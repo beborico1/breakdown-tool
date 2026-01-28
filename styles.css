@@ -41,33 +41,33 @@ h1 {
 }
 
 .btn-primary {
-  background-color: #1a73e8;
+  background-color: #632889;
   color: #fff;
 }
 
 .btn-primary:hover {
-  background-color: #1557b0;
+  background-color: #4e1f6d;
 }
 
 .btn-secondary {
-  background-color: #e8f0fe;
-  color: #1a73e8;
+  background-color: #ede0f5;
+  color: #632889;
 }
 
 .btn-secondary:hover {
-  background-color: #d2e3fc;
+  background-color: #dbc5eb;
 }
 
 .btn-small {
   padding: 8px 12px;
   font-size: 13px;
-  background-color: #1a73e8;
+  background-color: #632889;
   color: #fff;
   flex-shrink: 0;
 }
 
 .btn-small:hover {
-  background-color: #1557b0;
+  background-color: #4e1f6d;
 }
 
 .status {
@@ -133,7 +133,7 @@ h1 {
 }
 
 .input:focus {
-  border-color: #1a73e8;
+  border-color: #632889;
 }
 
 .input::placeholder {

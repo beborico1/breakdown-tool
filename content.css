@@ -4,33 +4,16 @@
 }
 
 .caption-translatable:hover {
-  background-color: rgba(26, 115, 232, 0.1);
+  background-color: rgba(99, 40, 137, 0.1);
   border-radius: 4px;
 }
 
-.caption-translating {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-/* Hide original caption text when overlay is active */
-.nMcdL.caption-has-overlay .ygicle.VbkSUe {
-  display: none !important;
-}
-
-/* Translation overlay element */
-.caption-translation-overlay {
-  font: inherit;
-  color: inherit;
-  display: inline;
-}
-
-.caption-translation-overlay.loading {
+[data-translated][data-loading] {
   opacity: 0.6;
   font-style: italic;
 }
 
-.caption-translation-overlay.error {
+[data-translated][data-error] {
   color: #c5221f;
   font-style: italic;
 }

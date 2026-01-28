@@ -2,7 +2,7 @@
 let lastCopiedIndex = 0;
 
 // Translation state keyed by container element
-// Value: { originalText, translatedText, overlayEl }
+// Value: { originalText, translatedText, translatedEl }
 const translationState = new Map();
 
 // Debug infrastructure
@@ -23,7 +23,8 @@ function extractCaptions() {
 
   containers.forEach(container => {
     const nameEl = container.querySelector('.NWpY1d');
-    const messageEl = container.querySelector('.ygicle.VbkSUe');
+    const messageEl = container.querySelector('.ygicle.VbkSUe[data-translated]')
+                   || container.querySelector('.ygicle.VbkSUe');
 
     const name = nameEl?.textContent?.trim() || '';
     const message = messageEl?.textContent?.trim() || '';
@@ -119,10 +120,9 @@ async function translateWithGemini(text) {
  */
 function removeOverlay(container) {
   const state = translationState.get(container);
-  if (state?.overlayEl && state.overlayEl.parentNode) {
-    state.overlayEl.remove();
+  if (state?.translatedEl && state.translatedEl.parentNode) {
+    state.translatedEl.remove();
   }
-  container.classList.remove('caption-has-overlay');
   translationState.delete(container);
 }
 
@@ -132,11 +132,6 @@ function removeOverlay(container) {
  */
 async function handleCaptionClick(event) {
   const container = event.currentTarget;
-  const messageEl = container.querySelector('.ygicle.VbkSUe');
-
-  if (!messageEl) return;
-
-  debugLog('CLICK', 'Container clicked, text:', messageEl.textContent?.trim().slice(0, 60));
 
   // If already translated, toggle off
   if (translationState.has(container)) {
@@ -145,22 +140,29 @@ async function handleCaptionClick(event) {
     return;
   }
 
+  // Find the original (non-translated) caption element
+  const messageEl = container.querySelector('.ygicle.VbkSUe:not([data-translated])');
+  if (!messageEl) return;
+
+  debugLog('CLICK', 'Container clicked, text:', messageEl.textContent?.trim().slice(0, 60));
+
   const originalText = messageEl.textContent?.trim();
   if (!originalText) return;
 
-  // Create overlay element
-  const overlayEl = document.createElement('span');
-  overlayEl.className = 'caption-translation-overlay loading';
-  overlayEl.textContent = 'Translating...';
+  // Create translated element with same classes as the original
+  const translatedEl = document.createElement('div');
+  translatedEl.className = messageEl.className;
+  translatedEl.setAttribute('data-translated', 'true');
+  translatedEl.setAttribute('data-loading', 'true');
+  translatedEl.textContent = 'Translating...';
 
-  // Hide original and show overlay
-  container.classList.add('caption-has-overlay');
-  container.appendChild(overlayEl);
+  // Atomically replace the original with our element
+  messageEl.replaceWith(translatedEl);
 
   // Store state
-  translationState.set(container, { originalText, translatedText: null, overlayEl });
+  translationState.set(container, { originalText, translatedText: null, translatedEl });
 
-  debugLog('TRANSLATE', 'Overlay inserted, starting translation');
+  debugLog('TRANSLATE', 'Original replaced with translated element, starting translation');
 
   try {
     const translated = await translateWithGemini(originalText);
@@ -171,11 +173,11 @@ async function handleCaptionClick(event) {
       return;
     }
 
-    overlayEl.textContent = translated;
-    overlayEl.classList.remove('loading');
+    translatedEl.textContent = translated;
+    translatedEl.removeAttribute('data-loading');
     translationState.get(container).translatedText = translated;
 
-    debugLog('TRANSLATE', 'Overlay updated with translation');
+    debugLog('TRANSLATE', 'Translated element updated with translation');
   } catch (error) {
     console.error('Translation error:', error);
     debugLog('TRANSLATE', 'Error:', error.message);
@@ -183,9 +185,9 @@ async function handleCaptionClick(event) {
     // Check if user toggled off while translation was in flight
     if (!translationState.has(container)) return;
 
-    overlayEl.textContent = `[Error: ${error.message}]`;
-    overlayEl.classList.remove('loading');
-    overlayEl.classList.add('error');
+    translatedEl.textContent = `[Error: ${error.message}]`;
+    translatedEl.removeAttribute('data-loading');
+    translatedEl.setAttribute('data-error', 'true');
 
     // Clean up after 3 seconds to allow retry
     setTimeout(() => {
@@ -215,14 +217,16 @@ function setupCaptionClickHandlers() {
   });
 }
 
+let lastMutationLogTime = 0;
+
 // Set up a MutationObserver to handle dynamically added captions
 const observer = new MutationObserver((mutations) => {
   let addedCount = 0;
   let removedCount = 0;
 
   for (const mutation of mutations) {
-    // Skip mutations on our own overlay elements
-    if (mutation.target.classList?.contains('caption-translation-overlay')) continue;
+    // Skip mutations on our own translated elements
+    if (mutation.target.hasAttribute?.('data-translated')) continue;
 
     addedCount += mutation.addedNodes.length;
     removedCount += mutation.removedNodes.length;
@@ -251,7 +255,11 @@ const observer = new MutationObserver((mutations) => {
   }
 
   if (addedCount > 0 || removedCount > 0) {
-    debugLog('MUTATION', `Batch: +${addedCount} / -${removedCount} nodes`);
+    const now = Date.now();
+    if (now - lastMutationLogTime > 1000) {
+      debugLog('MUTATION', `Batch: +${addedCount} / -${removedCount} nodes`);
+      lastMutationLogTime = now;
+    }
   }
 
   // Clean up stale state: containers no longer in DOM
@@ -262,12 +270,23 @@ const observer = new MutationObserver((mutations) => {
     }
   }
 
-  // Repair: verify all translated containers still have their overlays
+  // Fight Meet re-insertions: protect translated containers
   for (const [container, state] of translationState) {
-    if (state.overlayEl && !container.contains(state.overlayEl)) {
-      debugLog('REPAIR', 'Overlay dislodged by Meet, re-inserting');
-      container.appendChild(state.overlayEl);
-      container.classList.add('caption-has-overlay');
+    // (A) Remove any original caption elements Meet re-inserted
+    const originals = container.querySelectorAll('.ygicle.VbkSUe:not([data-translated])');
+    for (const orig of originals) {
+      orig.remove();
+    }
+
+    // (B) Re-insert our element if dislodged
+    if (state.translatedEl && !container.contains(state.translatedEl)) {
+      container.appendChild(state.translatedEl);
+    }
+
+    // (C) Restore text if Meet overwrote it
+    if (state.translatedText && state.translatedEl &&
+        state.translatedEl.textContent !== state.translatedText) {
+      state.translatedEl.textContent = state.translatedText;
     }
   }
 
@@ -279,7 +298,8 @@ const observer = new MutationObserver((mutations) => {
 function initializeObserver() {
   observer.observe(document.body, {
     childList: true,
-    subtree: true
+    subtree: true,
+    characterData: true
   });
   // Initial setup
   setupCaptionClickHandlers();
