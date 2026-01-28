@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Google Meet Caption Copier",
+  "version": "1.1.0",
+  "description": "Extract and copy captions from Google Meet with translation support",
+  "permissions": [
+    "clipboardWrite",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Copy Meet Captions"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ]
+}
