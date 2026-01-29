@@ -17,3 +17,195 @@
   color: #c5221f;
   font-style: italic;
 }
+
+/* Visual feedback for delta translation in progress */
+[data-translated][data-updating]::after {
+  content: '...';
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* ============================================
+   JAPANESE BREAKDOWN PANEL STYLES
+   ============================================ */
+
+/* Panel container */
+.breakdown-panel {
+  background: #1F1F1F;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+}
+
+.breakdown-panel[data-expanded="false"] {
+  max-height: 60px;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+
+.breakdown-panel[data-expanded="false"] .breakdown-original,
+.breakdown-panel[data-expanded="false"] .breakdown-grid,
+.breakdown-panel[data-expanded="false"] .breakdown-translation {
+  opacity: 0;
+  max-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Header with speaker name */
+.breakdown-header {
+  margin-bottom: 12px;
+}
+
+.breakdown-speaker {
+  color: #A78BFA;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Original sentence with furigana */
+.breakdown-original {
+  color: #E8EAED;
+  font-size: 20px;
+  line-height: 2;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #2D2D2D;
+  border-radius: 8px;
+  text-align: center;
+  transition: opacity 0.3s ease, max-height 0.3s ease;
+}
+
+.breakdown-original ruby {
+  ruby-position: over;
+}
+
+.breakdown-original rt {
+  font-size: 10px;
+  color: #9CA3AF;
+  font-weight: 400;
+}
+
+.word-segment {
+  display: inline-block;
+  margin: 0 2px;
+}
+
+/* Word breakdown grid */
+.breakdown-grid {
+  margin-bottom: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #2D2D2D;
+  transition: opacity 0.3s ease, max-height 0.3s ease;
+}
+
+.breakdown-grid-header {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.5fr;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #3D3D3D;
+  border-bottom: 1px solid #4D4D4D;
+}
+
+.breakdown-grid-header .grid-col {
+  color: #9CA3AF;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.breakdown-word-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.5fr;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #3D3D3D;
+  transition: background-color 0.15s ease;
+}
+
+.breakdown-word-row:last-child {
+  border-bottom: none;
+}
+
+.breakdown-word-row:hover {
+  background: #3A3A3A;
+}
+
+/* Word columns */
+.word-japanese {
+  color: #E8EAED;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.word-romaji {
+  color: #D1D5DB;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  align-self: center;
+}
+
+.word-english {
+  color: #9CA3AF;
+  font-size: 13px;
+  align-self: center;
+}
+
+/* Part of speech colors - text only */
+.type-noun { color: #4285F4; }
+.type-verb { color: #34A853; }
+.type-particle { color: #EA4335; }
+.type-adjective { color: #FBBC04; }
+.type-adverb { color: #A78BFA; }
+.type-counter { color: #60A5FA; }
+.type-expression { color: #F472B6; }
+.type-auxiliary { color: #F87171; }
+.type-copula { color: #2DD4BF; }
+.type-other { color: #9CA3AF; }
+
+/* Full translation */
+.breakdown-translation {
+  color: #E8EAED;
+  font-size: 14px;
+  font-style: italic;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(99, 40, 137, 0.15), rgba(99, 40, 137, 0.05));
+  border-left: 3px solid #632889;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 16px;
+  transition: opacity 0.3s ease, max-height 0.3s ease;
+}
+
+
+/* Loading animation for analysis */
+@keyframes analyzing {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+[data-translated][data-loading] {
+  background: linear-gradient(
+    90deg,
+    #2D2D2D 0%,
+    #3D3D3D 50%,
+    #2D2D2D 100%
+  );
+  background-size: 200% 100%;
+  animation: analyzing 1.5s ease infinite;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
