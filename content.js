@@ -217,7 +217,7 @@ Text: ${text}`;
         }],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 65536,
         }
       })
     }
@@ -547,7 +547,7 @@ async function translateWithGemini(text, options = {}) {
         }],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 65536,
         }
       })
     }
@@ -1063,6 +1063,155 @@ async function handleCaptionClick(event) {
 }
 
 /**
+ * Auto-process the second-to-last caption card when a new card appears
+ * The last card is skipped because it's still being updated as the speaker talks
+ */
+async function autoProcessPreviousCard() {
+  // Get all caption containers in DOM order
+  const allContainers = document.querySelectorAll('.nMcdL');
+
+  // Need at least 2 containers to process the previous one
+  if (allContainers.length < 2) {
+    return;
+  }
+
+  // Get the second-to-last container (index -2)
+  const previousContainer = allContainers[allContainers.length - 2];
+
+  // Skip if already processed (has breakdownData in translationState)
+  if (translationState.has(previousContainer)) {
+    const state = translationState.get(previousContainer);
+    if (state.breakdownData) {
+      debugLog('AUTO-PROCESS', 'Previous card already has breakdown, skipping');
+      return;
+    }
+  }
+
+  // Find the message element
+  const messageEl = previousContainer.querySelector('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original])');
+  if (!messageEl) {
+    debugLog('AUTO-PROCESS', 'No message element found in previous card');
+    return;
+  }
+
+  const originalText = messageEl.textContent?.trim();
+  if (!originalText) {
+    debugLog('AUTO-PROCESS', 'No text in previous card');
+    return;
+  }
+
+  // Get speaker name
+  const nameEl = previousContainer.querySelector('.NWpY1d');
+  const speaker = nameEl?.textContent?.trim() || '(unknown)';
+
+  debugLog('AUTO-PROCESS', `Processing previous card: speaker="${speaker}", text="${originalText.slice(0, 40)}..."`);
+
+  // Check cache first
+  const cached = findCachedTranslation(speaker, originalText);
+
+  // Create placeholder element
+  const translatedEl = document.createElement('div');
+  translatedEl.className = messageEl.className;
+  translatedEl.setAttribute('data-translated', 'true');
+
+  if (cached?.breakdownData) {
+    translatedEl.style.display = 'none';
+    debugLog('AUTO-PROCESS', 'Using cached breakdown');
+  } else {
+    translatedEl.setAttribute('data-loading', 'true');
+    translatedEl.textContent = 'Analyzing Japanese...';
+  }
+
+  // Shadow element strategy
+  hideOriginalElement(messageEl);
+  messageEl.insertAdjacentElement('afterend', translatedEl);
+
+  // Clone original for fallback
+  const originalEl = messageEl.cloneNode(true);
+  originalEl.style.cssText = '';
+  originalEl.removeAttribute('data-shadow-original');
+
+  // Generate content key
+  const contentKey = cached?.contentKey || generateContentKey(speaker, originalText, getTimeBucket());
+
+  // Store state
+  translationState.set(previousContainer, {
+    originalText,
+    originalEl,
+    translatedText: cached?.translatedText || null,
+    translatedEl,
+    contentKey,
+    lastTranslatedLength: originalText.length,
+    shadowOriginalEl: messageEl,
+    speakerName: speaker,
+    isIncremental: false,
+    breakdownData: cached?.breakdownData || null,
+    isExpanded: true
+  });
+
+  // Mark as active
+  activeContentKeys.add(contentKey);
+
+  // If cached, render and return
+  if (cached?.breakdownData) {
+    renderBreakdownPanel(previousContainer, cached.breakdownData, speaker);
+    debugLog('AUTO-PROCESS', 'Applied cached breakdown');
+    return;
+  }
+
+  // Analyze with Gemini
+  try {
+    const breakdownData = await analyzeJapaneseWithGemini(originalText);
+
+    // Check if state still exists
+    if (!translationState.has(previousContainer)) {
+      debugLog('AUTO-PROCESS', 'State removed during analysis, discarding');
+      return;
+    }
+
+    // Hide loading placeholder
+    translatedEl.style.display = 'none';
+    translatedEl.removeAttribute('data-loading');
+
+    // Update state
+    const state = translationState.get(previousContainer);
+    state.breakdownData = breakdownData;
+    state.translatedText = breakdownData.translation;
+
+    // Render breakdown panel
+    renderBreakdownPanel(previousContainer, breakdownData, speaker);
+
+    // Cache the result
+    translationCache.set(contentKey, {
+      translatedText: breakdownData.translation,
+      breakdownData: breakdownData,
+      timestamp: Date.now(),
+      speaker,
+      originalText
+    });
+    debugLog('AUTO-PROCESS', 'Breakdown complete and cached');
+
+  } catch (error) {
+    console.error('Auto-process error:', error);
+    debugLog('AUTO-PROCESS', 'Error:', error.message);
+
+    if (!translationState.has(previousContainer)) return;
+
+    translatedEl.textContent = `[Error: ${error.message}]`;
+    translatedEl.style.display = '';
+    translatedEl.removeAttribute('data-loading');
+    translatedEl.setAttribute('data-error', 'true');
+
+    // Clean up after 3 seconds
+    setTimeout(() => {
+      if (translationState.has(previousContainer)) {
+        removeOverlay(previousContainer);
+      }
+    }, 3000);
+  }
+}
+
+/**
  * Make caption containers clickable for translation
  */
 function setupCaptionClickHandlers() {
@@ -1122,6 +1271,11 @@ function setupCaptionClickHandlers() {
       }
     }
   });
+
+  // Auto-process the previous card when new containers are added
+  if (containers.length > 0) {
+    autoProcessPreviousCard();
+  }
 }
 
 let lastMutationLogTime = 0;
