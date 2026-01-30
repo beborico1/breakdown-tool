@@ -102,6 +102,22 @@
   margin: 0 2px;
 }
 
+/* Pending text (incoming unprocessed Japanese) */
+.breakdown-pending {
+  color: #9CA3AF;
+  font-size: 18px;
+  padding: 8px 16px;
+  background: rgba(99, 40, 137, 0.1);
+  border-radius: 4px;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* Hide pending text when panel is collapsed */
+.breakdown-panel[data-expanded="false"] .breakdown-pending {
+  display: none !important;
+}
+
 /* Word breakdown grid */
 .breakdown-grid {
   margin-bottom: 16px;

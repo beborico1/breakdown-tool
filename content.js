@@ -333,6 +333,12 @@ function renderBreakdownPanel(container, breakdownData, speakerName, isExpanded 
   originalDiv.innerHTML = `「${furiganaHtml}」`;
   panel.appendChild(originalDiv);
 
+  // Pending text element (for incoming unprocessed text)
+  const pendingDiv = document.createElement('div');
+  pendingDiv.className = 'breakdown-pending';
+  pendingDiv.style.display = 'none'; // Hidden until there's new text
+  panel.appendChild(pendingDiv);
+
   // Word breakdown grid
   const grid = document.createElement('div');
   grid.className = 'breakdown-grid';
@@ -371,7 +377,64 @@ function renderBreakdownPanel(container, breakdownData, speakerName, isExpanded 
   // Insert panel into container
   container.appendChild(panel);
 
-  debugLog('BREAKDOWN', 'Panel rendered with', breakdownData.words.length, 'words');
+  // debugLog('BREAKDOWN', 'Panel rendered with', breakdownData.words.length, 'words');
+}
+
+/**
+ * Reprocess breakdown panel with updated text
+ * @param {HTMLElement} container - Caption container
+ * @param {string} text - Full text to analyze
+ * @param {string} speakerName - Speaker name
+ */
+async function reprocessBreakdown(container, text, speakerName) {
+  const state = translationState.get(container);
+  if (!state) return;
+
+  try {
+    const breakdownData = await analyzeJapaneseWithGemini(text);
+
+    // Check if user toggled off while analysis was in flight
+    if (!translationState.has(container)) {
+      debugLog('REPROCESS', 'User toggled off during reanalysis, discarding result');
+      return;
+    }
+
+    // Hide the loading placeholder
+    state.translatedEl.style.display = 'none';
+    state.translatedEl.removeAttribute('data-loading');
+
+    // Update state with new breakdown data
+    state.breakdownData = breakdownData;
+    state.translatedText = breakdownData.translation;
+    state.lastTranslatedLength = text.length;
+
+    // Render the updated breakdown panel
+    renderBreakdownPanel(container, breakdownData, speakerName, state.isExpanded);
+
+    // Update cache
+    if (state.contentKey) {
+      const cacheEntry = translationCache.get(state.contentKey);
+      if (cacheEntry) {
+        cacheEntry.translatedText = breakdownData.translation;
+        cacheEntry.breakdownData = breakdownData;
+        cacheEntry.originalText = text;
+        cacheEntry.timestamp = Date.now();
+      }
+    }
+
+    debugLog('REPROCESS', 'Breakdown panel updated with new analysis');
+  } catch (error) {
+    console.error('Reprocess error:', error);
+    debugLog('REPROCESS', 'Error:', error.message);
+
+    // Check if user toggled off
+    if (!translationState.has(container)) return;
+
+    state.translatedEl.textContent = `[Error: ${error.message}]`;
+    state.translatedEl.style.display = '';
+    state.translatedEl.removeAttribute('data-loading');
+    state.translatedEl.setAttribute('data-error', 'true');
+  }
 }
 
 /**
@@ -722,6 +785,29 @@ async function executeFullRetranslation(container, text) {
 }
 
 /**
+ * Update breakdown panel with incoming unprocessed text
+ * Shows new Japanese text below the furigana line without auto-processing
+ * @param {HTMLElement} container
+ */
+function updateBreakdownDelta(container) {
+  const state = translationState.get(container);
+  if (!state?.shadowOriginalEl || !state.breakdownData) return;
+
+  const currentText = state.shadowOriginalEl.textContent?.trim() || '';
+  const processedText = state.originalText;
+
+  if (currentText.length > processedText.length && currentText.startsWith(processedText)) {
+    const newText = currentText.slice(processedText.length);
+    const pendingDiv = container.querySelector('.breakdown-pending');
+    if (pendingDiv) {
+      pendingDiv.textContent = newText;
+      pendingDiv.style.display = 'block';
+      debugLog('BREAKDOWN-DELTA', `Showing pending text: "${newText.slice(0, 40)}..."`);
+    }
+  }
+}
+
+/**
  * Update visual display with untranslated delta text (no API call)
  * Shows: [already translated text] [new untranslated original text]
  * @param {HTMLElement} container
@@ -804,18 +890,32 @@ async function handleCaptionClick(event) {
   if (translationState.has(container)) {
     const state = translationState.get(container);
 
-    // If breakdown panel exists, toggle it
+    // If breakdown panel exists, check for new text or toggle
     if (state.breakdownData) {
+      const currentText = state.shadowOriginalEl?.textContent?.trim() || '';
+
+      // If there's new text, reprocess the entire message
+      if (currentText.length > state.originalText.length && currentText.startsWith(state.originalText)) {
+        debugLog('REPROCESS', `New text detected, reprocessing full message`);
+        // Update state and trigger reanalysis
+        state.originalText = currentText;
+        state.breakdownData = null; // Clear old breakdown
+        // Remove old panel and show loading
+        const panel = container.querySelector('.breakdown-panel');
+        if (panel) panel.remove();
+        // Show loading indicator
+        state.translatedEl.style.display = '';
+        state.translatedEl.setAttribute('data-loading', 'true');
+        state.translatedEl.textContent = 'Reanalyzing...';
+        // Trigger new analysis
+        reprocessBreakdown(container, currentText, state.speakerName);
+        return;
+      }
+
+      // Otherwise toggle expand/collapse as before
       const panel = container.querySelector('.breakdown-panel');
       if (panel) {
-        const isExpanded = panel.getAttribute('data-expanded') === 'true';
-        if (isExpanded) {
-          // Collapse panel
-          toggleBreakdownPanel(container);
-        } else {
-          // Expand panel
-          toggleBreakdownPanel(container);
-        }
+        toggleBreakdownPanel(container);
         return;
       }
     }
@@ -1055,8 +1155,14 @@ const observer = new MutationObserver((mutations) => {
       if (shadowEl) {
         const container = shadowEl.closest('.nMcdL');
         if (container && translationState.has(container)) {
-          // Only update visual display - user must click to translate
-          updateVisualDelta(container);
+          const state = translationState.get(container);
+          if (state.breakdownData) {
+            // Show new text in breakdown panel without processing
+            updateBreakdownDelta(container);
+          } else if (state.isIncremental) {
+            // Only update visual display - user must click to translate
+            updateVisualDelta(container);
+          }
         }
       }
     }
@@ -1218,7 +1324,7 @@ const observer = new MutationObserver((mutations) => {
     // (D) Re-insert breakdown panel if dislodged
     if (state.breakdownData && !container.querySelector('.breakdown-panel')) {
       if (!didFight) { observer.disconnect(); didFight = true; }
-      debugLog('FIGHT-D', 'Re-inserting dislodged breakdown panel');
+      // debugLog('FIGHT-D', 'Re-inserting dislodged breakdown panel');
       renderBreakdownPanel(container, state.breakdownData, state.speakerName, state.isExpanded);
     }
   }
