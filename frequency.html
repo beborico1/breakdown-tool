@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Word Frequency - Meet Captions</title>
+  <link rel="stylesheet" href="frequency.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Word Frequency</h1>
+      <div class="header-actions">
+        <button id="exportJson" class="btn btn-secondary">Export JSON</button>
+        <button id="exportCsv" class="btn btn-secondary">Export CSV</button>
+      </div>
+    </header>
+
+    <div class="summary-cards">
+      <div class="summary-card">
+        <span class="summary-value" id="totalWordsValue">0</span>
+        <span class="summary-label">Total Words</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-value" id="uniqueWordsValue">0</span>
+        <span class="summary-label">Unique Words</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-value" id="daysTrackingValue">0</span>
+        <span class="summary-label">Days Tracking</span>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="filter-row">
+        <div class="type-chips">
+          <button class="chip active" data-type="all">All</button>
+          <button class="chip" data-type="noun">Noun</button>
+          <button class="chip" data-type="verb">Verb</button>
+          <button class="chip" data-type="particle">Particle</button>
+          <button class="chip" data-type="adjective">Adjective</button>
+          <button class="chip" data-type="adverb">Adverb</button>
+          <button class="chip" data-type="other">Other</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="sort-controls">
+          <label>Sort by:</label>
+          <select id="sortBy">
+            <option value="frequency">Frequency</option>
+            <option value="alphabetical">A-Z</option>
+            <option value="recent">Recent</option>
+          </select>
+        </div>
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Search words...">
+        </div>
+      </div>
+    </div>
+
+    <div class="type-distribution">
+      <h3>Type Distribution</h3>
+      <div class="chart" id="typeChart"></div>
+    </div>
+
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <p>No words tracked yet</p>
+      <p class="empty-hint">Translate some captions in Google Meet to start building your vocabulary</p>
+    </div>
+
+    <div id="wordGrid" class="word-grid"></div>
+
+    <div id="loadingState" class="loading-state">
+      <div class="loading-skeleton"></div>
+      <div class="loading-skeleton"></div>
+      <div class="loading-skeleton"></div>
+      <div class="loading-skeleton"></div>
+    </div>
+  </div>
+  <script src="frequency.js"></script>
+</body>
+</html>

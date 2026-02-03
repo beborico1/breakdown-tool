@@ -1,0 +1,451 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1F1F1F;
+  color: #E8EAED;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #3D3D3D;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #E8EAED;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Buttons */
+.btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #632889;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #7c35a8;
+}
+
+.btn-secondary {
+  background: #3D3D3D;
+  color: #E8EAED;
+}
+
+.btn-secondary:hover {
+  background: #4D4D4D;
+}
+
+/* Summary Cards */
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  background: #2D2D2D;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.summary-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #A78BFA;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Filters */
+.filters {
+  background: #2D2D2D;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.filter-row + .filter-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #3D3D3D;
+}
+
+/* Type Chips */
+.type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #3D3D3D;
+  color: #9CA3AF;
+}
+
+.chip:hover {
+  background: #4D4D4D;
+}
+
+.chip.active {
+  background: #632889;
+  color: #fff;
+}
+
+/* Type-specific chip colors when active */
+.chip[data-type="noun"].active { background: #4285F4; }
+.chip[data-type="verb"].active { background: #34A853; }
+.chip[data-type="particle"].active { background: #EA4335; }
+.chip[data-type="adjective"].active { background: #FBBC04; color: #1F1F1F; }
+.chip[data-type="adverb"].active { background: #A78BFA; }
+
+/* Sort & Search */
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-controls label {
+  font-size: 13px;
+  color: #9CA3AF;
+}
+
+.sort-controls select {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid #3D3D3D;
+  border-radius: 6px;
+  background: #1F1F1F;
+  color: #E8EAED;
+  cursor: pointer;
+}
+
+.sort-controls select:focus {
+  outline: none;
+  border-color: #632889;
+}
+
+.search-box {
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid #3D3D3D;
+  border-radius: 6px;
+  background: #1F1F1F;
+  color: #E8EAED;
+}
+
+.search-box input::placeholder {
+  color: #6B7280;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #632889;
+}
+
+/* Type Distribution Chart */
+.type-distribution {
+  background: #2D2D2D;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.type-distribution h3 {
+  font-size: 14px;
+  font-weight: 500;
+  color: #9CA3AF;
+  margin-bottom: 12px;
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chart-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chart-label {
+  width: 80px;
+  font-size: 12px;
+  color: #9CA3AF;
+  text-align: right;
+}
+
+.chart-bar-container {
+  flex: 1;
+  height: 24px;
+  background: #1F1F1F;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.chart-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease-out;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+}
+
+.chart-bar span {
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* Chart bar colors */
+.chart-bar.noun { background: #4285F4; }
+.chart-bar.verb { background: #34A853; }
+.chart-bar.particle { background: #EA4335; }
+.chart-bar.adjective { background: #FBBC04; }
+.chart-bar.adjective span { color: #1F1F1F; }
+.chart-bar.adverb { background: #A78BFA; }
+.chart-bar.counter { background: #60A5FA; }
+.chart-bar.expression { background: #F472B6; }
+.chart-bar.auxiliary { background: #F87171; }
+.chart-bar.copula { background: #2DD4BF; }
+.chart-bar.other { background: #6B7280; }
+
+/* Word Grid */
+.word-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.word-card {
+  background: #2D2D2D;
+  border-radius: 10px;
+  padding: 14px;
+  transition: all 0.2s;
+  cursor: default;
+}
+
+.word-card:hover {
+  background: #3D3D3D;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.word-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.word-japanese {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.word-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #9CA3AF;
+}
+
+.word-reading {
+  font-size: 13px;
+  color: #9CA3AF;
+  margin-bottom: 4px;
+}
+
+.word-type-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+/* Type badge colors */
+.word-type-badge.noun { background: rgba(66, 133, 244, 0.2); color: #4285F4; }
+.word-type-badge.verb { background: rgba(52, 168, 83, 0.2); color: #34A853; }
+.word-type-badge.particle { background: rgba(234, 67, 53, 0.2); color: #EA4335; }
+.word-type-badge.adjective { background: rgba(251, 188, 4, 0.2); color: #FBBC04; }
+.word-type-badge.adverb { background: rgba(167, 139, 250, 0.2); color: #A78BFA; }
+.word-type-badge.counter { background: rgba(96, 165, 250, 0.2); color: #60A5FA; }
+.word-type-badge.expression { background: rgba(244, 114, 182, 0.2); color: #F472B6; }
+.word-type-badge.auxiliary { background: rgba(248, 113, 113, 0.2); color: #F87171; }
+.word-type-badge.copula { background: rgba(45, 212, 191, 0.2); color: #2DD4BF; }
+.word-type-badge.other { background: rgba(107, 114, 128, 0.2); color: #6B7280; }
+
+/* Japanese text colors */
+.word-japanese.noun { color: #4285F4; }
+.word-japanese.verb { color: #34A853; }
+.word-japanese.particle { color: #EA4335; }
+.word-japanese.adjective { color: #FBBC04; }
+.word-japanese.adverb { color: #A78BFA; }
+.word-japanese.counter { color: #60A5FA; }
+.word-japanese.expression { color: #F472B6; }
+.word-japanese.auxiliary { color: #F87171; }
+.word-japanese.copula { color: #2DD4BF; }
+.word-japanese.other { color: #6B7280; }
+
+.word-english {
+  font-size: 12px;
+  color: #9CA3AF;
+  line-height: 1.4;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6B7280;
+}
+
+.empty-state p {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  font-size: 14px !important;
+  color: #4B5563 !important;
+}
+
+/* Loading State */
+.loading-state {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    #2D2D2D 0%,
+    #3D3D3D 50%,
+    #2D2D2D 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton 1.5s ease infinite;
+  border-radius: 10px;
+  height: 120px;
+}
+
+@keyframes skeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Search highlight */
+.highlight {
+  background: rgba(99, 40, 137, 0.4);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  body {
+    padding: 16px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .header-actions .btn {
+    flex: 1;
+  }
+
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sort-controls {
+    justify-content: space-between;
+  }
+
+  .search-box {
+    min-width: 100%;
+  }
+
+  .word-grid {
+    grid-template-columns: 1fr;
+  }
+}

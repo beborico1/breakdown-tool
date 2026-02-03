@@ -157,3 +157,142 @@ h1 {
   background-color: #fce8e6;
   color: #c5221f;
 }
+
+/* Mode toggle section */
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Toggle switch styles */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #dadce0;
+  border-radius: 24px;
+  transition: background-color 0.2s;
+}
+
+.toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: #632889;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+.toggle-switch input:focus + .toggle-slider {
+  box-shadow: 0 0 0 2px rgba(99, 40, 137, 0.2);
+}
+
+/* Word Frequency Section */
+.frequency-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.frequency-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #5f6368;
+}
+
+.stat-separator {
+  color: #dadce0;
+}
+
+.top-words {
+  font-size: 12px;
+  color: #5f6368;
+  padding: 8px 10px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.top-words-empty {
+  color: #9aa0a6;
+  font-style: italic;
+}
+
+.top-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.top-word-text {
+  font-weight: 500;
+  color: #202124;
+}
+
+.top-word-count {
+  color: #5f6368;
+  font-size: 11px;
+}
+
+.frequency-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-freq {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.btn-danger {
+  background-color: #fce8e6;
+  color: #c5221f;
+}
+
+.btn-danger:hover {
+  background-color: #f5c6c2;
+}

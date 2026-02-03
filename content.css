@@ -33,7 +33,16 @@
    JAPANESE BREAKDOWN PANEL STYLES
    ============================================ */
 
-/* Panel container */
+/* Transparent wrapper - just for layout */
+.breakdown-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 8px;
+  margin-top: 12px;
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+}
+
+/* Panel container (deprecated - kept for reference)
 .breakdown-panel {
   background: #1F1F1F;
   border-radius: 12px;
@@ -60,6 +69,7 @@
   padding: 0;
   overflow: hidden;
 }
+*/
 
 /* Header with speaker name */
 .breakdown-header {
@@ -74,7 +84,7 @@
   letter-spacing: 0.5px;
 }
 
-/* Original sentence with furigana */
+/* Original sentence with furigana (deprecated - kept for reference)
 .breakdown-original {
   color: #E8EAED;
   font-size: 20px;
@@ -101,6 +111,7 @@
   display: inline-block;
   margin: 0 2px;
 }
+*/
 
 /* Pending text (incoming unprocessed Japanese) */
 .breakdown-pending {
@@ -114,71 +125,62 @@
 }
 
 /* Hide pending text when panel is collapsed */
-.breakdown-panel[data-expanded="false"] .breakdown-pending {
+.breakdown-wrapper[data-expanded="false"] .breakdown-pending {
   display: none !important;
 }
 
-/* Word breakdown grid */
-.breakdown-grid {
-  margin-bottom: 16px;
-  border-radius: 8px;
-  overflow: hidden;
+/* Word breakdown - flowing paragraph layout (deprecated - kept for reference)
+.breakdown-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 8px;
+  padding: 12px;
   background: #2D2D2D;
+  border-radius: 8px;
+  margin-bottom: 16px;
   transition: opacity 0.3s ease, max-height 0.3s ease;
 }
+*/
 
-.breakdown-grid-header {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1.5fr;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #3D3D3D;
-  border-bottom: 1px solid #4D4D4D;
-}
-
-.breakdown-grid-header .grid-col {
-  color: #9CA3AF;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
-.breakdown-word-row {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1.5fr;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid #3D3D3D;
+.word-block {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 10px;
+  background: #383838;
+  border-radius: 6px;
+  min-width: 40px;
   transition: background-color 0.15s ease;
 }
 
-.breakdown-word-row:last-child {
-  border-bottom: none;
+.word-block:hover {
+  background: #424242;
 }
 
-.breakdown-word-row:hover {
-  background: #3A3A3A;
-}
-
-/* Word columns */
-.word-japanese {
-  color: #E8EAED;
-  font-size: 16px;
+/* Word stack within each block */
+.word-block .word-japanese {
+  font-size: 15px;
   font-weight: 500;
+  /* Color inherited from .type-* classes (noun=blue, verb=green, etc.) */
 }
 
-.word-romaji {
-  color: #D1D5DB;
-  font-size: 13px;
+.word-block .word-hiragana {
+  font-size: 12px;
+  color: #B0B0B0;
+  margin-top: 1px;
+}
+
+.word-block .word-romaji {
+  font-size: 11px;
+  color: #E0E0E0;
+  margin-top: 2px;
   font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-  align-self: center;
 }
 
-.word-english {
-  color: #9CA3AF;
-  font-size: 13px;
-  align-self: center;
+.word-block .word-english {
+  font-size: 11px;
+  color: #888;
+  margin-top: 1px;
 }
 
 /* Part of speech colors - text only */
@@ -193,8 +195,44 @@
 .type-copula { color: #2DD4BF; }
 .type-other { color: #9CA3AF; }
 
+/* Word type tooltip - shown on block hover */
+.word-block {
+  position: relative;
+  cursor: help;
+}
+
+.word-block .word-japanese::after {
+  content: attr(data-type);
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%) translateY(100%);
+  background: #3D3D3D;
+  color: inherit; /* Uses the type color */
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.word-block:hover .word-japanese::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(calc(100% + 4px));
+}
+
 /* Full translation */
 .breakdown-translation {
+  width: 100%;
+  flex-basis: 100%;
+  margin-top: 8px;
   color: #E8EAED;
   font-size: 14px;
   font-style: italic;
@@ -202,7 +240,6 @@
   background: linear-gradient(135deg, rgba(99, 40, 137, 0.15), rgba(99, 40, 137, 0.05));
   border-left: 3px solid #632889;
   border-radius: 0 8px 8px 0;
-  margin-bottom: 16px;
   transition: opacity 0.3s ease, max-height 0.3s ease;
 }
 
@@ -224,4 +261,400 @@
   animation: analyzing 1.5s ease infinite;
   border-radius: 8px;
   padding: 12px 16px;
+}
+
+/* ============================================
+   MINIMALISTIC MODE STYLES
+   ============================================ */
+
+/* Base character span */
+.mm-char {
+  position: relative;
+  display: inline;
+  cursor: help;
+}
+
+/* Pending state - white text for unprocessed characters */
+.mm-pending {
+  color: #FFFFFF !important;
+}
+
+/* Processing state - gray text with pulse animation */
+.mm-processing {
+  color: #9CA3AF !important;
+  animation: mm-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mm-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Word type colors for processed characters */
+.mm-type-noun { color: #4285F4 !important; }
+.mm-type-verb { color: #34A853 !important; }
+.mm-type-particle { color: #EA4335 !important; }
+.mm-type-adjective { color: #FBBC04 !important; }
+.mm-type-adverb { color: #A78BFA !important; }
+.mm-type-counter { color: #60A5FA !important; }
+.mm-type-expression { color: #F472B6 !important; }
+.mm-type-auxiliary { color: #F87171 !important; }
+.mm-type-copula { color: #2DD4BF !important; }
+.mm-type-other { color: #9CA3AF !important; }
+
+/* Tooltip styles using ::after pseudo-element */
+.mm-char[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%) translateY(-4px);
+  background: #1F1F1F;
+  color: #E8EAED;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.mm-char[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+/* Sentence-end period (。) with full translation tooltip */
+.mm-sentence-end[data-sentence-translation]::after {
+  content: attr(data-sentence-translation);
+  max-width: 350px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* Minimalistic mode container styling */
+.mm-container {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* Hide original text when minimalistic mode is active */
+[data-mm-active] .ygicle.VbkSUe:not([data-mm-display]) {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+}
+
+/* Minimalistic display element */
+.mm-display {
+  display: inline;
+}
+
+/* ============================================
+   GOOGLE CHAT WORD BREAKDOWN (GCWB) STYLES
+   ============================================ */
+
+/* Custom Context Menu */
+.gcwb-context-menu {
+  position: fixed;
+  z-index: 100000;
+  background: #1F1F1F;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  padding: 4px;
+  min-width: 180px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  animation: gcwbMenuEnter 0.15s ease-out;
+}
+
+.gcwb-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  color: #E8EAED;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.gcwb-context-menu-item:hover {
+  background: rgba(99, 40, 137, 0.3);
+}
+
+.gcwb-menu-icon {
+  font-size: 16px;
+}
+
+.gcwb-menu-text {
+  flex: 1;
+}
+
+@keyframes gcwbMenuEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Breakdown Overlay */
+.gcwb-overlay {
+  position: fixed;
+  z-index: 100001;
+  background: #1F1F1F;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  max-width: 600px;
+  min-width: 300px;
+  max-height: 80vh;
+  overflow: hidden;
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.gcwb-overlay-enter {
+  animation: gcwbOverlayEnter 0.2s ease-out;
+}
+
+.gcwb-overlay-exit {
+  animation: gcwbOverlayExit 0.2s ease-out forwards;
+}
+
+@keyframes gcwbOverlayEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gcwbOverlayExit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/* Overlay Header */
+.gcwb-overlay-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gcwb-overlay-close {
+  background: none;
+  border: none;
+  color: #9CA3AF;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.gcwb-overlay-close:hover {
+  color: #E8EAED;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Overlay Content */
+.gcwb-overlay-content {
+  padding: 16px;
+  max-height: calc(80vh - 60px);
+  overflow-y: auto;
+}
+
+/* Loading State */
+.gcwb-overlay-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #9CA3AF;
+  font-size: 14px;
+  background: linear-gradient(
+    90deg,
+    #2D2D2D 0%,
+    #3D3D3D 50%,
+    #2D2D2D 100%
+  );
+  background-size: 200% 100%;
+  animation: analyzing 1.5s ease infinite;
+  border-radius: 8px;
+}
+
+/* Error State */
+.gcwb-overlay-error {
+  text-align: center;
+  padding: 24px;
+}
+
+.gcwb-error-message {
+  color: #EA4335;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.gcwb-retry-btn {
+  background: rgba(99, 40, 137, 0.3);
+  border: 1px solid #632889;
+  color: #E8EAED;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.gcwb-retry-btn:hover {
+  background: rgba(99, 40, 137, 0.5);
+}
+
+/* Word Cards Container */
+.gcwb-overlay-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Individual Word Card */
+.gcwb-word-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  background: #383838;
+  border-radius: 8px;
+  min-width: 50px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+  animation: gcwbCardEnter 0.25s ease-out both;
+}
+
+.gcwb-word-card:hover {
+  background: #424242;
+  transform: translateY(-2px);
+}
+
+.gcwb-word-card.gcwb-copied {
+  background: rgba(99, 40, 137, 0.4);
+}
+
+@keyframes gcwbCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Word Card Text Styles */
+.gcwb-word-japanese {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.gcwb-word-hiragana {
+  font-size: 12px;
+  color: #B0B0B0;
+  margin-top: 2px;
+}
+
+.gcwb-word-romaji {
+  font-size: 11px;
+  color: #E0E0E0;
+  margin-top: 3px;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+}
+
+.gcwb-word-english {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+  text-align: center;
+  max-width: 100px;
+  word-wrap: break-word;
+}
+
+/* Word Type Colors for GCWB */
+.gcwb-type-noun { color: #4285F4; }
+.gcwb-type-verb { color: #34A853; }
+.gcwb-type-particle { color: #EA4335; }
+.gcwb-type-adjective { color: #FBBC04; }
+.gcwb-type-adverb { color: #A78BFA; }
+.gcwb-type-counter { color: #60A5FA; }
+.gcwb-type-expression { color: #F472B6; }
+.gcwb-type-auxiliary { color: #F87171; }
+.gcwb-type-copula { color: #2DD4BF; }
+.gcwb-type-other { color: #9CA3AF; }
+
+/* Translation Section */
+.gcwb-overlay-translation {
+  color: #E8EAED;
+  font-size: 14px;
+  font-style: italic;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(99, 40, 137, 0.15), rgba(99, 40, 137, 0.05));
+  border-left: 3px solid #632889;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 16px;
+}
+
+/* Action Buttons */
+.gcwb-overlay-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gcwb-copy-btn {
+  flex: 1;
+  min-width: 100px;
+  background: #383838;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #E8EAED;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.gcwb-copy-btn:hover {
+  background: #424242;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.gcwb-copy-btn.gcwb-copied {
+  background: rgba(99, 40, 137, 0.4);
+  border-color: #632889;
 }

@@ -28,6 +28,39 @@
       </div>
       <div id="keyStatus" class="key-status"></div>
     </div>
+
+    <hr class="divider">
+
+    <div class="mode-toggle">
+      <div class="setting-info">
+        <span class="setting-title">Minimalistic Mode</span>
+        <span class="setting-hint">Inline colored text with hover tooltips</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="minimalisticToggle">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <hr class="divider">
+
+    <div class="frequency-section">
+      <div class="setting-header">
+        <span class="setting-title">Word Frequency</span>
+      </div>
+      <div class="frequency-stats">
+        <span id="uniqueWords">0 unique</span>
+        <span class="stat-separator">•</span>
+        <span id="totalWords">0 total</span>
+      </div>
+      <div id="topWords" class="top-words">
+        <span class="top-words-empty">No words tracked yet</span>
+      </div>
+      <div class="frequency-buttons">
+        <button id="viewAllWords" class="btn btn-secondary btn-freq">View All Words</button>
+        <button id="clearData" class="btn btn-danger btn-freq">Clear Data</button>
+      </div>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>
