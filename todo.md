@@ -1,3 +1,5 @@
-add a white outline to the extension icon
+modularize content.js
 
-make it so it splits by kanji romanji english meaning
+restructure this
+
+improve google chat version
