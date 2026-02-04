@@ -207,7 +207,7 @@ async function clearFrequencyData() {
  * Open the full frequency analytics page
  */
 function openFrequencyPage() {
-  chrome.tabs.create({ url: 'frequency.html' });
+  chrome.tabs.create({ url: 'src/pages/frequency/frequency.html' });
 }
 
 // Frequency section event listeners

@@ -539,7 +539,7 @@
 .gcwb-overlay-words {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0;
   margin-bottom: 16px;
 }
 
@@ -548,9 +548,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 12px;
+  padding: 0;
   background: #383838;
-  border-radius: 8px;
+  border-radius: 0;
+  border: 1px solid #555;
   min-width: 50px;
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.15s ease;
