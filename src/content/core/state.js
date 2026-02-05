@@ -95,3 +95,7 @@ export function setActiveGcwbContextMenu(value) {
 export function setOverlayCreatedAt(value) {
   overlayCreatedAt = value;
 }
+
+// Track inline breakdown state per message element
+// Value: { originalHTML, breakdownData, isShowingBreakdown }
+export const inlineBreakdownState = new Map();

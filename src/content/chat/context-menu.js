@@ -3,7 +3,7 @@ import {
   setActiveGcwbContextMenu
 } from '../core/state.js';
 import { extractChatMessageText } from './message-finder.js';
-import { showBreakdownOverlay } from './overlay.js';
+import { showInlineBreakdown } from './inline-breakdown.js';
 
 /**
  * Show custom context menu at cursor position
@@ -35,7 +35,7 @@ export function showCustomContextMenu(event, messageEl) {
   menu.querySelector('[data-action="analyze"]').addEventListener('click', (e) => {
     e.stopPropagation();  // Prevent click from bubbling to outside-click handlers
     hideCustomContextMenu();
-    showBreakdownOverlay(messageEl, text);
+    showInlineBreakdown(messageEl, text);
   });
 
   document.body.appendChild(menu);

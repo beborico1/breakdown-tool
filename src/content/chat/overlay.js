@@ -32,6 +32,7 @@ function showCachedOverlay(anchorEl, breakdownData) {
 
   positionOverlay(overlay, anchorEl);
   renderOverlayContent(overlay, breakdownData);
+  setupDragHandlers(overlay);
 
   // Set up close handlers
   overlay.querySelector('[data-action="close"]').addEventListener('click', hideBreakdownOverlay);
@@ -78,6 +79,7 @@ export async function showBreakdownOverlay(anchorEl, text) {
 
   // Position overlay near the message
   positionOverlay(overlay, anchorEl);
+  setupDragHandlers(overlay);
 
   // Set up close handlers
   overlay.querySelector('[data-action="close"]').addEventListener('click', hideBreakdownOverlay);
@@ -126,6 +128,47 @@ export async function showBreakdownOverlay(anchorEl, text) {
 }
 
 /**
+ * Set up drag handlers for the overlay
+ * @param {HTMLElement} overlay - Overlay element
+ */
+function setupDragHandlers(overlay) {
+  const header = overlay.querySelector('.gcwb-overlay-header');
+  let isDragging = false;
+  let startX, startY, initialLeft, initialTop;
+
+  header.addEventListener('mousedown', (e) => {
+    // Don't drag if clicking the close button
+    if (e.target.closest('[data-action="close"]')) return;
+
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    initialLeft = parseInt(overlay.style.left, 10) || 0;
+    initialTop = parseInt(overlay.style.top, 10) || 0;
+
+    overlay.classList.add('gcwb-dragging');
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    overlay.style.left = `${initialLeft + dx}px`;
+    overlay.style.top = `${initialTop + dy}px`;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      overlay.classList.remove('gcwb-dragging');
+    }
+  });
+}
+
+/**
  * Render breakdown content in the overlay
  * @param {HTMLElement} overlay - Overlay element
  * @param {Object} breakdownData - Breakdown data from API
@@ -135,8 +178,8 @@ function renderOverlayContent(overlay, breakdownData) {
     const typeClass = getWordTypeClass(word.type);
     return `
       <div class="gcwb-word-card" data-word="${word.japanese}">
+        <div class="gcwb-word-hiragana">${word.reading || word.japanese}</div>
         <div class="gcwb-word-japanese gcwb-type-${typeClass}">${word.japanese}</div>
-        ${word.reading ? `<div class="gcwb-word-hiragana">${word.reading}</div>` : ''}
         <div class="gcwb-word-romaji">${word.romaji}</div>
         <div class="gcwb-word-english">${word.english}</div>
       </div>

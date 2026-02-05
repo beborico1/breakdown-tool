@@ -4,12 +4,15 @@ const copyNewBtn = document.getElementById('copyNew');
 const apiKeyInput = document.getElementById('apiKey');
 const saveKeyBtn = document.getElementById('saveKey');
 const keyStatusEl = document.getElementById('keyStatus');
+const viewAllWordsBtn = document.getElementById('viewAllWords');
+
+/* Commented out - Minimalistic Mode and Word Frequency stats removed
 const minimalisticToggle = document.getElementById('minimalisticToggle');
 const uniqueWordsEl = document.getElementById('uniqueWords');
 const totalWordsEl = document.getElementById('totalWords');
 const topWordsEl = document.getElementById('topWords');
-const viewAllWordsBtn = document.getElementById('viewAllWords');
 const clearDataBtn = document.getElementById('clearData');
+*/
 
 /**
  * Show status message
@@ -137,18 +140,22 @@ apiKeyInput.addEventListener('keypress', (e) => {
   }
 });
 
+/* Commented out - Minimalistic Mode functions removed
 /**
  * Load minimalistic mode setting
  */
+/*
 async function loadMinimalisticMode() {
   chrome.storage.sync.get(['minimalisticModeEnabled'], (result) => {
     minimalisticToggle.checked = result.minimalisticModeEnabled || false;
   });
 }
+*/
 
 /**
  * Save minimalistic mode setting
  */
+/*
 function saveMinimalisticMode() {
   const enabled = minimalisticToggle.checked;
   chrome.storage.sync.set({ minimalisticModeEnabled: enabled });
@@ -156,10 +163,13 @@ function saveMinimalisticMode() {
 
 // Handle minimalistic mode toggle
 minimalisticToggle.addEventListener('change', saveMinimalisticMode);
+*/
 
+/* Commented out - Word Frequency stats functions removed
 /**
  * Load word frequency stats from storage
  */
+/*
 async function loadFrequencyStats() {
   chrome.storage.local.get(['wordFrequencyData'], (result) => {
     const data = result.wordFrequencyData;
@@ -188,10 +198,12 @@ async function loadFrequencyStats() {
     }
   });
 }
+*/
 
 /**
  * Clear all frequency data
  */
+/*
 async function clearFrequencyData() {
   if (!confirm('Are you sure you want to clear all word frequency data? This cannot be undone.')) {
     return;
@@ -202,6 +214,7 @@ async function clearFrequencyData() {
     showStatus('Word frequency data cleared', true);
   });
 }
+*/
 
 /**
  * Open the full frequency analytics page
@@ -212,9 +225,9 @@ function openFrequencyPage() {
 
 // Frequency section event listeners
 viewAllWordsBtn.addEventListener('click', openFrequencyPage);
-clearDataBtn.addEventListener('click', clearFrequencyData);
+// clearDataBtn.addEventListener('click', clearFrequencyData);
 
 // Load saved key on popup open
 loadApiKey();
-loadMinimalisticMode();
-loadFrequencyStats();
+// loadMinimalisticMode();
+// loadFrequencyStats();

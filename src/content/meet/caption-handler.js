@@ -145,22 +145,24 @@ export async function handleCaptionClick(event) {
   // Check cache first (now caches breakdown data)
   const cached = findCachedTranslation(speaker, originalText);
 
-  // Create a placeholder element while loading
+  // Create a placeholder element (kept for error states, but hidden during normal processing)
   const translatedEl = document.createElement('div');
   translatedEl.className = messageEl.className;
   translatedEl.setAttribute('data-translated', 'true');
+  translatedEl.style.display = 'none'; // Always hidden initially
 
   // If cached with breakdown data, render immediately
   if (cached?.breakdownData) {
-    translatedEl.style.display = 'none'; // Hide the placeholder
     debugLog('CACHE-HIT', `Using cached breakdown for: ${originalText.slice(0, 40)}`);
   } else {
-    translatedEl.setAttribute('data-loading', 'true');
-    translatedEl.textContent = 'Analyzing Japanese...';
+    // Show processing indicator on original text (gray color)
+    messageEl.setAttribute('data-processing', 'true');
   }
 
-  // Shadow element strategy: hide original instead of replacing
-  hideOriginalElement(messageEl);
+  // Shadow element strategy: hide original only for cached results
+  if (cached?.breakdownData) {
+    hideOriginalElement(messageEl);
+  }
 
   // Insert translated element after the hidden original
   messageEl.insertAdjacentElement('afterend', translatedEl);
@@ -209,9 +211,9 @@ export async function handleCaptionClick(event) {
       return;
     }
 
-    // Hide the loading placeholder
-    translatedEl.style.display = 'none';
-    translatedEl.removeAttribute('data-loading');
+    // Remove processing indicator from original and hide it
+    messageEl.removeAttribute('data-processing');
+    hideOriginalElement(messageEl);
 
     // Update state with breakdown data
     const state = translationState.get(container);
@@ -242,9 +244,12 @@ export async function handleCaptionClick(event) {
     // Check if user toggled off
     if (!translationState.has(container)) return;
 
+    // Remove processing indicator on error
+    messageEl.removeAttribute('data-processing');
+    hideOriginalElement(messageEl);
+
     translatedEl.textContent = `[Error: ${error.message}]`;
     translatedEl.style.display = '';
-    translatedEl.removeAttribute('data-loading');
     translatedEl.setAttribute('data-error', 'true');
 
     // Clean up after 3 seconds to allow retry

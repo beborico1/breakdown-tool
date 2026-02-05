@@ -67,21 +67,20 @@ export async function autoProcessPreviousCard() {
   // Check cache first
   const cached = findCachedTranslation(speaker, originalText);
 
-  // Create placeholder element
+  // Create placeholder element (kept for error states, but hidden during normal processing)
   const translatedEl = document.createElement('div');
   translatedEl.className = messageEl.className;
   translatedEl.setAttribute('data-translated', 'true');
+  translatedEl.style.display = 'none'; // Always hidden initially
 
   if (cached?.breakdownData) {
-    translatedEl.style.display = 'none';
     debugLog('AUTO-PROCESS', 'Using cached breakdown');
+    // Shadow element strategy: hide original only for cached results
+    hideOriginalElement(messageEl);
   } else {
-    translatedEl.setAttribute('data-loading', 'true');
-    translatedEl.textContent = 'Analyzing Japanese...';
+    // Show processing indicator on original text (gray color)
+    messageEl.setAttribute('data-processing', 'true');
   }
-
-  // Shadow element strategy
-  hideOriginalElement(messageEl);
   messageEl.insertAdjacentElement('afterend', translatedEl);
 
   // Clone original for fallback
@@ -127,9 +126,9 @@ export async function autoProcessPreviousCard() {
       return;
     }
 
-    // Hide loading placeholder
-    translatedEl.style.display = 'none';
-    translatedEl.removeAttribute('data-loading');
+    // Remove processing indicator from original and hide it
+    messageEl.removeAttribute('data-processing');
+    hideOriginalElement(messageEl);
 
     // Update state
     const state = translationState.get(previousContainer);
@@ -158,9 +157,12 @@ export async function autoProcessPreviousCard() {
 
     if (!translationState.has(previousContainer)) return;
 
+    // Remove processing indicator on error
+    messageEl.removeAttribute('data-processing');
+    hideOriginalElement(messageEl);
+
     translatedEl.textContent = `[Error: ${error.message}]`;
     translatedEl.style.display = '';
-    translatedEl.removeAttribute('data-loading');
     translatedEl.setAttribute('data-error', 'true');
 
     // Clean up after 3 seconds
