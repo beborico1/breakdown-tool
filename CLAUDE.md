@@ -1,5 +1,13 @@
 # Project Notes
 
+## Building
+
+Always rebuild after any code change:
+
+```bash
+npm run build
+```
+
 ## Pushing Changes
 
 This project lives inside a sparse checkout of the internship repo. To push changes:
@@ -23,3 +31,5 @@ git push origin main
 - **Path**: `2024/Luis_Rico/Extra/google-meet-caption-analyzer`
 
 Do NOT add a remote origin to this local repo - it syncs via rsync to the internship monorepo.
+
+NO COAUTHORING IN THE COMMIT MESSAGES.
