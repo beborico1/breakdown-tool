@@ -223,6 +223,11 @@ export async function handleCaptionClick(event) {
     // Render the breakdown panel
     renderBreakdownPanel(container, breakdownData, speaker);
 
+    // Remove translatedEl — translation is in the breakdown panel
+    if (state.translatedEl?.parentNode) {
+      state.translatedEl.remove();
+    }
+
     // Record word frequencies
     recordWordFrequencies(breakdownData.words, contentKey);
 

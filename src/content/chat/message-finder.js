@@ -73,14 +73,44 @@ export function findChatMessageElement(target) {
 }
 
 /**
- * Extract text from a Google Chat message element
+ * Extract text from a Google Chat message element.
+ * Strips hidden accessibility spans and quoted reply blocks so only
+ * the actual reply text is returned.
  * @param {HTMLElement} messageEl - Message element
  * @returns {string} - Message text
  */
 export function extractChatMessageText(messageEl) {
-  // Clone to avoid modifying original, then extract text
+  // Clone to avoid modifying original
   const clone = messageEl.cloneNode(true);
-  // Remove hidden spans
-  clone.querySelectorAll('span[style*="display: none"]').forEach(el => el.remove());
+
+  // Remove hidden spans (accessibility text like "Quoted", "End Quote")
+  clone.querySelectorAll('span[style*="display: none"], span[style*="display:none"]').forEach(el => el.remove());
+
+  // Remove quoted block container if present.
+  // Google Chat quoted replies have hidden spans with "Quoted"/"End Quote" text.
+  // After removing hidden spans above, detect the quoted container by looking for
+  // a direct child that previously contained those markers. We use the original
+  // element to find the quoted block, then remove the corresponding child from the clone.
+  const hiddenSpans = messageEl.querySelectorAll('span[style*="display: none"], span[style*="display:none"]');
+  for (const span of hiddenSpans) {
+    const text = span.textContent?.trim().toLowerCase() || '';
+    if (text === 'quoted' || text === 'end quote' || text.includes('end quote')) {
+      // Walk up to direct child of messageEl
+      let node = span;
+      while (node.parentElement && node.parentElement !== messageEl) {
+        node = node.parentElement;
+      }
+      if (node.parentElement === messageEl) {
+        // Find the same child in the clone by index
+        const children = Array.from(messageEl.children);
+        const index = children.indexOf(node);
+        if (index >= 0 && clone.children[index]) {
+          clone.children[index].remove();
+        }
+        break;
+      }
+    }
+  }
+
   return clone.textContent?.trim() || '';
 }

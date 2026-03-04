@@ -138,6 +138,11 @@ export async function autoProcessPreviousCard() {
     // Render breakdown panel
     renderBreakdownPanel(previousContainer, breakdownData, speaker);
 
+    // Remove translatedEl — translation is in the breakdown panel
+    if (state.translatedEl?.parentNode) {
+      state.translatedEl.remove();
+    }
+
     // Record word frequencies
     recordWordFrequencies(breakdownData.words, contentKey);
 

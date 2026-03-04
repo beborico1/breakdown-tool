@@ -272,7 +272,7 @@ export function handleMutations(mutations, observerConfig) {
     // (A) Remove any original caption elements Meet re-inserted
     // BUT keep shadow original elements (they receive text updates)
     // Also keep mm-display elements for minimalistic mode
-    const originals = container.querySelectorAll('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-display])');
+    const originals = container.querySelectorAll('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-display]):not([data-processing])');
     if (originals.length > 0) {
       if (!didFight) { observer.disconnect(); didFight = true; }
       for (const orig of originals) {
@@ -289,7 +289,7 @@ export function handleMutations(mutations, observerConfig) {
     // (C) Restore text if Meet overwrote it (but NOT if we're in the middle of updating or showing delta)
     // Skip for minimalistic mode (it uses innerHTML with spans, not textContent)
     // Skip this check if the element has data-updating or data-has-delta attribute
-    if (!state.minimalisticState && state.translatedText && state.translatedEl &&
+    if (!state.minimalisticState && !state.breakdownData && state.translatedText && state.translatedEl &&
         !state.translatedEl.hasAttribute('data-updating') &&
         !state.translatedEl.hasAttribute('data-has-delta') &&
         state.translatedEl.textContent !== state.translatedText) {

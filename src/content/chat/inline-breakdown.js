@@ -187,9 +187,9 @@ function escapeHtml(text) {
 function renderInlineContent(messageEl, breakdownData) {
   const wordsHtml = breakdownData.words.map((word, index) => {
     const typeClass = getWordTypeClass(word.type);
-    const readingText = (word.reading || '').trim() || word.japanese;
-    const romajiText = (word.romaji || '').trim() || word.japanese;
-    const englishText = (word.english || '').trim() || word.japanese;
+    const readingText = (word.reading || '').trim() || '-';
+    const romajiText = (word.romaji || '').trim() || '-';
+    const englishText = (word.english || '').trim() || '-';
 
     return `
       <span class="gcwb-word" data-word="${escapeHtml(word.japanese)}"

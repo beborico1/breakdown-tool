@@ -176,9 +176,9 @@ function setupDragHandlers(overlay) {
 function renderOverlayContent(overlay, breakdownData) {
   const wordsHtml = breakdownData.words.map(word => {
     const typeClass = getWordTypeClass(word.type);
-    const reading = (word.reading || '').trim() || word.japanese;
-    const romaji = (word.romaji || '').trim() || word.japanese;
-    const english = (word.english || '').trim() || word.japanese;
+    const reading = (word.reading || '').trim() || '-';
+    const romaji = (word.romaji || '').trim() || '-';
+    const english = (word.english || '').trim() || '-';
     return `
       <div class="gcwb-word-card" data-word="${word.japanese}">
         <div class="gcwb-word-japanese gcwb-type-${typeClass}">${word.japanese}</div>

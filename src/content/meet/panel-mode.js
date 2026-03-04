@@ -37,9 +37,9 @@ export function renderBreakdownPanel(container, breakdownData, speakerName, isEx
     const typeLabel = typeClass.charAt(0).toUpperCase() + typeClass.slice(1);
     block.innerHTML = `
       <span class="word-japanese type-${typeClass}" data-type="${typeLabel}">${word.japanese}</span>
-      ${word.reading ? `<span class="word-hiragana">${word.reading}</span>` : ''}
-      <span class="word-romaji">${word.romaji}</span>
-      <span class="word-english">${word.english}</span>
+      <span class="word-hiragana">${word.reading || '-'}</span>
+      <span class="word-romaji">${word.romaji || '-'}</span>
+      <span class="word-english">${word.english || '-'}</span>
     `;
     panel.appendChild(block);
   });
@@ -84,6 +84,11 @@ export async function reprocessBreakdown(container, text, speakerName) {
 
     // Render the updated breakdown panel
     renderBreakdownPanel(container, breakdownData, speakerName, state.isExpanded);
+
+    // Remove translatedEl — translation is in the breakdown panel
+    if (state.translatedEl?.parentNode) {
+      state.translatedEl.remove();
+    }
 
     // Record word frequencies (use new content key for reprocessed text)
     const reprocessKey = generateContentKey(speakerName, text, getTimeBucket());
