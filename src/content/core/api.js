@@ -15,6 +15,21 @@ export async function getApiKey() {
 }
 
 /**
+ * Update token usage in storage
+ * @param {number} tokens - Number of tokens to add
+ */
+async function updateTokenUsage(tokens) {
+  if (!tokens || tokens <= 0) return;
+
+  chrome.storage.local.get(['tokenUsage'], (result) => {
+    const currentUsage = result.tokenUsage || 0;
+    const newUsage = currentUsage + tokens;
+    chrome.storage.local.set({ tokenUsage: newUsage });
+    debugLog('API', `Token usage updated: +${tokens} (total: ${newUsage})`);
+  });
+}
+
+/**
  * Analyze Japanese text in chunks when the full text causes truncation
  * @param {string} text - Full Japanese text to analyze
  * @param {string} apiKey - Gemini API key
@@ -140,6 +155,12 @@ Text: ${text}`;
   const finishReason = data.candidates?.[0]?.finishReason;
   let responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
+  // Track token usage
+  const usageMetadata = data.usageMetadata;
+  if (usageMetadata?.totalTokenCount) {
+    updateTokenUsage(usageMetadata.totalTokenCount);
+  }
+
   debugLog('API-BREAKDOWN', 'finishReason:', finishReason);
   debugLog('API-BREAKDOWN', 'Response length:', responseText?.length || 0);
 
@@ -256,6 +277,12 @@ export async function translateWithGemini(text, options = {}) {
 
   const data = await response.json();
   const translatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  // Track token usage
+  const usageMetadata = data.usageMetadata;
+  if (usageMetadata?.totalTokenCount) {
+    updateTokenUsage(usageMetadata.totalTokenCount);
+  }
 
   if (!translatedText) {
     debugLog('API', 'No translation in response:', data);

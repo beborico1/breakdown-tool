@@ -97,5 +97,5 @@ export function setOverlayCreatedAt(value) {
 }
 
 // Track inline breakdown state per message element
-// Value: { originalHTML, breakdownData, isShowingBreakdown }
+// Value: { originalHTML, breakdownData, isShowingBreakdown, loadingIndicator }
 export const inlineBreakdownState = new Map();

@@ -176,12 +176,15 @@ function setupDragHandlers(overlay) {
 function renderOverlayContent(overlay, breakdownData) {
   const wordsHtml = breakdownData.words.map(word => {
     const typeClass = getWordTypeClass(word.type);
+    const reading = (word.reading || '').trim() || word.japanese;
+    const romaji = (word.romaji || '').trim() || word.japanese;
+    const english = (word.english || '').trim() || word.japanese;
     return `
       <div class="gcwb-word-card" data-word="${word.japanese}">
-        <div class="gcwb-word-hiragana">${word.reading || word.japanese}</div>
         <div class="gcwb-word-japanese gcwb-type-${typeClass}">${word.japanese}</div>
-        <div class="gcwb-word-romaji">${word.romaji}</div>
-        <div class="gcwb-word-english">${word.english}</div>
+        <div class="gcwb-word-hiragana">${reading}</div>
+        <div class="gcwb-word-romaji">${romaji}</div>
+        <div class="gcwb-word-english">${english}</div>
       </div>
     `;
   }).join('');

@@ -1,6 +1,9 @@
 import { debugLog } from '../core/debug.js';
 import { isGoogleChat, findChatMessageElement, extractChatMessageText } from './message-finder.js';
 import { showCustomContextMenu } from './context-menu.js';
+import { initWordCache } from '../core/word-cache.js';
+import { highlightKnownWords, highlightAllMessages } from './word-highlight.js';
+import { setupWordTooltip } from './word-tooltip.js';
 
 /**
  * Handle right-click on Google Chat messages
@@ -37,6 +40,48 @@ function handleChatContextMenu(event) {
 }
 
 /**
+ * Set up automatic highlighting for new messages using MutationObserver
+ */
+function setupAutoHighlighting() {
+  // Highlight all existing messages
+  highlightAllMessages();
+
+  // Watch for new messages
+  const observer = new MutationObserver((mutations) => {
+    let shouldHighlight = false;
+
+    for (const mutation of mutations) {
+      // Check added nodes for message elements
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          // Check if this is a message element or contains message elements
+          if (node.classList?.contains('Zc1Emd') || node.querySelector?.('.Zc1Emd')) {
+            shouldHighlight = true;
+            break;
+          }
+        }
+      }
+      if (shouldHighlight) break;
+    }
+
+    if (shouldHighlight) {
+      // Small delay to let DOM settle
+      setTimeout(() => {
+        highlightAllMessages();
+      }, 50);
+    }
+  });
+
+  // Observe the entire document for changes
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  debugLog('GCWB', 'Auto-highlighting set up with MutationObserver');
+}
+
+/**
  * Set up context menu handler for Google Chat
  */
 export function setupChatContextMenu() {
@@ -55,11 +100,21 @@ export function setupChatContextMenu() {
 /**
  * Initialize Google Chat features
  */
-export function initializeGoogleChat() {
+export async function initializeGoogleChat() {
   debugLog('GCWB-INIT', `Document readyState: ${document.readyState}`);
+
+  // Initialize word cache from storage
+  await initWordCache();
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupChatContextMenu);
+    document.addEventListener('DOMContentLoaded', () => {
+      setupChatContextMenu();
+      setupAutoHighlighting();
+      setupWordTooltip();
+    });
   } else {
     setupChatContextMenu();
+    setupAutoHighlighting();
+    setupWordTooltip();
   }
 }

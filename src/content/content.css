@@ -152,7 +152,7 @@
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  padding: 0;
+  padding: 4px 12px;
   background: #383838;
   border-radius: 0;
   border: 1px solid #555;
@@ -601,7 +601,7 @@
 .gcwb-word-hiragana {
   font-size: 12px;
   color: #B0B0B0;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .gcwb-word-romaji {
@@ -678,10 +678,49 @@
    INLINE BREAKDOWN STYLES
    ============================================ */
 
+/* Override Google Chat parent element stretching when containing breakdown */
+.DTp27d:has(.gcwb-inline-container) {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: fit-content !important;
+  flex: none !important;
+  align-self: flex-start !important;
+}
+
+.EAOoq:has(.gcwb-inline-container) {
+  height: auto !important;
+  min-height: 0 !important;
+  flex: none !important;
+  align-items: flex-start !important;
+}
+
+.LrGp7b:has(.gcwb-inline-container),
+.YJxKBc:has(.gcwb-inline-container),
+.Hj5Fxb:has(.gcwb-inline-container),
+.zlPNZe:has(.gcwb-inline-container) {
+  height: auto !important;
+  min-height: 0 !important;
+  align-items: flex-start !important;
+  align-content: flex-start !important;
+}
+
 /* Main container that replaces message content */
 .gcwb-inline-container {
   font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', -apple-system, BlinkMacSystemFont, sans-serif;
   animation: gcwbInlineEnter 0.2s ease-out;
+  /* Prevent stretching from parent flex/grid */
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: fit-content !important;
+  flex: 0 0 auto !important;
+  align-self: flex-start !important;
+  /* Remove top padding/margin to flush header with top */
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 @keyframes gcwbInlineEnter {
@@ -698,6 +737,8 @@
   display: flex;
   justify-content: flex-end;
   margin-bottom: 8px;
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
 .gcwb-toggle-btn {
@@ -717,47 +758,35 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-/* Word cards container - inline flow */
+/* Word cards container - use flexbox with row wrap for reliable horizontal flow */
 .gcwb-inline-words {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+  align-content: flex-start !important;
+  gap: 2px !important;
   margin-bottom: 10px;
-  line-height: 1.6;
+  width: auto !important;
 }
 
-/* Word wrapper - inline with hover popover */
+/* Word wrapper - flex item with hover popover */
 .gcwb-word {
   position: relative;
-  display: inline-block;
   padding: 2px 4px;
-  margin: 0 2px;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.15s ease;
   animation: gcwbWordEnter 0.2s ease-out both;
-}
-
-/* Subtle interactivity hint - small dot below */
-.gcwb-word::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 3px;
-  height: 3px;
-  background: currentColor;
-  opacity: 0.3;
-  border-radius: 50%;
+  /* Flex item: shrink to content, don't grow or stretch */
+  flex: 0 0 auto !important;
+  align-self: flex-start !important;
+  /* Prevent text wrapping inside word */
+  white-space: nowrap !important;
 }
 
 .gcwb-word:hover {
   background: rgba(255, 255, 255, 0.08);
-}
-
-.gcwb-word:hover::after {
-  opacity: 0;
 }
 
 /* Copy feedback */
@@ -772,7 +801,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -782,36 +811,34 @@
   font-weight: 500;
 }
 
-/* Popover - hidden by default */
+/* Popover - appended to document.body on hover, visible immediately */
 .gcwb-word-popover {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
+  position: fixed;
   background: #2D2D2D;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 10px 14px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 10000;
+  pointer-events: auto;
+  z-index: 100002;
   white-space: nowrap;
   text-align: center;
+  min-width: 120px;
+  animation: gcwbPopoverEnter 0.15s ease-out;
 }
 
-/* Show on hover with delay */
-.gcwb-word:hover .gcwb-word-popover {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-  pointer-events: auto;
-  transition-delay: 150ms;
+@keyframes gcwbPopoverEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* Arrow pointing down */
+/* Arrow pointing down (popover above word) */
 .gcwb-popover-arrow {
   position: absolute;
   bottom: -6px;
@@ -825,12 +852,33 @@
   transform: translateX(-50%) rotate(45deg);
 }
 
+/* Arrow pointing up (popover below word) */
+.gcwb-popover-below .gcwb-popover-arrow {
+  bottom: auto;
+  top: -6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
+  border-right: none;
+}
+
 /* Popover content typography */
 .gcwb-popover-reading {
   font-size: 14px;
-  color: #B0B0B0;
   margin-bottom: 4px;
 }
+
+/* Popover reading inherits word type color */
+.gcwb-popover-reading.gcwb-type-noun { color: #4285F4; }
+.gcwb-popover-reading.gcwb-type-verb { color: #34A853; }
+.gcwb-popover-reading.gcwb-type-particle { color: #EA4335; }
+.gcwb-popover-reading.gcwb-type-adjective { color: #FBBC04; }
+.gcwb-popover-reading.gcwb-type-adverb { color: #A78BFA; }
+.gcwb-popover-reading.gcwb-type-counter { color: #60A5FA; }
+.gcwb-popover-reading.gcwb-type-expression { color: #F472B6; }
+.gcwb-popover-reading.gcwb-type-auxiliary { color: #F87171; }
+.gcwb-popover-reading.gcwb-type-copula { color: #2DD4BF; }
+.gcwb-popover-reading.gcwb-type-other { color: #9CA3AF; }
 
 .gcwb-popover-romaji {
   font-size: 12px;
@@ -843,7 +891,7 @@
   font-size: 11px;
   color: #9CA3AF;
   white-space: normal;
-  max-width: 160px;
+  max-width: 220px;
   line-height: 1.3;
 }
 
@@ -852,17 +900,6 @@
   margin-bottom: 4px;
 }
 
-/* Translation block */
-.gcwb-inline-translation {
-  color: #1a1a1a;
-  font-size: 11px;
-  font-style: italic;
-  padding: 8px 12px;
-  background: linear-gradient(135deg, rgba(99, 40, 137, 0.15), rgba(99, 40, 137, 0.05));
-  border-left: 2px solid #632889;
-  border-radius: 0 6px 6px 0;
-  margin-bottom: 10px;
-}
 
 /* Action buttons - compact row */
 .gcwb-inline-actions {
@@ -959,4 +996,143 @@
 
 @keyframes gcwbSpin {
   to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   CACHED WORD HIGHLIGHTING & TOOLTIPS
+   ============================================ */
+
+/* Cached/known words - color highlights only */
+.gcwb-cached-word {
+  cursor: help;
+  transition: background-color 0.15s ease;
+}
+
+.gcwb-cached-word:hover {
+  background-color: rgba(167, 139, 250, 0.1);
+}
+
+/* Word tooltip - positioned above the word */
+.gcwb-word-tooltip {
+  position: fixed;
+  z-index: 100002;
+  background: #1F1F1F;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+  animation: gcwbTooltipEnter 0.15s ease-out;
+  pointer-events: auto;
+  min-width: 100px;
+  max-width: 280px;
+}
+
+@keyframes gcwbTooltipEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tooltip content */
+.gcwb-tooltip-content {
+  text-align: center;
+}
+
+.gcwb-tooltip-japanese {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.gcwb-tooltip-reading {
+  font-size: 13px;
+  color: #B0B0B0;
+  margin-bottom: 3px;
+}
+
+.gcwb-tooltip-romaji {
+  font-size: 12px;
+  color: #E0E0E0;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  margin-bottom: 6px;
+}
+
+.gcwb-tooltip-meaning {
+  font-size: 12px;
+  color: #9CA3AF;
+  line-height: 1.3;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+}
+
+.gcwb-tooltip-type {
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* Purple loading indicator — bouncing dots appended to message */
+.gcwb-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.gcwb-loading-indicator .gcwb-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #A78BFA;
+  animation: gcwbBounce 1.2s ease-in-out infinite;
+}
+
+.gcwb-loading-indicator .gcwb-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.gcwb-loading-indicator .gcwb-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes gcwbBounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Tooltip arrow pointing down (when tooltip is above word) */
+.gcwb-tooltip-arrow {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: #1F1F1F;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
+  border-left: none;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+/* Tooltip below word (when not enough space above) */
+.gcwb-word-tooltip.gcwb-tooltip-below .gcwb-tooltip-arrow {
+  bottom: auto;
+  top: -6px;
+  transform: translateX(-50%) rotate(-135deg);
 }

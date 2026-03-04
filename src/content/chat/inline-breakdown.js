@@ -7,6 +7,22 @@ import {
 import { getWordTypeClass } from '../utils/text.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
+import { cacheWords } from '../core/word-cache.js';
+import { clearHighlightState, highlightKnownWords } from './word-highlight.js';
+import { forceHideTooltip } from './word-tooltip.js';
+
+/**
+ * Remove the sibling loading indicator.
+ * Safe to call even if no indicator exists.
+ * @param {HTMLElement} messageEl - Message element
+ */
+function cleanupLoadingIndicator(messageEl) {
+  const state = inlineBreakdownState.get(messageEl);
+  if (state?.loadingIndicator) {
+    state.loadingIndicator.remove();
+    state.loadingIndicator = null;
+  }
+}
 
 /**
  * Show inline breakdown for a message, replacing its content
@@ -32,6 +48,10 @@ export async function showInlineBreakdown(messageEl, text) {
     return;
   }
 
+  // Clear any word highlights and tooltip before showing breakdown
+  clearHighlightState(messageEl);
+  forceHideTooltip();
+
   // Save original HTML if not already saved
   if (!existingState?.originalHTML) {
     inlineBreakdownState.set(messageEl, {
@@ -41,11 +61,18 @@ export async function showInlineBreakdown(messageEl, text) {
     });
   }
 
-  // Show loading state - append indicator instead of replacing
-  const loadingIndicator = document.createElement('div');
-  loadingIndicator.className = 'gcwb-inline-loading-indicator';
-  loadingIndicator.innerHTML = '<span class="gcwb-spinner"></span>';
-  messageEl.appendChild(loadingIndicator);
+  // Show loading indicator — insert a sibling indicator after the message so
+  // the dots appear appended at the end of the original text.
+  const indicator = document.createElement('span');
+  indicator.className = 'gcwb-loading-indicator';
+  indicator.innerHTML = '<span class="gcwb-dot"></span><span class="gcwb-dot"></span><span class="gcwb-dot"></span>';
+  messageEl.parentNode.insertBefore(indicator, messageEl.nextSibling);
+
+  // Store indicator reference so we can remove it later
+  const stateAfterIndicator = inlineBreakdownState.get(messageEl);
+  if (stateAfterIndicator) {
+    stateAfterIndicator.loadingIndicator = indicator;
+  }
 
   // Analyze the text
   try {
@@ -54,6 +81,7 @@ export async function showInlineBreakdown(messageEl, text) {
     // Check if message was restored during analysis
     const currentState = inlineBreakdownState.get(messageEl);
     if (!currentState?.isShowingBreakdown) {
+      cleanupLoadingIndicator(messageEl);
       debugLog('GCWB-INLINE', 'Message restored during analysis, aborting');
       return;
     }
@@ -70,6 +98,11 @@ export async function showInlineBreakdown(messageEl, text) {
       });
       activeContentKeys.add(contentKey);
       debugLog('GCWB-INLINE', `Cached breakdown: ${contentKey.slice(0, 40)}`);
+
+      // Persist individual words to word cache for future highlighting
+      if (breakdownData.words && breakdownData.words.length > 0) {
+        cacheWords(breakdownData.words);
+      }
     }
 
     // Update state with breakdown data
@@ -78,9 +111,8 @@ export async function showInlineBreakdown(messageEl, text) {
       breakdownData: breakdownData
     });
 
-    // Remove loading indicator
-    const loader = messageEl.querySelector('.gcwb-inline-loading-indicator');
-    if (loader) loader.remove();
+    // Remove the analyzing overlay before rendering the final breakdown
+    cleanupLoadingIndicator(messageEl);
 
     // Render the breakdown
     renderInlineContent(messageEl, breakdownData);
@@ -88,9 +120,8 @@ export async function showInlineBreakdown(messageEl, text) {
     const currentState = inlineBreakdownState.get(messageEl);
     if (!currentState?.isShowingBreakdown) return;
 
-    // Remove loading indicator
-    const loader = messageEl.querySelector('.gcwb-inline-loading-indicator');
-    if (loader) loader.remove();
+    // Remove the analyzing overlay before showing the error
+    cleanupLoadingIndicator(messageEl);
 
     messageEl.innerHTML = `
       <div class="gcwb-inline-container">
@@ -114,6 +145,10 @@ export async function showInlineBreakdown(messageEl, text) {
  * @param {Object} breakdownData - Cached breakdown data
  */
 function showCachedInline(messageEl, breakdownData) {
+  // Clear any word highlights and tooltip before showing breakdown
+  clearHighlightState(messageEl);
+  forceHideTooltip();
+
   // Save original HTML if not already saved
   const existingState = inlineBreakdownState.get(messageEl);
   if (!existingState?.originalHTML) {
@@ -152,20 +187,18 @@ function escapeHtml(text) {
 function renderInlineContent(messageEl, breakdownData) {
   const wordsHtml = breakdownData.words.map((word, index) => {
     const typeClass = getWordTypeClass(word.type);
-    const readingText = word.reading || word.japanese;
+    const readingText = (word.reading || '').trim() || word.japanese;
+    const romajiText = (word.romaji || '').trim() || word.japanese;
+    const englishText = (word.english || '').trim() || word.japanese;
 
     return `
       <span class="gcwb-word" data-word="${escapeHtml(word.japanese)}"
+            data-reading="${escapeHtml(readingText)}"
+            data-romaji="${escapeHtml(romajiText)}"
+            data-english="${escapeHtml(englishText)}"
+            data-type="${escapeHtml(typeClass)}"
             style="animation-delay: ${index * 0.03}s">
         <span class="gcwb-word-text gcwb-type-${typeClass}">${escapeHtml(word.japanese)}</span>
-        <div class="gcwb-word-popover">
-          <div class="gcwb-popover-arrow"></div>
-          <div class="gcwb-popover-content">
-            <div class="gcwb-popover-reading">${escapeHtml(readingText)}</div>
-            <div class="gcwb-popover-romaji">${escapeHtml(word.romaji)}</div>
-            <div class="gcwb-popover-meaning">${escapeHtml(word.english)}</div>
-          </div>
-        </div>
       </span>
     `;
   }).join('');
@@ -176,11 +209,106 @@ function renderInlineContent(messageEl, breakdownData) {
         <button class="gcwb-toggle-btn" data-action="restore">↩ Original</button>
       </div>
       <div class="gcwb-inline-words">${wordsHtml}</div>
-      <div class="gcwb-inline-translation">"${escapeHtml(breakdownData.translation)}"</div>
     </div>
   `;
 
   setupInlineHandlers(messageEl, breakdownData);
+}
+
+// Active inline popover state
+let activePopover = null;
+let popoverHideTimeout = null;
+const POPOVER_SHOW_DELAY = 150;
+const POPOVER_HIDE_DELAY = 100;
+
+/**
+ * Create and show a body-appended popover for a word element
+ * @param {HTMLElement} wordEl - The .gcwb-word element
+ */
+function showInlinePopover(wordEl) {
+  // Clear any pending hide
+  if (popoverHideTimeout) {
+    clearTimeout(popoverHideTimeout);
+    popoverHideTimeout = null;
+  }
+
+  // Remove existing popover
+  hideInlinePopoverImmediate();
+
+  const word = wordEl.dataset.word;
+  const reading = wordEl.dataset.reading;
+  const romaji = wordEl.dataset.romaji;
+  const english = wordEl.dataset.english;
+  const typeClass = wordEl.dataset.type;
+
+  if (!word) return;
+
+  // Create popover element
+  const popover = document.createElement('div');
+  popover.className = 'gcwb-word-popover';
+
+  popover.innerHTML = `
+    <div class="gcwb-popover-arrow"></div>
+    <div class="gcwb-popover-content">
+      <div class="gcwb-popover-reading gcwb-type-${typeClass}">${escapeHtml(reading || word)}</div>
+      <div class="gcwb-popover-romaji">${escapeHtml(romaji || word)}</div>
+      <div class="gcwb-popover-meaning">${escapeHtml(english || word)}</div>
+    </div>
+  `;
+
+  document.body.appendChild(popover);
+  activePopover = popover;
+
+  // Position using getBoundingClientRect (correct since popover is on body)
+  const wordRect = wordEl.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+
+  let left = wordRect.left + (wordRect.width / 2) - (popoverRect.width / 2);
+  let top = wordRect.top - popoverRect.height - 8;
+
+  const padding = 8;
+  if (left < padding) left = padding;
+  if (left + popoverRect.width > window.innerWidth - padding) {
+    left = window.innerWidth - popoverRect.width - padding;
+  }
+
+  if (top < padding) {
+    top = wordRect.bottom + 8;
+    popover.classList.add('gcwb-popover-below');
+  }
+
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+
+  // Allow hovering the popover itself
+  popover.addEventListener('mouseenter', () => {
+    if (popoverHideTimeout) {
+      clearTimeout(popoverHideTimeout);
+      popoverHideTimeout = null;
+    }
+  });
+  popover.addEventListener('mouseleave', () => {
+    scheduleHidePopover();
+  });
+}
+
+/**
+ * Schedule hiding the popover after a short delay
+ */
+function scheduleHidePopover() {
+  popoverHideTimeout = setTimeout(() => {
+    hideInlinePopoverImmediate();
+  }, POPOVER_HIDE_DELAY);
+}
+
+/**
+ * Immediately remove the active popover
+ */
+function hideInlinePopoverImmediate() {
+  if (activePopover) {
+    activePopover.remove();
+    activePopover = null;
+  }
 }
 
 /**
@@ -205,8 +333,21 @@ function setupInlineHandlers(messageEl, breakdownData) {
     });
   });
 
-  // Word click to copy
+  // Word hover for body-appended popover and click to copy
   messageEl.querySelectorAll('.gcwb-word').forEach(wordEl => {
+    let showTimeout;
+
+    wordEl.addEventListener('mouseenter', () => {
+      showTimeout = setTimeout(() => {
+        showInlinePopover(wordEl);
+      }, POPOVER_SHOW_DELAY);
+    });
+
+    wordEl.addEventListener('mouseleave', () => {
+      clearTimeout(showTimeout);
+      scheduleHidePopover();
+    });
+
     wordEl.addEventListener('click', (e) => {
       e.stopPropagation();
       const word = wordEl.dataset.word;
@@ -244,12 +385,17 @@ function setupErrorHandlers(messageEl, text) {
 export function restoreOriginalContent(messageEl) {
   const state = inlineBreakdownState.get(messageEl);
   if (state?.originalHTML) {
+    // Remove analyzing overlay if it's still present (e.g. restored during loading)
+    cleanupLoadingIndicator(messageEl);
+    // Clean up any body-appended popover
+    hideInlinePopoverImmediate();
     messageEl.innerHTML = state.originalHTML;
     inlineBreakdownState.set(messageEl, {
       ...state,
       isShowingBreakdown: false
     });
     debugLog('GCWB-INLINE', 'Restored original content');
+    highlightKnownWords(messageEl);
   }
 }
 

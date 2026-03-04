@@ -5,6 +5,9 @@ const apiKeyInput = document.getElementById('apiKey');
 const saveKeyBtn = document.getElementById('saveKey');
 const keyStatusEl = document.getElementById('keyStatus');
 const viewAllWordsBtn = document.getElementById('viewAllWords');
+const tokenCountEl = document.getElementById('tokenCount');
+const tokenCostEl = document.getElementById('tokenCost');
+const resetUsageBtn = document.getElementById('resetUsage');
 
 /* Commented out - Minimalistic Mode and Word Frequency stats removed
 const minimalisticToggle = document.getElementById('minimalisticToggle');
@@ -227,7 +230,106 @@ function openFrequencyPage() {
 viewAllWordsBtn.addEventListener('click', openFrequencyPage);
 // clearDataBtn.addEventListener('click', clearFrequencyData);
 
+/**
+ * Initialize popup - check if on Google Meet
+ */
+async function init() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const isOnMeet = tab?.url?.includes('meet.google.com');
+
+  const buttonsDiv = document.querySelector('.buttons');
+  buttonsDiv.style.display = isOnMeet ? 'flex' : 'none';
+}
+
+/**
+ * Format token count for display (e.g., 1234 -> "1,234", 1234567 -> "1.2M")
+ * @param {number} tokens
+ * @returns {string}
+ */
+function formatTokenCount(tokens) {
+  if (tokens >= 1000000) {
+    return (tokens / 1000000).toFixed(1) + 'M';
+  }
+  if (tokens >= 10000) {
+    return (tokens / 1000).toFixed(1) + 'K';
+  }
+  return tokens.toLocaleString();
+}
+
+/**
+ * Format cost based on token count ($0.15 per 1M tokens for Gemini 2.5 Flash)
+ * @param {number} tokens
+ * @returns {string}
+ */
+function formatCost(tokens) {
+  const cost = (tokens / 1000000) * 0.15;
+  if (cost < 0.01) {
+    return '~$' + cost.toFixed(4);
+  }
+  return '~$' + cost.toFixed(2);
+}
+
+/**
+ * Update the usage display with optional animation
+ * @param {number} tokens
+ * @param {boolean} animate
+ */
+function updateUsageDisplay(tokens, animate = false) {
+  tokenCountEl.textContent = formatTokenCount(tokens);
+  tokenCostEl.textContent = formatCost(tokens);
+
+  // Disable reset button if zero tokens
+  resetUsageBtn.disabled = tokens === 0;
+
+  if (animate) {
+    tokenCountEl.classList.add('updating');
+    tokenCostEl.classList.add('updating');
+    setTimeout(() => {
+      tokenCountEl.classList.remove('updating');
+      tokenCostEl.classList.remove('updating');
+    }, 300);
+  }
+}
+
+/**
+ * Load token usage from storage
+ */
+function loadUsage() {
+  chrome.storage.local.get(['tokenUsage'], (result) => {
+    const tokens = result.tokenUsage || 0;
+    updateUsageDisplay(tokens);
+  });
+}
+
+/**
+ * Reset token usage counter
+ */
+function resetUsage() {
+  if (!confirm('Reset token usage counter to zero?')) {
+    return;
+  }
+
+  chrome.storage.local.set({ tokenUsage: 0 }, () => {
+    updateUsageDisplay(0, true);
+    showStatus('Token usage reset', true);
+  });
+}
+
+// Listen for storage changes to update in real-time
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.tokenUsage) {
+    updateUsageDisplay(changes.tokenUsage.newValue || 0, true);
+  }
+});
+
+// Reset usage button handler
+resetUsageBtn.addEventListener('click', resetUsage);
+
 // Load saved key on popup open
 loadApiKey();
+loadUsage();
 // loadMinimalisticMode();
 // loadFrequencyStats();
+
+// Initialize popup state
+init();
