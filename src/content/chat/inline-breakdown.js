@@ -204,7 +204,6 @@ function renderInlineContent(messageEl, breakdownData) {
   const translationDelay = (breakdownData.words.length * 0.03) + 0.1;
   const translationHtml = translation ? `
       <div class="gcwb-inline-translation" style="animation-delay: ${translationDelay}s">
-        <span class="gcwb-translation-label">EN</span>
         <span class="gcwb-translation-text">"${escapeHtml(translation)}"</span>
       </div>
   ` : '';

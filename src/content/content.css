@@ -914,7 +914,6 @@
 .gcwb-inline-translation {
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 8px 12px;
   margin-top: 8px;
   background: linear-gradient(135deg, rgba(99, 40, 137, 0.15), rgba(99, 40, 137, 0.05));
@@ -933,23 +932,10 @@
   background: rgba(99, 40, 137, 0.4);
 }
 
-.gcwb-translation-label {
-  background: #632889;
-  color: #E8EAED;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  border-radius: 3px;
-  padding: 1px 5px;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
 .gcwb-translation-text {
-  color: #E8EAED;
+  color: #3c4043;
   font-style: italic;
   font-size: 13px;
-  opacity: 0.9;
 }
 
 @keyframes gcwbTranslationEnter {
