@@ -47,6 +47,12 @@ export function setupCaptionClickHandlers() {
     container.classList.add('caption-translatable');
     container.addEventListener('click', handleCaptionClick);
 
+    // Strip inline max-width that Google Meet may apply (780px cap)
+    container.style.removeProperty('max-width');
+    if (container.parentElement) {
+      container.parentElement.style.removeProperty('max-width');
+    }
+
     const nameEl = container.querySelector('.NWpY1d');
     const messageEl = container.querySelector('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original])');
     const speaker = nameEl?.textContent?.trim() || '(unknown)';
@@ -310,6 +316,16 @@ export function handleMutations(mutations, observerConfig) {
         if (!didFight) { observer.disconnect(); didFight = true; }
         renderMinimalisticCaption(state.translatedEl, state.originalText, state.minimalisticState);
       }
+    }
+
+    // (F) Strip inline max-width that Meet may re-apply (780px cap)
+    if (container.style.maxWidth) {
+      if (!didFight) { observer.disconnect(); didFight = true; }
+      container.style.removeProperty('max-width');
+    }
+    if (container.parentElement?.style.maxWidth) {
+      if (!didFight) { observer.disconnect(); didFight = true; }
+      container.parentElement.style.removeProperty('max-width');
     }
   }
 

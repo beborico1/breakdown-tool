@@ -46,6 +46,15 @@
   gap: 0;
   margin-top: 12px;
   font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+
+  /* Font size custom properties (set dynamically via JS) */
+  --wb-font-japanese: 15px;
+  --wb-font-hiragana: 12px;
+  --wb-font-romaji: 11px;
+  --wb-font-english: 11px;
+  --wb-font-pending: 18px;
+  --wb-font-translation: 14px;
+  --wb-font-tooltip: 10px;
 }
 
 /* Panel container (deprecated - kept for reference)
@@ -122,7 +131,7 @@
 /* Pending text (incoming unprocessed Japanese) */
 .breakdown-pending {
   color: #9CA3AF;
-  font-size: 18px;
+  font-size: var(--wb-font-pending, 18px);
   padding: 8px 16px;
   background: rgba(99, 40, 137, 0.1);
   border-radius: 4px;
@@ -166,26 +175,26 @@
 
 /* Word stack within each block */
 .word-block .word-japanese {
-  font-size: 15px;
+  font-size: var(--wb-font-japanese, 15px);
   font-weight: 500;
   /* Color inherited from .type-* classes (noun=blue, verb=green, etc.) */
 }
 
 .word-block .word-hiragana {
-  font-size: 12px;
+  font-size: var(--wb-font-hiragana, 12px);
   color: #B0B0B0;
   margin-top: 1px;
 }
 
 .word-block .word-romaji {
-  font-size: 11px;
+  font-size: var(--wb-font-romaji, 11px);
   color: #E0E0E0;
   margin-top: 2px;
   font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
 }
 
 .word-block .word-english {
-  font-size: 11px;
+  font-size: var(--wb-font-english, 11px);
   color: #888;
   margin-top: 1px;
 }
@@ -216,7 +225,7 @@
   transform: translateX(-50%) translateY(100%);
   background: #3D3D3D;
   color: inherit; /* Uses the type color */
-  font-size: 10px;
+  font-size: var(--wb-font-tooltip, 10px);
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -241,7 +250,7 @@
   flex-basis: 100%;
   margin-top: 8px;
   color: #E8EAED;
-  font-size: 14px;
+  font-size: var(--wb-font-translation, 14px);
   font-style: italic;
   padding: 12px 16px;
   background: linear-gradient(135deg, rgba(99, 40, 137, 0.15), rgba(99, 40, 137, 0.05));
@@ -901,6 +910,59 @@
 }
 
 
+/* Inline translation section */
+.gcwb-inline-translation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: linear-gradient(135deg, rgba(99, 40, 137, 0.15), rgba(99, 40, 137, 0.05));
+  border-left: 3px solid #632889;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  animation: gcwbTranslationEnter 0.3s ease-out both;
+  transition: filter 0.15s ease;
+}
+
+.gcwb-inline-translation:hover {
+  filter: brightness(1.15);
+}
+
+.gcwb-inline-translation.gcwb-copied {
+  background: rgba(99, 40, 137, 0.4);
+}
+
+.gcwb-translation-label {
+  background: #632889;
+  color: #E8EAED;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.gcwb-translation-text {
+  color: #E8EAED;
+  font-style: italic;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+@keyframes gcwbTranslationEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Action buttons - compact row */
 .gcwb-inline-actions {
   display: flex;
@@ -1135,4 +1197,18 @@
   bottom: auto;
   top: -6px;
   transform: translateX(-50%) rotate(-135deg);
+}
+
+/* ============================================
+   GOOGLE MEET CAPTION WIDTH OVERRIDE
+   ============================================ */
+
+/* Remove max-width on the caption card itself */
+.nMcdL {
+  max-width: none !important;
+}
+
+/* Remove max-width on the direct parent wrapper (likely where 780px lives) */
+[class]:has(> .nMcdL) {
+  max-width: none !important;
 }

@@ -20,13 +20,24 @@
     <div class="settings">
       <div class="setting-header">
         <span class="setting-title">Gemini API Key</span>
-        <span class="setting-hint">Uses Gemini 2.5 Flash (~$0.15/1M tokens)</span>
+        <span class="setting-hint" id="modelCostHint">Uses Gemini 2.5 Flash (~$0.15/1M tokens)</span>
       </div>
       <div class="api-key-group">
         <input type="password" id="apiKey" placeholder="Gemini API Key" class="input">
         <button id="saveKey" class="btn btn-small">Save</button>
       </div>
       <div id="keyStatus" class="key-status"></div>
+      <div class="model-selector">
+        <label class="setting-hint" for="modelSelect">Model</label>
+        <select id="modelSelect" class="input">
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+          <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+        </select>
+      </div>
     </div>
 
     <hr class="divider">
@@ -51,6 +62,18 @@
           <span class="usage-stat-label">est. cost</span>
         </div>
       </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="font-size-section">
+      <div class="setting-header">
+        <div class="font-size-header">
+          <span class="setting-title">Card Font Size</span>
+          <span class="font-size-value" id="fontSizeValue">15px</span>
+        </div>
+      </div>
+      <input type="range" id="fontSizeSlider" class="font-size-slider" min="10" max="24" step="1" value="15">
     </div>
 
     <!-- Minimalistic Mode - commented out

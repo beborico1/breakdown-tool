@@ -14,6 +14,20 @@ export async function getApiKey() {
   });
 }
 
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+
+/**
+ * Get the selected Gemini model from storage
+ * @returns {Promise<string>}
+ */
+export async function getModel() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['geminiModel'], (result) => {
+      resolve(result.geminiModel || DEFAULT_MODEL);
+    });
+  });
+}
+
 /**
  * Update token usage in storage
  * @param {number} tokens - Number of tokens to add
@@ -95,6 +109,7 @@ export async function analyzeJapaneseWithGemini(text, options = {}) {
     throw new Error('No API key. Set it in the extension popup.');
   }
 
+  const model = await getModel();
   const callNum = incrementApiCallCount();
 
   const prompt = `Analyze this Japanese text and return ONLY valid JSON (no markdown, no code blocks, no explanation):
@@ -125,7 +140,7 @@ Text: ${text}`;
   debugLog('API-BREAKDOWN', `INPUT (${text.length} chars):`, text);
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -233,6 +248,7 @@ export async function translateWithGemini(text, options = {}) {
     throw new Error('No API key. Set it in the extension popup.');
   }
 
+  const model = await getModel();
   const callNum = incrementApiCallCount();
 
   let prompt;
@@ -249,7 +265,7 @@ export async function translateWithGemini(text, options = {}) {
   debugLog('API', `FULL PROMPT:`, prompt);
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {

@@ -8,6 +8,22 @@ const viewAllWordsBtn = document.getElementById('viewAllWords');
 const tokenCountEl = document.getElementById('tokenCount');
 const tokenCostEl = document.getElementById('tokenCost');
 const resetUsageBtn = document.getElementById('resetUsage');
+const modelSelectEl = document.getElementById('modelSelect');
+const modelCostHintEl = document.getElementById('modelCostHint');
+const fontSizeSlider = document.getElementById('fontSizeSlider');
+const fontSizeValueEl = document.getElementById('fontSizeValue');
+
+const GEMINI_MODELS = {
+  'gemini-2.5-flash':     { label: 'Gemini 2.5 Flash',      costPer1M: 0.15 },
+  'gemini-2.5-pro':       { label: 'Gemini 2.5 Pro',        costPer1M: 1.25 },
+  'gemini-2.0-flash':     { label: 'Gemini 2.0 Flash',      costPer1M: 0.10 },
+  'gemini-2.0-flash-lite':{ label: 'Gemini 2.0 Flash Lite', costPer1M: 0.075 },
+  'gemini-1.5-flash':     { label: 'Gemini 1.5 Flash',      costPer1M: 0.075 },
+  'gemini-1.5-pro':       { label: 'Gemini 1.5 Pro',        costPer1M: 1.25 },
+};
+
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+let currentModelId = DEFAULT_MODEL;
 
 /* Commented out - Minimalistic Mode and Word Frequency stats removed
 const minimalisticToggle = document.getElementById('minimalisticToggle');
@@ -257,12 +273,13 @@ function formatTokenCount(tokens) {
 }
 
 /**
- * Format cost based on token count ($0.15 per 1M tokens for Gemini 2.5 Flash)
+ * Format cost based on token count and selected model
  * @param {number} tokens
  * @returns {string}
  */
 function formatCost(tokens) {
-  const cost = (tokens / 1000000) * 0.15;
+  const costPer1M = GEMINI_MODELS[currentModelId]?.costPer1M || 0.15;
+  const cost = (tokens / 1000000) * costPer1M;
   if (cost < 0.01) {
     return '~$' + cost.toFixed(4);
   }
@@ -315,19 +332,76 @@ function resetUsage() {
   });
 }
 
+/**
+ * Update the cost hint text with the selected model info
+ * @param {string} modelId
+ */
+function updateCostHint(modelId) {
+  const model = GEMINI_MODELS[modelId];
+  if (model) {
+    modelCostHintEl.textContent = `Uses ${model.label} (~$${model.costPer1M}/1M tokens)`;
+  }
+}
+
+/**
+ * Load saved model from storage
+ */
+function loadModel() {
+  chrome.storage.sync.get(['geminiModel'], (result) => {
+    currentModelId = result.geminiModel || DEFAULT_MODEL;
+    modelSelectEl.value = currentModelId;
+    updateCostHint(currentModelId);
+    loadUsage(); // re-render cost with correct model rate
+  });
+}
+
+// Handle model selection change
+modelSelectEl.addEventListener('change', () => {
+  const modelId = modelSelectEl.value;
+  currentModelId = modelId;
+  chrome.storage.sync.set({ geminiModel: modelId });
+  updateCostHint(modelId);
+  loadUsage(); // re-render cost with new model rate
+});
+
 // Listen for storage changes to update in real-time
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes.tokenUsage) {
     updateUsageDisplay(changes.tokenUsage.newValue || 0, true);
+  }
+  if (areaName === 'sync' && changes.geminiModel) {
+    currentModelId = changes.geminiModel.newValue || DEFAULT_MODEL;
+    modelSelectEl.value = currentModelId;
+    updateCostHint(currentModelId);
+    loadUsage();
   }
 });
 
 // Reset usage button handler
 resetUsageBtn.addEventListener('click', resetUsage);
 
-// Load saved key on popup open
+/**
+ * Load font size setting from storage
+ */
+function loadFontSize() {
+  chrome.storage.sync.get(['wordBlockFontSize'], (result) => {
+    const size = result.wordBlockFontSize || 15;
+    fontSizeSlider.value = size;
+    fontSizeValueEl.textContent = `${size}px`;
+  });
+}
+
+// Font size slider handler
+fontSizeSlider.addEventListener('input', () => {
+  const size = parseInt(fontSizeSlider.value, 10);
+  fontSizeValueEl.textContent = `${size}px`;
+  chrome.storage.sync.set({ wordBlockFontSize: size });
+});
+
+// Load saved key and model on popup open
 loadApiKey();
-loadUsage();
+loadModel();
+loadFontSize();
 // loadMinimalisticMode();
 // loadFrequencyStats();
 

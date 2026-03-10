@@ -1,9 +1,35 @@
 import { debugLog } from '../core/debug.js';
-import { translationState, translationCache, activeContentKeys } from '../core/state.js';
+import { translationState, translationCache, activeContentKeys, wordBlockFontSize } from '../core/state.js';
 import { getWordTypeClass } from '../utils/text.js';
 import { generateContentKey, getTimeBucket } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
+
+/**
+ * Apply font size CSS custom properties to a single breakdown wrapper
+ * @param {HTMLElement} wrapper - A .breakdown-wrapper element
+ * @param {number} baseFontSize - The base (japanese) font size in px
+ */
+export function applyFontSizeToWrapper(wrapper, baseFontSize) {
+  const scale = baseFontSize / 15;
+  wrapper.style.setProperty('--wb-font-japanese', `${baseFontSize}px`);
+  wrapper.style.setProperty('--wb-font-hiragana', `${Math.round(12 * scale)}px`);
+  wrapper.style.setProperty('--wb-font-romaji', `${Math.round(11 * scale)}px`);
+  wrapper.style.setProperty('--wb-font-english', `${Math.round(11 * scale)}px`);
+  wrapper.style.setProperty('--wb-font-pending', `${Math.round(18 * scale)}px`);
+  wrapper.style.setProperty('--wb-font-translation', `${Math.round(14 * scale)}px`);
+  wrapper.style.setProperty('--wb-font-tooltip', `${Math.round(10 * scale)}px`);
+}
+
+/**
+ * Apply font size to all existing breakdown wrappers in the DOM
+ * @param {number} baseFontSize - The base (japanese) font size in px
+ */
+export function applyWordBlockFontSize(baseFontSize) {
+  document.querySelectorAll('.breakdown-wrapper').forEach(wrapper => {
+    applyFontSizeToWrapper(wrapper, baseFontSize);
+  });
+}
 
 /**
  * Render the breakdown panel for a caption
@@ -37,7 +63,7 @@ export function renderBreakdownPanel(container, breakdownData, speakerName, isEx
     const typeLabel = typeClass.charAt(0).toUpperCase() + typeClass.slice(1);
     block.innerHTML = `
       <span class="word-japanese type-${typeClass}" data-type="${typeLabel}">${word.japanese}</span>
-      <span class="word-hiragana">${word.reading || '-'}</span>
+      <span class="word-hiragana">${word.reading || word.japanese}</span>
       <span class="word-romaji">${word.romaji || '-'}</span>
       <span class="word-english">${word.english || '-'}</span>
     `;
@@ -49,6 +75,9 @@ export function renderBreakdownPanel(container, breakdownData, speakerName, isEx
   translationDiv.className = 'breakdown-translation';
   translationDiv.textContent = `"${breakdownData.translation}"`;
   panel.appendChild(translationDiv);
+
+  // Apply current font size setting
+  applyFontSizeToWrapper(panel, wordBlockFontSize);
 
   // Insert panel into container
   container.appendChild(panel);

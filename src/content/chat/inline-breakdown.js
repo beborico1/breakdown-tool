@@ -187,7 +187,7 @@ function escapeHtml(text) {
 function renderInlineContent(messageEl, breakdownData) {
   const wordsHtml = breakdownData.words.map((word, index) => {
     const typeClass = getWordTypeClass(word.type);
-    const readingText = (word.reading || '').trim() || '-';
+    const readingText = (word.reading || '').trim() || word.japanese;
     const romajiText = (word.romaji || '').trim() || '-';
     const englishText = (word.english || '').trim() || '-';
 
@@ -203,12 +203,22 @@ function renderInlineContent(messageEl, breakdownData) {
     `;
   }).join('');
 
+  const translation = breakdownData.translation || '';
+  const translationDelay = (breakdownData.words.length * 0.03) + 0.1;
+  const translationHtml = translation ? `
+      <div class="gcwb-inline-translation" style="animation-delay: ${translationDelay}s">
+        <span class="gcwb-translation-label">EN</span>
+        <span class="gcwb-translation-text">"${escapeHtml(translation)}"</span>
+      </div>
+  ` : '';
+
   messageEl.innerHTML = `
     <div class="gcwb-inline-container">
       <div class="gcwb-inline-header">
         <button class="gcwb-toggle-btn" data-action="restore">↩ Original</button>
       </div>
       <div class="gcwb-inline-words">${wordsHtml}</div>
+      ${translationHtml}
     </div>
   `;
 
@@ -332,6 +342,19 @@ function setupInlineHandlers(messageEl, breakdownData) {
       handleInlineCopy(copyType, breakdownData, e.target);
     });
   });
+
+  // Translation click-to-copy
+  const translationEl = messageEl.querySelector('.gcwb-inline-translation');
+  if (translationEl) {
+    translationEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const text = breakdownData.translation || '';
+      navigator.clipboard.writeText(text).then(() => {
+        translationEl.classList.add('gcwb-copied');
+        setTimeout(() => translationEl.classList.remove('gcwb-copied'), 1500);
+      });
+    });
+  }
 
   // Word hover for body-appended popover and click to copy
   messageEl.querySelectorAll('.gcwb-word').forEach(wordEl => {

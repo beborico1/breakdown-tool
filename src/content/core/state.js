@@ -79,6 +79,10 @@ export const OBSERVER_CONFIG = {
   characterData: true,
 };
 
+// Word block font size
+export let wordBlockFontSize = 15;
+export function setWordBlockFontSize(value) { wordBlockFontSize = value; }
+
 // Google Chat state
 export let activeGcwbOverlay = null;
 export let activeGcwbContextMenu = null;

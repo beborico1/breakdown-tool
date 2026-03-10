@@ -176,7 +176,7 @@ function setupDragHandlers(overlay) {
 function renderOverlayContent(overlay, breakdownData) {
   const wordsHtml = breakdownData.words.map(word => {
     const typeClass = getWordTypeClass(word.type);
-    const reading = (word.reading || '').trim() || '-';
+    const reading = (word.reading || '').trim() || word.japanese;
     const romaji = (word.romaji || '').trim() || '-';
     const english = (word.english || '').trim() || '-';
     return `

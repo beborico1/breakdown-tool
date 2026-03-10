@@ -5,13 +5,16 @@ import {
   setMinimalisticModeEnabled,
   translationState,
   setLastCopiedIndex,
-  lastCopiedIndex
+  lastCopiedIndex,
+  setWordBlockFontSize,
+  wordBlockFontSize
 } from '../core/state.js';
 import { pruneTranslationCache } from '../core/cache.js';
 import { loadMinimalisticMode, removeMinimalisticOverlay } from './minimalistic-mode.js';
 import { removeOverlay } from './caption-handler.js';
 import { setupCaptionClickHandlers, handleMutations, setObserver } from './dom-fighter.js';
 import { extractCaptions, formatCaptions } from './caption-extractor.js';
+import { applyWordBlockFontSize } from './panel-mode.js';
 
 // Create the MutationObserver
 const observer = new MutationObserver((mutations) => {
@@ -31,6 +34,14 @@ function initializeObserver() {
 
   // Load minimalistic mode setting
   loadMinimalisticMode();
+
+  // Load word block font size setting
+  chrome.storage.sync.get(['wordBlockFontSize'], (result) => {
+    if (result.wordBlockFontSize) {
+      setWordBlockFontSize(result.wordBlockFontSize);
+      applyWordBlockFontSize(result.wordBlockFontSize);
+    }
+  });
 
   // Prune translation cache periodically (every minute)
   setInterval(pruneTranslationCache, 60 * 1000);
@@ -92,6 +103,13 @@ export function initializeGoogleMeet() {
   // Listen for storage changes (minimalistic mode toggle)
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync') return;
+
+    if (changes.wordBlockFontSize) {
+      const newSize = changes.wordBlockFontSize.newValue;
+      debugLog('STORAGE', `Word block font size changed: ${newSize}`);
+      setWordBlockFontSize(newSize);
+      applyWordBlockFontSize(newSize);
+    }
 
     if (changes.minimalisticModeEnabled) {
       const newValue = changes.minimalisticModeEnabled.newValue;
