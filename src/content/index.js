@@ -10,7 +10,9 @@
 
 import { initializeGoogleMeet } from './meet/index.js';
 import { initializeGoogleChat } from './chat/index.js';
+import { initializeGmail } from './gmail/index.js';
 
 // Initialize features based on current page
 initializeGoogleMeet();
 initializeGoogleChat();
+initializeGmail();

@@ -2,19 +2,18 @@ import {
   activeGcwbContextMenu,
   setActiveGcwbContextMenu
 } from '../core/state.js';
-import { extractChatMessageText } from './message-finder.js';
 import { showInlineBreakdown } from './inline-breakdown.js';
 
 /**
  * Show custom context menu at cursor position
  * @param {MouseEvent} event - Right-click event
  * @param {HTMLElement} messageEl - Message element
+ * @param {string} text - Extracted text to analyze
  */
-export function showCustomContextMenu(event, messageEl) {
+export function showCustomContextMenu(event, messageEl, text) {
   // Hide any existing menu
   hideCustomContextMenu();
 
-  const text = extractChatMessageText(messageEl);
   if (!text) return;
 
   // Create context menu

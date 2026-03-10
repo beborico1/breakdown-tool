@@ -1212,3 +1212,37 @@
 [class]:has(> .nMcdL) {
   max-width: none !important;
 }
+
+/* ============================================
+   GMAIL-SPECIFIC OVERRIDES
+   ============================================ */
+
+/* Ensure message body doesn't clip popover overflow */
+.a3s.aiL {
+  overflow: visible !important;
+}
+
+/* Adjust cached-word hover background for Gmail's light theme */
+.a3s.aiL .gcwb-cached-word:hover {
+  background-color: rgba(99, 40, 137, 0.12);
+}
+
+/* Ensure inline breakdown container works in Gmail's layout */
+.a3s.aiL .gcwb-inline-container {
+  background: #1F1F1F;
+  border-radius: 8px;
+  padding: 12px !important;
+  margin: 8px 0 !important;
+}
+
+/* Gmail toggle button needs lighter style for light theme context */
+.a3s.aiL .gcwb-toggle-btn {
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #666;
+}
+
+.a3s.aiL .gcwb-toggle-btn:hover {
+  color: #333;
+  border-color: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.05);
+}

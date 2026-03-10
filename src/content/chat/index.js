@@ -36,7 +36,7 @@ function handleChatContextMenu(event) {
   // Prevent default context menu and show our custom one
   event.preventDefault();
   event.stopPropagation();
-  showCustomContextMenu(event, messageEl);
+  showCustomContextMenu(event, messageEl, text);
 }
 
 /**
@@ -106,15 +106,23 @@ export async function initializeGoogleChat() {
   // Initialize word cache from storage
   await initWordCache();
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      setupChatContextMenu();
-      setupAutoHighlighting();
-      setupWordTooltip();
-    });
-  } else {
+  const setup = () => {
     setupChatContextMenu();
     setupAutoHighlighting();
     setupWordTooltip();
+
+    // Re-highlight after inline breakdown is dismissed
+    document.addEventListener('gcwb-content-restored', (event) => {
+      const messageEl = event.target;
+      if (messageEl) {
+        highlightKnownWords(messageEl);
+      }
+    });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
   }
 }

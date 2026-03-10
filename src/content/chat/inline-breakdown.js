@@ -8,7 +8,6 @@ import { getWordTypeClass } from '../utils/text.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { cacheWords } from '../core/word-cache.js';
-import { clearHighlightState, highlightKnownWords } from './word-highlight.js';
 import { forceHideTooltip } from './word-tooltip.js';
 
 /**
@@ -48,8 +47,7 @@ export async function showInlineBreakdown(messageEl, text) {
     return;
   }
 
-  // Clear any word highlights and tooltip before showing breakdown
-  clearHighlightState(messageEl);
+  // Clear tooltip before showing breakdown
   forceHideTooltip();
 
   // Save original HTML if not already saved
@@ -145,8 +143,7 @@ export async function showInlineBreakdown(messageEl, text) {
  * @param {Object} breakdownData - Cached breakdown data
  */
 function showCachedInline(messageEl, breakdownData) {
-  // Clear any word highlights and tooltip before showing breakdown
-  clearHighlightState(messageEl);
+  // Clear tooltip before showing breakdown
   forceHideTooltip();
 
   // Save original HTML if not already saved
@@ -418,7 +415,7 @@ export function restoreOriginalContent(messageEl) {
       isShowingBreakdown: false
     });
     debugLog('GCWB-INLINE', 'Restored original content');
-    highlightKnownWords(messageEl);
+    messageEl.dispatchEvent(new CustomEvent('gcwb-content-restored', { bubbles: true }));
   }
 }
 
