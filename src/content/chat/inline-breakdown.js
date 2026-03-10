@@ -9,6 +9,7 @@ import { findCachedTranslation, generateContentKey, getTimeBucket } from '../cor
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { cacheWords } from '../core/word-cache.js';
 import { forceHideTooltip } from './word-tooltip.js';
+import { getPreHighlightHTML } from './word-highlight.js';
 
 /**
  * Remove the sibling loading indicator.
@@ -50,10 +51,11 @@ export async function showInlineBreakdown(messageEl, text) {
   // Clear tooltip before showing breakdown
   forceHideTooltip();
 
-  // Save original HTML if not already saved
+  // Save original HTML if not already saved (prefer pre-highlight version)
   if (!existingState?.originalHTML) {
+    const trueOriginal = getPreHighlightHTML(messageEl) || messageEl.innerHTML;
     inlineBreakdownState.set(messageEl, {
-      originalHTML: messageEl.innerHTML,
+      originalHTML: trueOriginal,
       breakdownData: null,
       isShowingBreakdown: true
     });
@@ -146,11 +148,12 @@ function showCachedInline(messageEl, breakdownData) {
   // Clear tooltip before showing breakdown
   forceHideTooltip();
 
-  // Save original HTML if not already saved
+  // Save original HTML if not already saved (prefer pre-highlight version)
   const existingState = inlineBreakdownState.get(messageEl);
   if (!existingState?.originalHTML) {
+    const trueOriginal = getPreHighlightHTML(messageEl) || messageEl.innerHTML;
     inlineBreakdownState.set(messageEl, {
-      originalHTML: messageEl.innerHTML,
+      originalHTML: trueOriginal,
       breakdownData: breakdownData,
       isShowingBreakdown: true
     });

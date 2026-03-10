@@ -2,7 +2,7 @@ import { debugLog } from '../core/debug.js';
 import { isGoogleChat, findChatMessageElement, extractChatMessageText } from './message-finder.js';
 import { showCustomContextMenu } from './context-menu.js';
 import { initWordCache } from '../core/word-cache.js';
-import { highlightKnownWords, highlightAllMessages } from './word-highlight.js';
+import { highlightKnownWords, highlightAllMessages, clearHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from './word-tooltip.js';
 
 /**
@@ -115,6 +115,7 @@ export async function initializeGoogleChat() {
     document.addEventListener('gcwb-content-restored', (event) => {
       const messageEl = event.target;
       if (messageEl) {
+        clearHighlightState(messageEl);
         highlightKnownWords(messageEl);
       }
     });

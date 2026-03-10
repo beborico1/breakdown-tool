@@ -141,3 +141,12 @@ export function isHighlighted(messageEl) {
 export function clearHighlightState(messageEl) {
   highlightedMessages.delete(messageEl);
 }
+
+/**
+ * Get the pre-highlight (truly original) HTML for a message element
+ * @param {HTMLElement} messageEl - Message element
+ * @returns {string|null} - Original HTML before highlighting, or null
+ */
+export function getPreHighlightHTML(messageEl) {
+  return highlightedMessages.get(messageEl)?.originalHTML || null;
+}
