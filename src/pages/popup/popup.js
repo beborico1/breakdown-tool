@@ -14,12 +14,11 @@ const fontSizeSlider = document.getElementById('fontSizeSlider');
 const fontSizeValueEl = document.getElementById('fontSizeValue');
 
 const GEMINI_MODELS = {
-  'gemini-2.5-flash':     { label: 'Gemini 2.5 Flash',      costPer1M: 0.15 },
-  'gemini-2.5-pro':       { label: 'Gemini 2.5 Pro',        costPer1M: 1.25 },
-  'gemini-2.0-flash':     { label: 'Gemini 2.0 Flash',      costPer1M: 0.10 },
-  'gemini-2.0-flash-lite':{ label: 'Gemini 2.0 Flash Lite', costPer1M: 0.075 },
-  'gemini-1.5-flash':     { label: 'Gemini 1.5 Flash',      costPer1M: 0.075 },
-  'gemini-1.5-pro':       { label: 'Gemini 1.5 Pro',        costPer1M: 1.25 },
+  'gemini-2.5-flash':      { label: 'Gemini 2.5 Flash',      costPer1M: 0.15 },
+  'gemini-2.5-flash-lite': { label: 'Gemini 2.5 Flash Lite', costPer1M: 0.075 },
+  'gemini-2.5-pro':        { label: 'Gemini 2.5 Pro',        costPer1M: 1.25 },
+  'gemini-2.0-flash':      { label: 'Gemini 2.0 Flash',      costPer1M: 0.10 },
+  'gemini-2.0-flash-lite': { label: 'Gemini 2.0 Flash Lite', costPer1M: 0.075 },
 };
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
