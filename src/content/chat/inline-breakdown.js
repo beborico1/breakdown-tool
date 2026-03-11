@@ -12,7 +12,7 @@ import { forceHideTooltip } from './word-tooltip.js';
 import { getPreHighlightHTML } from './word-highlight.js';
 
 /**
- * Remove the sibling loading indicator.
+ * Remove the loading indicator.
  * Safe to call even if no indicator exists.
  * @param {HTMLElement} messageEl - Message element
  */
@@ -61,12 +61,12 @@ export async function showInlineBreakdown(messageEl, text) {
     });
   }
 
-  // Show loading indicator — insert a sibling indicator after the message so
-  // the dots appear appended at the end of the original text.
+  // Show loading indicator — append inside the message so the dots
+  // appear inline at the end of the text, inside the bubble.
   const indicator = document.createElement('span');
   indicator.className = 'gcwb-loading-indicator';
   indicator.innerHTML = '<span class="gcwb-dot"></span><span class="gcwb-dot"></span><span class="gcwb-dot"></span>';
-  messageEl.parentNode.insertBefore(indicator, messageEl.nextSibling);
+  messageEl.appendChild(indicator);
 
   // Store indicator reference so we can remove it later
   const stateAfterIndicator = inlineBreakdownState.get(messageEl);
