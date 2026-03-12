@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Transcription - 会議 kaigi meeting</title>
+  <link rel="stylesheet" href="transcribe.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Live Japanese Transcription</h1>
+      <p class="subtitle">Speak or play Japanese audio to get word-by-word breakdowns</p>
+    </header>
+
+    <div id="warningNoKey" class="warning" style="display: none;">
+      No Gemini API key set. Open the extension popup to configure it.
+    </div>
+    <div id="warningNoSpeech" class="warning" style="display: none;">
+      Web Speech API is not supported in this browser. Please use Chrome.
+    </div>
+
+    <div class="controls">
+      <button id="micBtn" class="mic-btn" title="Start listening">
+        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <div class="status-row">
+        <span class="status-dot ready" id="statusDot"></span>
+        <span class="status-text" id="statusText">Ready</span>
+      </div>
+    </div>
+
+    <div class="silence-controls">
+      <div class="silence-header">
+        <label for="silenceSlider">Silence threshold</label>
+        <span class="silence-value" id="silenceValue">3s</span>
+      </div>
+      <input type="range" id="silenceSlider" class="silence-slider" min="1" max="6" step="0.5" value="3">
+      <button id="analyzeNow" class="btn btn-accent" disabled>Analyze Now</button>
+    </div>
+
+    <div class="transcript-area" id="transcriptArea">
+      <span class="transcript-placeholder" id="transcriptPlaceholder">Transcription will appear here...</span>
+    </div>
+
+    <div class="session-stats">
+      <div class="stat">
+        <span class="stat-value" id="segmentsProcessed">0</span>
+        <span class="stat-label">Segments</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="wordsAnalyzed">0</span>
+        <span class="stat-label">Words</span>
+      </div>
+    </div>
+
+    <h2 class="section-title">Breakdown History</h2>
+    <div id="historyContainer" class="history-container">
+      <div class="history-empty" id="historyEmpty">
+        Breakdowns will appear here after speech is detected and analyzed.
+      </div>
+    </div>
+  </div>
+  <script src="transcribe.js"></script>
+</body>
+</html>

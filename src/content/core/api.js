@@ -195,26 +195,8 @@ Text: ${text}`;
     return { truncated: true, original: text };
   }
 
-  // Clean up potential markdown code blocks
-  responseText = responseText.trim();
-  if (responseText.startsWith('```json')) {
-    responseText = responseText.slice(7);
-  } else if (responseText.startsWith('```')) {
-    responseText = responseText.slice(3);
-  }
-  if (responseText.endsWith('```')) {
-    responseText = responseText.slice(0, -3);
-  }
-  responseText = responseText.trim();
-
   try {
-    const breakdown = JSON.parse(responseText);
-
-    // Validate structure
-    if (!breakdown.original || !breakdown.translation || !Array.isArray(breakdown.words)) {
-      throw new Error('Invalid breakdown structure');
-    }
-
+    const breakdown = parseBreakdownResponse(responseText);
     debugLog('API-BREAKDOWN', `OUTPUT: ${breakdown.words.length} words parsed`);
     return breakdown;
   } catch (parseError) {
@@ -230,6 +212,138 @@ Text: ${text}`;
     }
 
     throw new Error('Failed to parse breakdown response');
+  }
+}
+
+/**
+ * Parse and validate a breakdown JSON response from Gemini
+ * @param {string} responseText - Raw response text
+ * @returns {Object} - Parsed breakdown object
+ */
+function parseBreakdownResponse(responseText) {
+  let cleaned = responseText.trim();
+
+  // Clean up potential markdown code blocks
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  cleaned = cleaned.trim();
+
+  const breakdown = JSON.parse(cleaned);
+
+  // Validate structure
+  if (!breakdown.original || !breakdown.translation || !Array.isArray(breakdown.words)) {
+    throw new Error('Invalid breakdown structure');
+  }
+
+  return breakdown;
+}
+
+/**
+ * Analyze audio with Gemini multimodal API for Japanese transcription + breakdown
+ * @param {string} base64Audio - Base64-encoded audio data
+ * @param {string} mimeType - Audio MIME type (e.g., 'audio/webm;codecs=opus')
+ * @returns {Promise<{original: string, translation: string, words: Array}>}
+ */
+export async function analyzeAudioWithGemini(base64Audio, mimeType) {
+  const apiKey = await getApiKey();
+
+  if (!apiKey) {
+    throw new Error('No API key. Set it in the extension popup.');
+  }
+
+  const model = await getModel();
+  const callNum = incrementApiCallCount();
+
+  const prompt = `Listen to this Japanese audio and return ONLY valid JSON (no markdown, no code blocks, no explanation):
+{
+  "original": "the transcribed Japanese text",
+  "translation": "natural English translation of the full sentence",
+  "words": [
+    {
+      "japanese": "word in kanji/kana as it appears",
+      "reading": "hiragana reading (only for words with kanji, empty string for hiragana/katakana-only words)",
+      "romaji": "romanized pronunciation",
+      "english": "English meaning or grammatical function",
+      "type": "noun|verb|particle|adjective|adverb|counter|expression|auxiliary|copula"
+    }
+  ]
+}
+
+Important:
+- If no Japanese speech is detected, return {"original": "", "translation": "", "words": []}
+- Break down ALL words including particles (は, が, を, に, etc.)
+- For particles, use their grammatical function as english (e.g., "topic marker", "subject marker", "object marker")
+- Keep word order matching the original sentence
+- Use lowercase for romaji except for proper nouns
+- For verbs, include the conjugated form as it appears`;
+
+  debugLog('API-AUDIO', `Call #${callNum}`);
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Audio
+              }
+            },
+            {
+              text: prompt
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 65536,
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    debugLog('API-AUDIO', 'Error response:', error);
+    throw new Error(error.error?.message || 'Audio analysis failed');
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  // Track token usage
+  const usageMetadata = data.usageMetadata;
+  if (usageMetadata?.totalTokenCount) {
+    updateTokenUsage(usageMetadata.totalTokenCount);
+  }
+
+  debugLog('API-AUDIO', 'Response length:', responseText?.length || 0);
+
+  if (!responseText) {
+    debugLog('API-AUDIO', 'No response text:', data);
+    throw new Error('No audio analysis returned');
+  }
+
+  try {
+    const breakdown = parseBreakdownResponse(responseText);
+    debugLog('API-AUDIO', `OUTPUT: ${breakdown.words.length} words parsed`);
+    return breakdown;
+  } catch (parseError) {
+    debugLog('API-AUDIO', 'JSON parse error:', parseError.message);
+    debugLog('API-AUDIO', 'Raw response:', responseText.slice(0, 200));
+    throw new Error('Failed to parse audio analysis response');
   }
 }
 

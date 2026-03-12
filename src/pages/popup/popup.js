@@ -5,6 +5,8 @@ const apiKeyInput = document.getElementById('apiKey');
 const saveKeyBtn = document.getElementById('saveKey');
 const keyStatusEl = document.getElementById('keyStatus');
 const viewAllWordsBtn = document.getElementById('viewAllWords');
+const liveTranscribeBtn = document.getElementById('liveTranscribe');
+const audioModeToggleBtn = document.getElementById('audioModeToggle');
 const tokenCountEl = document.getElementById('tokenCount');
 const tokenCostEl = document.getElementById('tokenCost');
 const resetUsageBtn = document.getElementById('resetUsage');
@@ -241,6 +243,86 @@ function openFrequencyPage() {
   chrome.tabs.create({ url: 'src/pages/frequency/frequency.html' });
 }
 
+// Audio Mode toggle
+audioModeToggleBtn.addEventListener('click', async () => {
+  // Check API key first
+  const result = await new Promise(resolve =>
+    chrome.storage.sync.get(['geminiApiKey'], resolve)
+  );
+  if (!result.geminiApiKey) {
+    showStatus('Set a Gemini API key first', false);
+    return;
+  }
+
+  // Check current state
+  const state = await new Promise(resolve =>
+    chrome.runtime.sendMessage({ type: 'get-audio-mode-state' }, resolve)
+  );
+
+  if (state?.active) {
+    // Stop
+    audioModeToggleBtn.disabled = true;
+    audioModeToggleBtn.textContent = 'Stopping...';
+    const response = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ type: 'stop-audio-capture' }, resolve)
+    );
+    audioModeToggleBtn.disabled = false;
+    if (response?.success) {
+      setAudioButtonState(false);
+    } else {
+      showStatus('Failed to stop: ' + (response?.error || 'Unknown error'), false);
+    }
+  } else {
+    // Start - get active tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      showStatus('No active tab found', false);
+      return;
+    }
+
+    audioModeToggleBtn.disabled = true;
+    audioModeToggleBtn.textContent = 'Starting...';
+    const response = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ type: 'start-audio-capture', tabId: tab.id }, resolve)
+    );
+    audioModeToggleBtn.disabled = false;
+    if (response?.success) {
+      setAudioButtonState(true);
+    } else {
+      showStatus('Failed to start: ' + (response?.error || 'Unknown error'), false);
+    }
+  }
+});
+
+/**
+ * Set the audio mode button state
+ */
+function setAudioButtonState(active) {
+  if (active) {
+    audioModeToggleBtn.textContent = 'Stop Listening';
+    audioModeToggleBtn.className = 'btn btn-danger-audio';
+  } else {
+    audioModeToggleBtn.textContent = 'Start Listening';
+    audioModeToggleBtn.className = 'btn btn-primary';
+  }
+}
+
+/**
+ * Load audio mode state on popup open
+ */
+function loadAudioModeState() {
+  chrome.runtime.sendMessage({ type: 'get-audio-mode-state' }, (state) => {
+    if (state?.active) {
+      setAudioButtonState(true);
+    }
+  });
+}
+
+// Transcription page
+liveTranscribeBtn.addEventListener('click', () => {
+  chrome.tabs.create({ url: 'src/pages/transcribe/transcribe.html' });
+});
+
 // Frequency section event listeners
 viewAllWordsBtn.addEventListener('click', openFrequencyPage);
 // clearDataBtn.addEventListener('click', clearFrequencyData);
@@ -401,6 +483,7 @@ fontSizeSlider.addEventListener('input', () => {
 loadApiKey();
 loadModel();
 loadFontSize();
+loadAudioModeState();
 // loadMinimalisticMode();
 // loadFrequencyStats();
 

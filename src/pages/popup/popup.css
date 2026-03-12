@@ -466,3 +466,24 @@ select.input {
   50% { transform: scale(1.05); }
   100% { transform: scale(1); }
 }
+
+/* Audio Mode Section */
+.audio-mode-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.btn-danger-audio {
+  background-color: #c5221f;
+  color: #fff;
+}
+
+.btn-danger-audio:hover {
+  background-color: #a31b19;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

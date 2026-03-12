@@ -1,21 +1,28 @@
 {
   "manifest_version": 3,
   "name": "会議 kaigi meeting",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Extract and copy captions from Google Meet with translation support",
   "permissions": [
     "clipboardWrite",
     "activeTab",
-    "storage"
+    "storage",
+    "tabCapture",
+    "offscreen",
+    "scripting"
   ],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "http://localhost:8765/*"
   ],
   "icons": {
     "16": "assets/icons/icon16.png",
     "32": "assets/icons/icon32.png",
     "48": "assets/icons/icon48.png",
     "128": "assets/icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "dist/service-worker.js"
   },
   "action": {
     "default_popup": "src/pages/popup/popup.html",

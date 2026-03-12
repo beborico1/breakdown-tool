@@ -11,6 +11,8 @@
     <header class="header">
       <h1>Word Frequency</h1>
       <div class="header-actions">
+        <span id="ankiStatus" class="anki-status-dot disconnected" title="AnkiConnect status"></span>
+        <button id="syncToAnki" class="btn btn-primary" disabled>Sync to Anki</button>
         <button id="exportJson" class="btn btn-secondary">Export JSON</button>
         <button id="exportCsv" class="btn btn-secondary">Export CSV</button>
       </div>
@@ -29,6 +31,10 @@
         <span class="summary-value" id="daysTrackingValue">0</span>
         <span class="summary-label">Days Tracking</span>
       </div>
+      <div class="summary-card">
+        <span class="summary-value" id="ankiSelectedValue">0</span>
+        <span class="summary-label">Selected for Anki</span>
+      </div>
     </div>
 
     <div class="filters">
@@ -44,6 +50,10 @@
         </div>
       </div>
       <div class="filter-row">
+        <div class="anki-batch-controls">
+          <button id="selectAll" class="btn btn-secondary">Select All</button>
+          <button id="deselectAll" class="btn btn-secondary">Deselect All</button>
+        </div>
         <div class="sort-controls">
           <label>Sort by:</label>
           <select id="sortBy">
@@ -75,6 +85,24 @@
       <div class="loading-skeleton"></div>
       <div class="loading-skeleton"></div>
       <div class="loading-skeleton"></div>
+    </div>
+
+    <div id="ankiSettingsPanel" class="anki-settings-panel" style="display: none;">
+      <h3>Anki Sync Settings</h3>
+      <div class="anki-settings-row">
+        <label for="ankiDeckSelect">Deck:</label>
+        <select id="ankiDeckSelect">
+          <option value="Kaigi Meeting">Kaigi Meeting</option>
+        </select>
+      </div>
+      <div class="anki-settings-actions">
+        <button id="ankiSyncNow" class="btn btn-primary">Sync Now</button>
+        <button id="ankiSyncCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+      <div id="ankiProgressContainer" class="anki-progress-bar" style="display: none;">
+        <div id="ankiProgressFill" class="anki-progress-fill" style="width: 0%;"></div>
+      </div>
+      <div id="ankiSyncResult" class="anki-sync-result" style="display: none;"></div>
     </div>
   </div>
   <script src="frequency.js"></script>

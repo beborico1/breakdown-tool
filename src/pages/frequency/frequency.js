@@ -2,6 +2,7 @@
 const totalWordsEl = document.getElementById('totalWordsValue');
 const uniqueWordsEl = document.getElementById('uniqueWordsValue');
 const daysTrackingEl = document.getElementById('daysTrackingValue');
+const ankiSelectedValueEl = document.getElementById('ankiSelectedValue');
 const typeChartEl = document.getElementById('typeChart');
 const wordGridEl = document.getElementById('wordGrid');
 const emptyStateEl = document.getElementById('emptyState');
@@ -11,12 +12,30 @@ const sortBySelect = document.getElementById('sortBy');
 const exportJsonBtn = document.getElementById('exportJson');
 const exportCsvBtn = document.getElementById('exportCsv');
 
+// Anki DOM Elements
+const ankiStatusEl = document.getElementById('ankiStatus');
+const syncToAnkiBtn = document.getElementById('syncToAnki');
+const selectAllBtn = document.getElementById('selectAll');
+const deselectAllBtn = document.getElementById('deselectAll');
+const ankiSettingsPanel = document.getElementById('ankiSettingsPanel');
+const ankiDeckSelect = document.getElementById('ankiDeckSelect');
+const ankiSyncNowBtn = document.getElementById('ankiSyncNow');
+const ankiSyncCancelBtn = document.getElementById('ankiSyncCancel');
+const ankiProgressContainer = document.getElementById('ankiProgressContainer');
+const ankiProgressFill = document.getElementById('ankiProgressFill');
+const ankiSyncResult = document.getElementById('ankiSyncResult');
+
 // State
 let allWords = [];
 let filteredWords = [];
 let currentFilter = 'all';
 let currentSort = 'frequency';
 let searchQuery = '';
+
+// Anki State
+let ankiSelectedWords = new Set();
+let ankiConnected = false;
+let ankiDeckName = 'Kaigi Meeting';
 
 // Type colors for chart
 const typeColors = {
@@ -41,6 +60,102 @@ async function loadData() {
       resolve(result.wordFrequencyData || null);
     });
   });
+}
+
+/**
+ * Load Anki selections from chrome.storage.local
+ */
+async function loadAnkiSelections() {
+  console.log('[Anki] Loading selections from storage...');
+  return new Promise(resolve => {
+    chrome.storage.local.get(['ankiSelectedWords'], (result) => {
+      if (result.ankiSelectedWords) {
+        ankiSelectedWords = new Set(result.ankiSelectedWords);
+      }
+      console.log('[Anki] Loaded', ankiSelectedWords.size, 'selections');
+      resolve();
+    });
+  });
+}
+
+/**
+ * Save Anki selections to chrome.storage.local
+ */
+function saveAnkiSelections() {
+  console.log('[Anki] Saving', ankiSelectedWords.size, 'selections');
+  chrome.storage.local.set({ ankiSelectedWords: [...ankiSelectedWords] });
+  updateAnkiSelectedCount();
+}
+
+/**
+ * Load Anki settings from chrome.storage.sync
+ */
+async function loadAnkiSettings() {
+  return new Promise(resolve => {
+    chrome.storage.sync.get(['ankiSettings'], (result) => {
+      if (result.ankiSettings) {
+        ankiDeckName = result.ankiSettings.deckName || 'Kaigi Meeting';
+      }
+      resolve();
+    });
+  });
+}
+
+/**
+ * Save Anki settings to chrome.storage.sync
+ */
+function saveAnkiSettings() {
+  chrome.storage.sync.set({ ankiSettings: { deckName: ankiDeckName } });
+}
+
+/**
+ * Update the Anki selected count in the summary card
+ */
+function updateAnkiSelectedCount() {
+  ankiSelectedValueEl.textContent = ankiSelectedWords.size.toLocaleString();
+  syncToAnkiBtn.disabled = ankiSelectedWords.size === 0;
+  console.log('[Anki] Updated count:', ankiSelectedWords.size, 'button disabled:', syncToAnkiBtn.disabled);
+}
+
+/**
+ * AnkiConnect API helper
+ */
+async function ankiConnect(action, params = {}) {
+  console.log('[Anki] API call:', action, params);
+  try {
+    const resp = await fetch('http://localhost:8765', {
+      method: 'POST',
+      body: JSON.stringify({ action, version: 6, params })
+    });
+    const data = await resp.json();
+    console.log('[Anki] API response:', action, data);
+    if (data.error) throw new Error(data.error);
+    return data.result;
+  } catch (error) {
+    console.error('[Anki] API error:', action, error);
+    throw error;
+  }
+}
+
+/**
+ * Check AnkiConnect connection status
+ */
+async function checkAnkiConnection() {
+  console.log('[Anki] Checking connection...');
+  try {
+    const result = await ankiConnect('version');
+    ankiConnected = true;
+    ankiStatusEl.className = 'anki-status-dot connected';
+    ankiStatusEl.title = 'AnkiConnect: connected';
+    console.log('[Anki] Connected! Version:', result);
+  } catch (error) {
+    ankiConnected = false;
+    ankiStatusEl.className = 'anki-status-dot disconnected';
+    ankiStatusEl.title = 'AnkiConnect: disconnected';
+    console.warn('[Anki] Connection failed:', error);
+  }
+  console.log('[Anki] ankiConnected =', ankiConnected);
+  updateAnkiSelectedCount();
 }
 
 /**
@@ -143,12 +258,19 @@ function renderWordGrid(words) {
     const japanese = highlightSearch(escapeHtml(word.japanese));
     const romaji = highlightSearch(escapeHtml(word.romaji));
     const english = highlightSearch(escapeHtml(word.english));
+    const wordKey = `${word.japanese}|${type}`;
+    const isSelected = ankiSelectedWords.has(wordKey);
 
     return `
-      <div class="word-card">
+      <div class="word-card${isSelected ? ' anki-selected' : ''}">
         <div class="word-card-header">
           <span class="word-japanese ${type}">${japanese}</span>
-          <span class="word-count">${word.count}x</span>
+          <div class="word-card-actions">
+            <span class="word-count">${word.count}x</span>
+            <label class="anki-checkbox">
+              <input type="checkbox" class="anki-check-input" data-word-key="${escapeHtml(wordKey)}" ${isSelected ? 'checked' : ''}>
+            </label>
+          </div>
         </div>
         <div class="word-reading">${romaji}</div>
         <span class="word-type-badge ${type}">${type}</span>
@@ -308,7 +430,18 @@ function downloadFile(content, filename, mimeType) {
  * Initialize the page
  */
 async function init() {
-  const data = await loadData();
+  // Load Anki state in parallel with word data
+  const [data] = await Promise.all([
+    loadData(),
+    loadAnkiSelections(),
+    loadAnkiSettings()
+  ]);
+
+  console.log('[Anki] Loaded selections:', ankiSelectedWords.size, 'words');
+  console.log('[Anki] Loaded settings, deck:', ankiDeckName);
+
+  // Check Anki connection (fire-and-forget)
+  checkAnkiConnection();
 
   loadingStateEl.style.display = 'none';
 
@@ -319,6 +452,7 @@ async function init() {
     emptyStateEl.style.display = 'block';
     wordGridEl.style.display = 'none';
     typeChartEl.innerHTML = '<p style="color: #6B7280; text-align: center;">No data yet</p>';
+    updateAnkiSelectedCount();
     return;
   }
 
@@ -336,6 +470,7 @@ async function init() {
 
   // Render word grid
   applyFiltersAndRender();
+  updateAnkiSelectedCount();
 }
 
 // Event Listeners
@@ -364,6 +499,201 @@ searchInput.addEventListener('input', () => {
 
 exportJsonBtn.addEventListener('click', exportJson);
 exportCsvBtn.addEventListener('click', exportCsv);
+
+// Anki checkbox delegation
+wordGridEl.addEventListener('change', (e) => {
+  if (!e.target.classList.contains('anki-check-input')) return;
+  const wordKey = e.target.dataset.wordKey;
+  console.log('[Anki] Checkbox toggled:', wordKey, '→', e.target.checked);
+  const card = e.target.closest('.word-card');
+  if (e.target.checked) {
+    ankiSelectedWords.add(wordKey);
+    card.classList.add('anki-selected');
+  } else {
+    ankiSelectedWords.delete(wordKey);
+    card.classList.remove('anki-selected');
+  }
+  saveAnkiSelections();
+});
+
+// Batch selection
+selectAllBtn.addEventListener('click', () => {
+  for (const word of filteredWords) {
+    const type = normalizeType(word.type);
+    ankiSelectedWords.add(`${word.japanese}|${type}`);
+  }
+  console.log('[Anki] Select All: added', filteredWords.length, 'filtered words');
+  saveAnkiSelections();
+  applyFiltersAndRender();
+});
+
+deselectAllBtn.addEventListener('click', () => {
+  ankiSelectedWords.clear();
+  console.log('[Anki] Deselect All: cleared all selections');
+  saveAnkiSelections();
+  applyFiltersAndRender();
+});
+
+// Sync to Anki button -> show settings panel and populate decks
+syncToAnkiBtn.addEventListener('click', async () => {
+  console.log('[Anki] Sync button clicked, opening settings panel');
+  ankiSettingsPanel.style.display = 'block';
+  ankiSyncResult.style.display = 'none';
+  ankiProgressContainer.style.display = 'none';
+  ankiProgressFill.style.width = '0%';
+
+  // Re-check connection when panel opens
+  await checkAnkiConnection();
+
+  try {
+    const decks = await ankiConnect('deckNames');
+    console.log('[Anki] Fetched decks:', decks);
+    ankiDeckSelect.innerHTML = '';
+    for (const deck of decks) {
+      const opt = document.createElement('option');
+      opt.value = deck;
+      opt.textContent = deck;
+      if (deck === ankiDeckName) opt.selected = true;
+      ankiDeckSelect.appendChild(opt);
+    }
+    // Add option to create new
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = '+ Create new deck...';
+    ankiDeckSelect.appendChild(newOpt);
+  } catch (error) {
+    console.error('[Anki] Failed to fetch decks:', error);
+    ankiDeckSelect.innerHTML = '<option value="Kaigi Meeting">Kaigi Meeting</option>';
+  }
+});
+
+ankiDeckSelect.addEventListener('change', () => {
+  if (ankiDeckSelect.value === '__new__') {
+    const name = prompt('Enter new deck name:');
+    if (name && name.trim()) {
+      const opt = document.createElement('option');
+      opt.value = name.trim();
+      opt.textContent = name.trim();
+      ankiDeckSelect.insertBefore(opt, ankiDeckSelect.lastElementChild);
+      ankiDeckSelect.value = name.trim();
+    } else {
+      ankiDeckSelect.value = ankiDeckName;
+    }
+  }
+});
+
+ankiSyncCancelBtn.addEventListener('click', () => {
+  ankiSettingsPanel.style.display = 'none';
+});
+
+// Sync Now
+ankiSyncNowBtn.addEventListener('click', async () => {
+  const deckName = ankiDeckSelect.value;
+  if (!deckName || deckName === '__new__') return;
+
+  const total = ankiSelectedWords.size;
+  console.log('[Anki] Sync Now clicked, deck:', deckName, 'words:', total);
+
+  ankiDeckName = deckName;
+  saveAnkiSettings();
+
+  ankiSyncNowBtn.disabled = true;
+  ankiSyncCancelBtn.disabled = true;
+  ankiProgressContainer.style.display = 'block';
+  ankiSyncResult.style.display = 'none';
+  ankiProgressFill.style.width = '0%';
+
+  let added = 0;
+  let skipped = 0;
+  let failed = 0;
+  const selectedKeys = [...ankiSelectedWords];
+  const syncedKeys = [];
+
+  try {
+    // Ensure deck exists
+    console.log('[Anki] Creating/ensuring deck:', deckName);
+    await ankiConnect('createDeck', { deck: deckName });
+
+    for (let i = 0; i < total; i++) {
+      const key = selectedKeys[i];
+      const [japanese, type] = key.split('|');
+      const word = allWords.find(w => w.japanese === japanese && normalizeType(w.type) === type);
+
+      console.log('[Anki] Processing word', i + 1, '/', total, ':', japanese, type);
+
+      if (!word) {
+        failed++;
+        continue;
+      }
+
+      try {
+        // Check for duplicates
+        const existing = await ankiConnect('findNotes', {
+          query: `deck:"${deckName}" front:"${word.japanese}"`
+        });
+
+        if (existing && existing.length > 0) {
+          console.log('[Anki] Duplicate found, skipping:', japanese);
+          skipped++;
+          syncedKeys.push(key);
+        } else {
+          const front = word.reading
+            ? `${word.japanese} (${word.reading})`
+            : word.japanese;
+          const back = [
+            word.english,
+            `Type: ${type}`,
+            `Romaji: ${word.romaji}`
+          ].join('<br>');
+
+          await ankiConnect('addNote', {
+            note: {
+              deckName,
+              modelName: 'Basic',
+              fields: { Front: front, Back: back },
+              tags: ['kaigi-meeting', type]
+            }
+          });
+          console.log('[Anki] Added note:', japanese);
+          added++;
+          syncedKeys.push(key);
+        }
+      } catch (error) {
+        console.error('[Anki] Failed to sync word:', japanese, error);
+        failed++;
+      }
+
+      // Update progress
+      ankiProgressFill.style.width = `${((i + 1) / total) * 100}%`;
+    }
+
+    // Remove synced words from selection
+    for (const key of syncedKeys) {
+      ankiSelectedWords.delete(key);
+    }
+    saveAnkiSelections();
+    applyFiltersAndRender();
+
+    console.log('[Anki] Sync complete. Added:', added, 'Skipped:', skipped, 'Failed:', failed);
+
+    // Show result
+    const parts = [];
+    if (added > 0) parts.push(`${added} added`);
+    if (skipped > 0) parts.push(`${skipped} already in Anki`);
+    if (failed > 0) parts.push(`${failed} failed`);
+
+    ankiSyncResult.textContent = parts.join(', ');
+    ankiSyncResult.className = `anki-sync-result ${failed > 0 && added === 0 ? 'error' : 'success'}`;
+    ankiSyncResult.style.display = 'block';
+  } catch (err) {
+    ankiSyncResult.textContent = `Sync failed: ${err.message}`;
+    ankiSyncResult.className = 'anki-sync-result error';
+    ankiSyncResult.style.display = 'block';
+  } finally {
+    ankiSyncNowBtn.disabled = false;
+    ankiSyncCancelBtn.disabled = false;
+  }
+});
 
 // Initialize
 init();

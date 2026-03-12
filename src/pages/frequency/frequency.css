@@ -58,6 +58,12 @@ body {
   background: #7c35a8;
 }
 
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .btn-secondary {
   background: #3D3D3D;
   color: #E8EAED;
@@ -409,6 +415,177 @@ body {
   background: rgba(99, 40, 137, 0.4);
   border-radius: 2px;
   padding: 0 2px;
+}
+
+/* Anki Checkbox */
+.anki-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.anki-check-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #4D4D4D;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin: 0;
+}
+
+.anki-check-input:hover {
+  border-color: #A78BFA;
+}
+
+.anki-check-input:checked {
+  background: #632889;
+  border-color: #632889;
+}
+
+.anki-check-input:checked::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Anki selected card */
+.word-card.anki-selected {
+  outline: 2px solid rgba(167, 139, 250, 0.5);
+  outline-offset: -2px;
+}
+
+/* Word card actions (count + checkbox) */
+.word-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Anki status dot */
+.anki-status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.anki-status-dot.connected {
+  background: #34A853;
+  box-shadow: 0 0 6px rgba(52, 168, 83, 0.5);
+}
+
+.anki-status-dot.disconnected {
+  background: #EA4335;
+  box-shadow: 0 0 6px rgba(234, 67, 53, 0.3);
+}
+
+/* Anki settings panel */
+.anki-settings-panel {
+  background: #2D2D2D;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
+}
+
+.anki-settings-panel h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #E8EAED;
+}
+
+.anki-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.anki-settings-row label {
+  font-size: 13px;
+  color: #9CA3AF;
+  min-width: 40px;
+}
+
+.anki-settings-row select {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid #3D3D3D;
+  border-radius: 6px;
+  background: #1F1F1F;
+  color: #E8EAED;
+  cursor: pointer;
+}
+
+.anki-settings-row select:focus {
+  outline: none;
+  border-color: #632889;
+}
+
+.anki-settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Anki progress bar */
+.anki-progress-bar {
+  height: 8px;
+  background: #1F1F1F;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.anki-progress-fill {
+  height: 100%;
+  background: #632889;
+  border-radius: 4px;
+  transition: width 0.3s ease-out;
+}
+
+/* Anki sync result */
+.anki-sync-result {
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 6px;
+}
+
+.anki-sync-result.success {
+  background: rgba(52, 168, 83, 0.15);
+  color: #34A853;
+}
+
+.anki-sync-result.error {
+  background: rgba(234, 67, 53, 0.15);
+  color: #EA4335;
+}
+
+/* Anki batch controls */
+.anki-batch-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.anki-batch-controls .btn {
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 /* Responsive */
