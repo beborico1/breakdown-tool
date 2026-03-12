@@ -1405,15 +1405,74 @@
   background-color: rgba(99, 40, 137, 0.12);
 }
 
-/* Ensure inline breakdown container works in Gmail's layout */
+/* Ensure inline breakdown container works in Gmail's layout — light mode */
 .a3s.aiL .gcwb-inline-container {
-  background: #1F1F1F;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
   padding: 12px !important;
   margin: 8px 0 !important;
+  color: #333;
 }
 
-/* Gmail toggle button needs lighter style for light theme context */
+.a3s.aiL .gcwb-word:hover {
+  background: rgba(99, 40, 137, 0.08);
+}
+
+.a3s.aiL .gcwb-word-popover {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.a3s.aiL .gcwb-popover-arrow {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.a3s.aiL .gcwb-popover-romaji {
+  color: #555;
+}
+
+.a3s.aiL .gcwb-popover-meaning {
+  color: #666;
+}
+
+.a3s.aiL .gcwb-inline-copy {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #333;
+}
+
+.a3s.aiL .gcwb-inline-copy:hover {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #111;
+}
+
+.a3s.aiL .gcwb-inline-loading {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: analyzing 1.5s ease infinite;
+  color: #666;
+}
+
+.a3s.aiL .gcwb-inline-error .gcwb-retry-btn {
+  background: rgba(99, 40, 137, 0.1);
+  border: 1px solid rgba(99, 40, 137, 0.3);
+  color: #632889;
+}
+
+.a3s.aiL .gcwb-inline-error .gcwb-retry-btn:hover {
+  background: rgba(99, 40, 137, 0.2);
+}
+
+/* Gmail toggle button — light theme */
 .a3s.aiL .gcwb-toggle-btn {
   border-color: rgba(0, 0, 0, 0.2);
   color: #666;
@@ -1424,3 +1483,112 @@
   border-color: rgba(0, 0, 0, 0.4);
   background: rgba(0, 0, 0, 0.05);
 }
+
+/* ============================================
+   REDMINE-SPECIFIC OVERRIDES
+   Scoped via body[class*="controller-"] (Redmine Rails convention)
+   ============================================ */
+
+/* Cached word hover — lighter background for Redmine's light theme */
+body[class*="controller-"] .gcwb-cached-word:hover {
+  background-color: rgba(99, 40, 137, 0.12);
+}
+
+/* Inline breakdown container on Redmine's light pages — light mode */
+body[class*="controller-"] .gcwb-inline-container {
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 12px !important;
+  margin: 8px 0 !important;
+  color: #333;
+}
+
+body[class*="controller-"] .gcwb-word:hover {
+  background: rgba(99, 40, 137, 0.08);
+}
+
+body[class*="controller-"] .gcwb-word-popover {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+body[class*="controller-"] .gcwb-popover-arrow {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+body[class*="controller-"] .gcwb-popover-romaji {
+  color: #555;
+}
+
+body[class*="controller-"] .gcwb-popover-meaning {
+  color: #666;
+}
+
+body[class*="controller-"] .gcwb-inline-copy {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #333;
+}
+
+body[class*="controller-"] .gcwb-inline-copy:hover {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #111;
+}
+
+body[class*="controller-"] .gcwb-inline-loading {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: analyzing 1.5s ease infinite;
+  color: #666;
+}
+
+body[class*="controller-"] .gcwb-inline-error .gcwb-retry-btn {
+  background: rgba(99, 40, 137, 0.1);
+  border: 1px solid rgba(99, 40, 137, 0.3);
+  color: #632889;
+}
+
+body[class*="controller-"] .gcwb-inline-error .gcwb-retry-btn:hover {
+  background: rgba(99, 40, 137, 0.2);
+}
+
+/* Toggle button — light-theme style */
+body[class*="controller-"] .gcwb-toggle-btn {
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #666;
+}
+
+body[class*="controller-"] .gcwb-toggle-btn:hover {
+  color: #333;
+  border-color: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* Context menu — light theme */
+body[class*="controller-"] .gcwb-context-menu {
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+body[class*="controller-"] .gcwb-context-menu-item {
+  color: #333;
+}
+
+body[class*="controller-"] .gcwb-context-menu-item:hover {
+  background: rgba(99, 40, 137, 0.1);
+}
+
+/* Loading indicator — ensure visibility on white backgrounds */
+body[class*="controller-"] .gcwb-loading-indicator .gcwb-dot {
+  background: #632889;
+}
+

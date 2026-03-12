@@ -12,6 +12,9 @@ let wordCache = new Map();
 // Cache staleness threshold (30 days)
 const WORD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
+// Must contain at least one Japanese character (hiragana, katakana, or kanji)
+const JAPANESE_CHAR_RE = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
+
 // Debounce timer for saving
 let saveTimeout = null;
 const SAVE_DEBOUNCE_MS = 1000;
@@ -67,7 +70,7 @@ export function cacheWords(words) {
   let addedCount = 0;
 
   for (const word of words) {
-    if (!word.japanese) continue;
+    if (!word.japanese || !JAPANESE_CHAR_RE.test(word.japanese)) continue;
 
     const existing = wordCache.get(word.japanese);
     const entry = {
@@ -124,7 +127,7 @@ export function getCachedWords(text) {
 
   const matches = [];
   const sortedWords = Array.from(wordCache.keys())
-    .filter(w => w.length > 0)
+    .filter(w => w.length > 0 && JAPANESE_CHAR_RE.test(w))
     .sort((a, b) => b.length - a.length); // Longest first for greedy matching
 
   // Track which positions have been matched

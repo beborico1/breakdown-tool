@@ -35,6 +35,14 @@ body {
 
 .header-actions {
   display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.anki-sync-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -496,10 +504,16 @@ body {
 
 /* Anki settings panel */
 .anki-settings-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  margin-top: 8px;
+  min-width: 300px;
   background: #2D2D2D;
   border-radius: 12px;
   padding: 20px;
-  margin-top: 24px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .anki-settings-panel h3 {

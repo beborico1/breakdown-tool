@@ -11,8 +11,27 @@
     <header class="header">
       <h1>Word Frequency</h1>
       <div class="header-actions">
-        <span id="ankiStatus" class="anki-status-dot disconnected" title="AnkiConnect status"></span>
-        <button id="syncToAnki" class="btn btn-primary" disabled>Sync to Anki</button>
+        <div class="anki-sync-wrapper">
+          <span id="ankiStatus" class="anki-status-dot disconnected" title="AnkiConnect status"></span>
+          <button id="syncToAnki" class="btn btn-primary" disabled>Sync to Anki</button>
+          <div id="ankiSettingsPanel" class="anki-settings-panel" style="display: none;">
+            <h3>Anki Sync Settings</h3>
+            <div class="anki-settings-row">
+              <label for="ankiDeckSelect">Deck:</label>
+              <select id="ankiDeckSelect">
+                <option value="Kaigi Meeting">Kaigi Meeting</option>
+              </select>
+            </div>
+            <div class="anki-settings-actions">
+              <button id="ankiSyncNow" class="btn btn-primary">Sync Now</button>
+              <button id="ankiSyncCancel" class="btn btn-secondary">Cancel</button>
+            </div>
+            <div id="ankiProgressContainer" class="anki-progress-bar" style="display: none;">
+              <div id="ankiProgressFill" class="anki-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div id="ankiSyncResult" class="anki-sync-result" style="display: none;"></div>
+          </div>
+        </div>
         <button id="exportJson" class="btn btn-secondary">Export JSON</button>
         <button id="exportCsv" class="btn btn-secondary">Export CSV</button>
       </div>
@@ -87,23 +106,6 @@
       <div class="loading-skeleton"></div>
     </div>
 
-    <div id="ankiSettingsPanel" class="anki-settings-panel" style="display: none;">
-      <h3>Anki Sync Settings</h3>
-      <div class="anki-settings-row">
-        <label for="ankiDeckSelect">Deck:</label>
-        <select id="ankiDeckSelect">
-          <option value="Kaigi Meeting">Kaigi Meeting</option>
-        </select>
-      </div>
-      <div class="anki-settings-actions">
-        <button id="ankiSyncNow" class="btn btn-primary">Sync Now</button>
-        <button id="ankiSyncCancel" class="btn btn-secondary">Cancel</button>
-      </div>
-      <div id="ankiProgressContainer" class="anki-progress-bar" style="display: none;">
-        <div id="ankiProgressFill" class="anki-progress-fill" style="width: 0%;"></div>
-      </div>
-      <div id="ankiSyncResult" class="anki-sync-result" style="display: none;"></div>
-    </div>
   </div>
   <script src="frequency.js"></script>
 </body>

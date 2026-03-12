@@ -2,7 +2,7 @@ import { debugLog } from '../core/debug.js';
 import { initWordCache } from '../core/word-cache.js';
 import { isGmail, findGmailMessageElement, extractGmailMessageText } from './message-finder.js';
 import { showCustomContextMenu } from '../chat/context-menu.js';
-import { highlightGmailMessage, highlightAllGmailMessages } from './word-highlight.js';
+import { highlightGmailMessage, highlightAllGmailMessages, clearGmailHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
 
 /**
@@ -130,6 +130,7 @@ export async function initializeGmail() {
     document.addEventListener('gcwb-content-restored', (event) => {
       const messageEl = event.target;
       if (messageEl?.closest('.a3s.aiL') || (messageEl?.classList?.contains('a3s') && messageEl?.classList?.contains('aiL'))) {
+        clearGmailHighlightState(messageEl);
         highlightGmailMessage(messageEl);
       }
     });

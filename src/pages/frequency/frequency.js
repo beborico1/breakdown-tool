@@ -586,6 +586,15 @@ ankiSyncCancelBtn.addEventListener('click', () => {
   ankiSettingsPanel.style.display = 'none';
 });
 
+// Close settings panel when clicking outside
+document.addEventListener('click', (e) => {
+  if (ankiSettingsPanel.style.display === 'none') return;
+  const wrapper = document.querySelector('.anki-sync-wrapper');
+  if (!wrapper.contains(e.target)) {
+    ankiSettingsPanel.style.display = 'none';
+  }
+});
+
 // Sync Now
 ankiSyncNowBtn.addEventListener('click', async () => {
   const deckName = ankiDeckSelect.value;

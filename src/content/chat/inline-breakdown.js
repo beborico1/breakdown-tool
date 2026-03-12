@@ -9,7 +9,9 @@ import { findCachedTranslation, generateContentKey, getTimeBucket } from '../cor
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { cacheWords } from '../core/word-cache.js';
 import { forceHideTooltip } from './word-tooltip.js';
-import { getPreHighlightHTML } from './word-highlight.js';
+import { getPreHighlightHTML as getChatPreHighlightHTML } from './word-highlight.js';
+import { getPreHighlightHTML as getRedminePreHighlightHTML } from '../redmine/word-highlight.js';
+import { getPreHighlightHTML as getGmailPreHighlightHTML } from '../gmail/word-highlight.js';
 
 /**
  * Remove the loading indicator.
@@ -53,7 +55,10 @@ export async function showInlineBreakdown(messageEl, text) {
 
   // Save original HTML if not already saved (prefer pre-highlight version)
   if (!existingState?.originalHTML) {
-    const trueOriginal = getPreHighlightHTML(messageEl) || messageEl.innerHTML;
+    const trueOriginal = getChatPreHighlightHTML(messageEl)
+      || getRedminePreHighlightHTML(messageEl)
+      || getGmailPreHighlightHTML(messageEl)
+      || messageEl.innerHTML;
     inlineBreakdownState.set(messageEl, {
       originalHTML: trueOriginal,
       breakdownData: null,
@@ -151,7 +156,10 @@ function showCachedInline(messageEl, breakdownData) {
   // Save original HTML if not already saved (prefer pre-highlight version)
   const existingState = inlineBreakdownState.get(messageEl);
   if (!existingState?.originalHTML) {
-    const trueOriginal = getPreHighlightHTML(messageEl) || messageEl.innerHTML;
+    const trueOriginal = getChatPreHighlightHTML(messageEl)
+      || getRedminePreHighlightHTML(messageEl)
+      || getGmailPreHighlightHTML(messageEl)
+      || messageEl.innerHTML;
     inlineBreakdownState.set(messageEl, {
       originalHTML: trueOriginal,
       breakdownData: breakdownData,
