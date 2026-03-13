@@ -7,7 +7,8 @@ import {
   setLastCopiedIndex,
   lastCopiedIndex,
   setWordBlockFontSize,
-  wordBlockFontSize
+  wordBlockFontSize,
+  setSentenceChunkSize
 } from '../core/state.js';
 import { pruneTranslationCache } from '../core/cache.js';
 import { loadMinimalisticMode, removeMinimalisticOverlay } from './minimalistic-mode.js';
@@ -40,6 +41,13 @@ function initializeObserver() {
     if (result.wordBlockFontSize) {
       setWordBlockFontSize(result.wordBlockFontSize);
       applyWordBlockFontSize(result.wordBlockFontSize);
+    }
+  });
+
+  // Load sentence chunk size setting
+  chrome.storage.sync.get(['sentenceChunkSize'], (result) => {
+    if (result.sentenceChunkSize) {
+      setSentenceChunkSize(result.sentenceChunkSize);
     }
   });
 
@@ -109,6 +117,12 @@ export function initializeGoogleMeet() {
       debugLog('STORAGE', `Word block font size changed: ${newSize}`);
       setWordBlockFontSize(newSize);
       applyWordBlockFontSize(newSize);
+    }
+
+    if (changes.sentenceChunkSize) {
+      const newSize = changes.sentenceChunkSize.newValue;
+      debugLog('STORAGE', `Sentence chunk size changed: ${newSize}`);
+      setSentenceChunkSize(newSize);
     }
 
     if (changes.minimalisticModeEnabled) {

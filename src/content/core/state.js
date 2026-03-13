@@ -22,6 +22,9 @@ export const translationState = new Map();
 
 // Delta translation debouncing
 export const DELTA_DEBOUNCE_MS = 500;
+
+// Sentence-level processing debounce (wait for speech recognition to settle)
+export const SENTENCE_DEBOUNCE_MS = 400;
 export const pendingDeltas = new Map();
 
 // Cache translations by content key (survives container replacement)
@@ -82,6 +85,10 @@ export const OBSERVER_CONFIG = {
 // Word block font size
 export let wordBlockFontSize = 15;
 export function setWordBlockFontSize(value) { wordBlockFontSize = value; }
+
+// Sentence chunk size (process every N sentence-ending marks)
+export let sentenceChunkSize = 2;
+export function setSentenceChunkSize(value) { sentenceChunkSize = value; }
 
 // Google Chat state
 export let activeGcwbOverlay = null;

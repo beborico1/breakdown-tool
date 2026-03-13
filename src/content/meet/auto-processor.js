@@ -12,6 +12,7 @@ import { hideOriginalElement } from '../utils/dom.js';
 import { renderBreakdownPanel } from './panel-mode.js';
 import { initializeMinimalisticContainer } from './minimalistic-mode.js';
 import { removeOverlay } from './caption-handler.js';
+import { finalizeSentenceProcessing } from './sentence-processor.js';
 
 /**
  * Auto-process the second-to-last caption card when a new card appears
@@ -29,9 +30,15 @@ export async function autoProcessPreviousCard() {
   // Get the second-to-last container (index -2)
   const previousContainer = allContainers[allContainers.length - 2];
 
-  // Skip if already processed (has breakdownData or minimalisticState in translationState)
+  // If previous container was sentence-processed, finalize it
   if (translationState.has(previousContainer)) {
     const state = translationState.get(previousContainer);
+    if (state.sentenceState) {
+      debugLog('AUTO-PROCESS', 'Finalizing sentence-processed previous card');
+      finalizeSentenceProcessing(previousContainer);
+      return;
+    }
+    // Skip if already processed (has breakdownData or minimalisticState)
     if (state.breakdownData || state.minimalisticState) {
       debugLog('AUTO-PROCESS', 'Previous card already processed, skipping');
       return;

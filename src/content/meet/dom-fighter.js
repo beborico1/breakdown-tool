@@ -1,8 +1,10 @@
 import { debugLog } from '../core/debug.js';
 import {
   translationState,
+  minimalisticModeEnabled,
   pendingDeltas,
   activeContentKeys,
+  wordBlockFontSize,
   OBSERVER_RATE_LIMIT,
   getObserverCallCount,
   getObserverCallWindowStart,
@@ -11,12 +13,14 @@ import {
 } from '../core/state.js';
 import { findCachedTranslation } from '../core/cache.js';
 import { hideOriginalElement } from '../utils/dom.js';
-import { renderBreakdownPanel } from './panel-mode.js';
+import { renderBreakdownPanel, applyFontSizeToWrapper } from './panel-mode.js';
 import { renderMinimalisticCaption, handleMinimalisticTextUpdate } from './minimalistic-mode.js';
 import { updateBreakdownDelta } from './panel-mode.js';
+import { getWordTypeClass } from '../utils/text.js';
 import { updateVisualDelta } from './delta-translation.js';
 import { handleCaptionClick } from './caption-handler.js';
 import { autoProcessPreviousCard } from './auto-processor.js';
+import { initializeSentenceProcessing, handleSentenceTextUpdate } from './sentence-processor.js';
 
 // Observer reference (will be set when created)
 let observer = null;
@@ -107,6 +111,15 @@ export function setupCaptionClickHandlers() {
   // Auto-process the previous card when new containers are added
   if (containers.length > 0) {
     autoProcessPreviousCard();
+
+    // Initialize sentence processing on the last (current) container
+    if (!minimalisticModeEnabled) {
+      const allContainers = document.querySelectorAll('.nMcdL');
+      const lastContainer = allContainers[allContainers.length - 1];
+      if (lastContainer && !translationState.has(lastContainer)) {
+        initializeSentenceProcessing(lastContainer);
+      }
+    }
   }
 }
 
@@ -143,7 +156,10 @@ export function handleMutations(mutations, observerConfig) {
         const container = shadowEl.closest('.nMcdL');
         if (container && translationState.has(container)) {
           const state = translationState.get(container);
-          if (state.minimalisticState) {
+          if (state.sentenceState) {
+            // Handle sentence-level processing text updates
+            handleSentenceTextUpdate(container);
+          } else if (state.minimalisticState) {
             // Handle minimalistic mode text updates
             const newText = shadowEl.textContent?.trim() || '';
             handleMinimalisticTextUpdate(container, newText);
@@ -295,7 +311,7 @@ export function handleMutations(mutations, observerConfig) {
     // (C) Restore text if Meet overwrote it (but NOT if we're in the middle of updating or showing delta)
     // Skip for minimalistic mode (it uses innerHTML with spans, not textContent)
     // Skip this check if the element has data-updating or data-has-delta attribute
-    if (!state.minimalisticState && !state.breakdownData && state.translatedText && state.translatedEl &&
+    if (!state.minimalisticState && !state.sentenceState && !state.breakdownData && state.translatedText && state.translatedEl &&
         !state.translatedEl.hasAttribute('data-updating') &&
         !state.translatedEl.hasAttribute('data-has-delta') &&
         state.translatedEl.textContent !== state.translatedText) {
@@ -304,9 +320,16 @@ export function handleMutations(mutations, observerConfig) {
     }
 
     // (D) Re-insert breakdown panel if dislodged (only for panel mode, not minimalistic)
-    if (!state.minimalisticState && state.breakdownData && !container.querySelector('.breakdown-panel')) {
+    if (!state.minimalisticState && !state.sentenceState && state.breakdownData && !container.querySelector('.breakdown-panel')) {
       if (!didFight) { observer.disconnect(); didFight = true; }
       renderBreakdownPanel(container, state.breakdownData, state.speakerName, state.isExpanded);
+    }
+
+    // (D2) Re-insert sentence-mode wrapper if dislodged
+    if (state.sentenceState && !container.querySelector('.breakdown-wrapper[data-sentence-mode]')) {
+      if (!didFight) { observer.disconnect(); didFight = true; }
+      // Rebuild the sentence wrapper from processed state
+      rebuildSentenceWrapper(container, state);
     }
 
     // (E) Re-render minimalistic display if needed
@@ -336,4 +359,56 @@ export function handleMutations(mutations, observerConfig) {
 
   // Wire up any new containers
   setupCaptionClickHandlers();
+}
+
+/**
+ * Rebuild a sentence-mode wrapper from stored state when Meet dislodges it
+ * @param {HTMLElement} container
+ * @param {Object} state - Translation state for the container
+ */
+function rebuildSentenceWrapper(container, state) {
+  const ss = state.sentenceState;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'breakdown-wrapper';
+  wrapper.setAttribute('data-sentence-mode', 'true');
+  wrapper.setAttribute('data-expanded', state.isExpanded ? 'true' : 'false');
+
+  // Re-render all processed sentences
+  for (const sentence of ss.processedSentences) {
+    const group = document.createElement('div');
+    group.className = 'sentence-group';
+
+    sentence.breakdownData.words.forEach(word => {
+      const block = document.createElement('div');
+      block.className = 'word-block';
+      const typeClass = getWordTypeClass(word.type);
+      const typeLabel = typeClass.charAt(0).toUpperCase() + typeClass.slice(1);
+      block.innerHTML = `
+        <span class="word-japanese type-${typeClass}" data-type="${typeLabel}">${word.japanese}</span>
+        <span class="word-hiragana">${word.reading || word.japanese}</span>
+        <span class="word-romaji">${word.romaji || '-'}</span>
+        <span class="word-english">${word.english || '-'}</span>
+      `;
+      group.appendChild(block);
+    });
+
+    const translationDiv = document.createElement('div');
+    translationDiv.className = 'breakdown-translation';
+    translationDiv.textContent = `"${sentence.breakdownData.translation}"`;
+    group.appendChild(translationDiv);
+
+    wrapper.appendChild(group);
+  }
+
+  // Re-add live text
+  const liveTextDiv = document.createElement('div');
+  liveTextDiv.className = 'sentence-live-text';
+  const pendingText = ss.fullText.slice(ss.lastProcessedIndex).trim();
+  liveTextDiv.textContent = pendingText;
+  liveTextDiv.style.display = pendingText ? '' : 'none';
+  wrapper.appendChild(liveTextDiv);
+
+  applyFontSizeToWrapper(wrapper, wordBlockFontSize);
+  container.appendChild(wrapper);
 }

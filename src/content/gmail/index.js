@@ -1,6 +1,7 @@
 import { debugLog } from '../core/debug.js';
 import { initWordCache } from '../core/word-cache.js';
-import { isGmail, findGmailMessageElement, extractGmailMessageText } from './message-finder.js';
+import { isGmail, findGmailMessageElement, extractGmailMessageText, extractBrSeparatedLine, filterJapaneseContent, getGmailThreadMessages } from './message-finder.js';
+import { showInlineBreakdown } from '../chat/inline-breakdown.js';
 import { showCustomContextMenu } from '../chat/context-menu.js';
 import { highlightGmailMessage, highlightAllGmailMessages, clearGmailHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
@@ -18,24 +19,59 @@ function handleGmailContextMenu(event) {
     return;
   }
 
-  const text = extractGmailMessageText(messageEl);
-  debugLog('GMAIL', 'Extracted text:', text?.slice(0, 50) + '...');
-  if (!text) {
+  // Focused sub-element → simple textContent; full message → full extraction
+  const isFocused = !(messageEl.classList?.contains('a3s') && messageEl.classList?.contains('aiL'));
+  let fullText;
+  if (isFocused) {
+    fullText = messageEl.textContent?.trim() || '';
+  } else {
+    // Try br-separated line extraction first (plain-text emails like Redmine notifications)
+    const lineText = extractBrSeparatedLine(event.target, messageEl);
+    if (lineText) {
+      fullText = lineText;
+      debugLog('GMAIL', 'Using br-separated line text');
+    } else {
+      fullText = extractGmailMessageText(messageEl);
+    }
+  }
+  debugLog('GMAIL', `Extracted text (focused=${isFocused}):`, fullText?.slice(0, 50) + '...');
+  if (!fullText) {
     debugLog('GMAIL', 'No text found');
     return;
   }
 
   // Check if text contains Japanese characters
-  const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text);
+  const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(fullText);
   if (!hasJapanese) {
     debugLog('GMAIL', 'No Japanese text detected');
     return;
   }
 
+  // Filter to Japanese-only content for analysis
+  const filteredText = filterJapaneseContent(fullText) || fullText;
+
+  // Check if thread has multiple messages with Japanese
+  const threadMessages = getGmailThreadMessages();
+  const options = {};
+  if (threadMessages.length >= 2) {
+    options.analyzeThread = () => analyzeThread(threadMessages);
+  }
+
   debugLog('GMAIL', 'Japanese detected, showing custom menu');
   event.preventDefault();
   event.stopPropagation();
-  showCustomContextMenu(event, messageEl, text);
+  showCustomContextMenu(event, messageEl, filteredText, options);
+}
+
+/**
+ * Analyze all Japanese messages in the Gmail thread
+ * @param {Array<{messageEl: HTMLElement, text: string}>} threadMessages
+ */
+function analyzeThread(threadMessages) {
+  debugLog('GMAIL', `Analyzing thread: ${threadMessages.length} messages`);
+  for (const { messageEl, text } of threadMessages) {
+    showInlineBreakdown(messageEl, text);
+  }
 }
 
 /**

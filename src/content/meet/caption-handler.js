@@ -34,6 +34,17 @@ export function removeOverlay(container) {
     breakdownPanel.remove();
   }
 
+  // Remove sentence-mode wrapper if present
+  const sentenceWrapper = container.querySelector('.breakdown-wrapper[data-sentence-mode]');
+  if (sentenceWrapper) {
+    sentenceWrapper.remove();
+  }
+
+  // Clear sentence debounce timer
+  if (state?.sentenceState?.debounceTimer) {
+    clearTimeout(state.sentenceState.debounceTimer);
+  }
+
   if (state?.translatedEl && state.translatedEl.parentNode) {
     // Handle shadow original element (incremental mode)
     if (state.shadowOriginalEl && state.shadowOriginalEl.parentNode) {
@@ -77,9 +88,21 @@ export async function handleCaptionClick(event) {
     return;
   }
 
-  // If already has breakdown, toggle expand/collapse
+  // If already has state, handle accordingly
   if (translationState.has(container)) {
     const state = translationState.get(container);
+
+    // Handle sentence-processed containers: toggle expand/collapse
+    if (state.sentenceState) {
+      const wrapper = container.querySelector('.breakdown-wrapper[data-sentence-mode]');
+      if (wrapper) {
+        const isExpanded = wrapper.getAttribute('data-expanded') === 'true';
+        wrapper.setAttribute('data-expanded', !isExpanded ? 'true' : 'false');
+        state.isExpanded = !isExpanded;
+        debugLog('SENTENCE-CLICK', `Sentence wrapper ${!isExpanded ? 'expanded' : 'collapsed'}`);
+      }
+      return;
+    }
 
     // If breakdown panel exists, check for new text or toggle
     if (state.breakdownData) {

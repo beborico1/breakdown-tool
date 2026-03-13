@@ -280,6 +280,56 @@
 }
 
 /* ============================================
+   SENTENCE-LEVEL PROCESSING STYLES
+   ============================================ */
+
+/* Sentence processing - group wrapper for each processed sentence */
+.sentence-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 4px;
+  width: 100%;
+}
+
+/* Separator between sentence groups */
+.sentence-group + .sentence-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(99, 40, 137, 0.2);
+}
+
+/* Live incoming text - WHITE (not gray) */
+.sentence-live-text {
+  color: #FFFFFF;
+  font-size: var(--wb-font-pending, 18px);
+  padding: 8px 16px;
+  width: 100%;
+  flex-basis: 100%;
+}
+
+/* Processing indicator for text being sent to API */
+.sentence-processing-text {
+  color: #9CA3AF;
+  font-size: var(--wb-font-pending, 18px);
+  padding: 8px 16px;
+  width: 100%;
+  flex-basis: 100%;
+  animation: mm-pulse 1.2s ease-in-out infinite;
+}
+
+/* Hide live text when panel collapsed */
+.breakdown-wrapper[data-expanded="false"] .sentence-live-text,
+.breakdown-wrapper[data-expanded="false"] .sentence-processing-text {
+  display: none !important;
+}
+
+/* Hide sentence groups when collapsed */
+.breakdown-wrapper[data-expanded="false"] .sentence-group {
+  display: none !important;
+}
+
+/* ============================================
    MINIMALISTIC MODE STYLES
    ============================================ */
 
@@ -416,6 +466,12 @@
 
 .gcwb-menu-text {
   flex: 1;
+}
+
+.gcwb-context-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 2px 8px;
 }
 
 @keyframes gcwbMenuEnter {
@@ -1585,6 +1641,10 @@ body[class*="controller-"] .gcwb-context-menu-item {
 
 body[class*="controller-"] .gcwb-context-menu-item:hover {
   background: rgba(99, 40, 137, 0.1);
+}
+
+body[class*="controller-"] .gcwb-context-menu-divider {
+  background: rgba(0, 0, 0, 0.08);
 }
 
 /* Loading indicator — ensure visibility on white backgrounds */

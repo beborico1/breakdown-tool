@@ -14,6 +14,8 @@ const modelSelectEl = document.getElementById('modelSelect');
 const modelCostHintEl = document.getElementById('modelCostHint');
 const fontSizeSlider = document.getElementById('fontSizeSlider');
 const fontSizeValueEl = document.getElementById('fontSizeValue');
+const chunkSizeSlider = document.getElementById('chunkSizeSlider');
+const chunkSizeValueEl = document.getElementById('chunkSizeValue');
 
 const GEMINI_MODELS = {
   'gemini-2.5-flash':      { label: 'Gemini 2.5 Flash',      costPer1M: 0.15 },
@@ -456,6 +458,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     updateCostHint(currentModelId);
     loadUsage();
   }
+  if (areaName === 'sync' && changes.sentenceChunkSize) {
+    const size = changes.sentenceChunkSize.newValue || 2;
+    chunkSizeSlider.value = size;
+    chunkSizeValueEl.textContent = size;
+  }
 });
 
 // Reset usage button handler
@@ -479,10 +486,29 @@ fontSizeSlider.addEventListener('input', () => {
   chrome.storage.sync.set({ wordBlockFontSize: size });
 });
 
+/**
+ * Load sentence chunk size setting from storage
+ */
+function loadChunkSize() {
+  chrome.storage.sync.get(['sentenceChunkSize'], (result) => {
+    const size = result.sentenceChunkSize || 2;
+    chunkSizeSlider.value = size;
+    chunkSizeValueEl.textContent = size;
+  });
+}
+
+// Chunk size slider handler
+chunkSizeSlider.addEventListener('input', () => {
+  const size = parseInt(chunkSizeSlider.value, 10);
+  chunkSizeValueEl.textContent = size;
+  chrome.storage.sync.set({ sentenceChunkSize: size });
+});
+
 // Load saved key and model on popup open
 loadApiKey();
 loadModel();
 loadFontSize();
+loadChunkSize();
 loadAudioModeState();
 // loadMinimalisticMode();
 // loadFrequencyStats();
