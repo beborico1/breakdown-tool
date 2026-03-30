@@ -10,14 +10,14 @@
   <div class="container">
     <header class="header">
       <h1>Live Japanese Transcription</h1>
-      <p class="subtitle">Speak or play Japanese audio to get word-by-word breakdowns</p>
+      <p class="subtitle">Speak Japanese to get word-by-word breakdowns</p>
     </header>
 
     <div id="warningNoKey" class="warning" style="display: none;">
       No Gemini API key set. Open the extension popup to configure it.
     </div>
-    <div id="warningNoSpeech" class="warning" style="display: none;">
-      Web Speech API is not supported in this browser. Please use Chrome.
+    <div id="warningNoMic" class="warning" style="display: none;">
+      Microphone access is required. Please allow mic access and reload.
     </div>
 
     <div class="controls">
@@ -45,7 +45,11 @@
     </div>
 
     <div class="transcript-area" id="transcriptArea">
-      <span class="transcript-placeholder" id="transcriptPlaceholder">Transcription will appear here...</span>
+      <span class="transcript-placeholder" id="transcriptPlaceholder">Audio level will appear here...</span>
+      <div class="audio-level-track">
+        <div class="audio-level-bar" id="audioLevelBar"></div>
+      </div>
+      <span class="segment-timer" id="segmentTimer"></span>
     </div>
 
     <div class="session-stats">

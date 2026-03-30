@@ -1,6 +1,7 @@
 // ============================================
 // Live Japanese Transcription Page
 // Self-contained (no imports) — matches popup.js / frequency.js pattern
+// Uses MediaRecorder + Gemini audio API for transcription + analysis
 // ============================================
 
 // --- DOM refs ---
@@ -8,12 +9,14 @@ const micBtn = document.getElementById('micBtn');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const warningNoKey = document.getElementById('warningNoKey');
-const warningNoSpeech = document.getElementById('warningNoSpeech');
+const warningNoMic = document.getElementById('warningNoMic');
 const silenceSlider = document.getElementById('silenceSlider');
 const silenceValue = document.getElementById('silenceValue');
 const analyzeNowBtn = document.getElementById('analyzeNow');
 const transcriptArea = document.getElementById('transcriptArea');
 const transcriptPlaceholder = document.getElementById('transcriptPlaceholder');
+const audioLevelBar = document.getElementById('audioLevelBar');
+const segmentTimerEl = document.getElementById('segmentTimer');
 const segmentsProcessedEl = document.getElementById('segmentsProcessed');
 const wordsAnalyzedEl = document.getElementById('wordsAnalyzed');
 const historyContainer = document.getElementById('historyContainer');
@@ -22,15 +25,26 @@ const historyEmpty = document.getElementById('historyEmpty');
 // --- State ---
 let apiKey = null;
 let modelId = 'gemini-2.5-flash';
-let recognition = null;
 let isListening = false;
-let isProcessing = false;
-let accumulatedText = '';
-let silenceTimer = null;
 let silenceThreshold = 3000; // ms
 let segmentCount = 0;
 let wordCount = 0;
-let shouldRestart = false;
+let accumulatedTranscript = ''; // transcribed text for "Analyze Now" re-analysis
+
+// --- Audio capture state ---
+let mediaStream = null;
+let audioContext = null;
+let analyser = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let silenceStart = null;
+let segmentStart = null;
+let silenceCheckInterval = null;
+let currentRMS = 0;
+
+const SILENCE_RMS_THRESHOLD = 15;   // 0-255 scale
+const MIN_SEGMENT_DURATION = 500;   // ms
+const MAX_SEGMENT_DURATION = 30000; // ms
 
 // ============================================
 // Duplicated utilities (from api.js, text.js, frequency-tracker.js)
@@ -195,6 +209,96 @@ Text: ${text}`;
   }
 }
 
+// ============================================
+// Gemini Audio Analysis (duplicated from api.js)
+// ============================================
+
+function parseBreakdownResponse(responseText) {
+  let text = responseText.trim();
+  if (text.startsWith('```json')) text = text.slice(7);
+  else if (text.startsWith('```')) text = text.slice(3);
+  if (text.endsWith('```')) text = text.slice(0, -3);
+  text = text.trim();
+
+  const breakdown = JSON.parse(text);
+  if (!breakdown.original && breakdown.original !== '') {
+    throw new Error('Missing original field');
+  }
+  if (!Array.isArray(breakdown.words)) {
+    throw new Error('Missing words array');
+  }
+  return breakdown;
+}
+
+async function analyzeAudioWithGemini(base64Audio, mimeType) {
+  if (!apiKey) throw new Error('No API key. Set it in the extension popup.');
+
+  const prompt = `Listen to this Japanese audio and return ONLY valid JSON (no markdown, no code blocks, no explanation):
+{
+  "original": "the transcribed Japanese text",
+  "translation": "natural English translation of the full sentence",
+  "words": [
+    {
+      "japanese": "word in kanji/kana as it appears",
+      "reading": "hiragana reading (only for words with kanji, empty string for hiragana/katakana-only words)",
+      "romaji": "romanized pronunciation",
+      "english": "English meaning or grammatical function",
+      "type": "noun|verb|particle|adjective|adverb|counter|expression|auxiliary|copula"
+    }
+  ]
+}
+
+Important:
+- If no Japanese speech is detected, return {"original": "", "translation": "", "words": []}
+- Break down ALL words including particles (は, が, を, に, etc.)
+- For particles, use their grammatical function as english (e.g., "topic marker", "subject marker", "object marker")
+- Keep word order matching the original sentence
+- Use lowercase for romaji except for proper nouns
+- For verbs, include the conjugated form as it appears`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Audio
+              }
+            },
+            { text: prompt }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 65536,
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || 'Audio analysis failed');
+  }
+
+  const data = await response.json();
+  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  const usageMetadata = data.usageMetadata;
+  if (usageMetadata?.totalTokenCount) {
+    updateTokenUsage(usageMetadata.totalTokenCount);
+  }
+
+  if (!responseText) throw new Error('No audio analysis returned');
+
+  return parseBreakdownResponse(responseText);
+}
+
 function recordWordFrequencies(words) {
   const now = Date.now();
   chrome.storage.local.get(['wordFrequencyData'], (result) => {
@@ -235,33 +339,24 @@ function setStatus(state, text) {
 }
 
 // ============================================
-// Transcript buffer
+// Audio level indicator
 // ============================================
 
-function updateTranscriptDisplay(interimText) {
-  transcriptPlaceholder.style.display = 'none';
-
-  // Remove previous interim
-  const oldInterim = transcriptArea.querySelector('.transcript-interim');
-  if (oldInterim) oldInterim.remove();
-
-  if (interimText) {
-    const span = document.createElement('span');
-    span.className = 'transcript-interim';
-    span.textContent = interimText;
-    transcriptArea.appendChild(span);
+function updateAudioLevel() {
+  if (!isListening) {
+    audioLevelBar.style.width = '0%';
+    segmentTimerEl.textContent = '';
+    return;
   }
 
-  transcriptArea.scrollTop = transcriptArea.scrollHeight;
-}
-
-function appendFinalTranscript(text) {
   transcriptPlaceholder.style.display = 'none';
-  const span = document.createElement('span');
-  span.className = 'transcript-final';
-  span.textContent = text;
-  transcriptArea.appendChild(span);
-  transcriptArea.scrollTop = transcriptArea.scrollHeight;
+  const pct = Math.min(100, (currentRMS / 80) * 100);
+  audioLevelBar.style.width = pct + '%';
+
+  if (segmentStart) {
+    const elapsed = ((Date.now() - segmentStart) / 1000).toFixed(1);
+    segmentTimerEl.textContent = elapsed + 's';
+  }
 }
 
 // ============================================
@@ -309,7 +404,7 @@ function createBreakdownCard(breakdown, originalText) {
   return card;
 }
 
-function createPendingCard(text) {
+function createPendingCard(label) {
   const card = document.createElement('div');
   card.className = 'segment-card pending';
 
@@ -320,11 +415,11 @@ function createPendingCard(text) {
 
   const original = document.createElement('div');
   original.className = 'segment-original';
-  original.textContent = text;
+  original.textContent = label;
   card.appendChild(original);
 
   const loading = document.createElement('div');
-  loading.textContent = 'Analyzing...';
+  loading.textContent = 'Transcribing & analyzing...';
   loading.style.color = '#9CA3AF';
   loading.style.fontSize = '13px';
   loading.style.fontStyle = 'italic';
@@ -333,7 +428,7 @@ function createPendingCard(text) {
   return card;
 }
 
-function createErrorCard(text, error) {
+function createErrorCard(label, error) {
   const card = document.createElement('div');
   card.className = 'segment-card error';
 
@@ -344,7 +439,7 @@ function createErrorCard(text, error) {
 
   const original = document.createElement('div');
   original.className = 'segment-original';
-  original.textContent = text;
+  original.textContent = label;
   card.appendChild(original);
 
   const errorDiv = document.createElement('div');
@@ -352,26 +447,59 @@ function createErrorCard(text, error) {
   errorDiv.textContent = error;
   card.appendChild(errorDiv);
 
-  const retryBtn = document.createElement('button');
-  retryBtn.className = 'btn-retry';
-  retryBtn.textContent = 'Retry';
-  retryBtn.addEventListener('click', () => {
-    card.remove();
-    sendForAnalysis(text);
-  });
-  card.appendChild(retryBtn);
-
   return card;
 }
 
 // ============================================
-// Analysis pipeline
+// Audio analysis pipeline
 // ============================================
 
+async function processAudioSegment(blob) {
+  const durationLabel = ((Date.now() - (segmentStart || Date.now())) / 1000).toFixed(1) + 's audio';
+
+  historyEmpty.style.display = 'none';
+  const pendingCard = createPendingCard(durationLabel);
+  historyContainer.insertBefore(pendingCard, historyContainer.firstChild);
+
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+
+    const breakdown = await analyzeAudioWithGemini(base64, 'audio/webm;codecs=opus');
+
+    pendingCard.remove();
+
+    // Empty response means no speech detected — discard silently
+    if (!breakdown.original || breakdown.original.trim() === '') {
+      return;
+    }
+
+    const breakdownCard = createBreakdownCard(breakdown, breakdown.original);
+    historyContainer.insertBefore(breakdownCard, historyContainer.firstChild);
+
+    recordWordFrequencies(breakdown.words);
+
+    accumulatedTranscript += breakdown.original + ' ';
+    if (isListening) {
+      analyzeNowBtn.disabled = false;
+    }
+
+    segmentCount++;
+    wordCount += breakdown.words.length;
+    segmentsProcessedEl.textContent = segmentCount;
+    wordsAnalyzedEl.textContent = wordCount;
+  } catch (error) {
+    pendingCard.remove();
+    const errorCard = createErrorCard(durationLabel, error.message);
+    historyContainer.insertBefore(errorCard, historyContainer.firstChild);
+  }
+}
+
+// Text re-analysis (for "Analyze Now" button)
 async function sendForAnalysis(text) {
   if (!text.trim()) return;
-  if (isProcessing) return;
-  isProcessing = true;
 
   historyEmpty.style.display = 'none';
   setStatus('processing', 'Processing...');
@@ -399,106 +527,132 @@ async function sendForAnalysis(text) {
     historyContainer.insertBefore(errorCard, historyContainer.firstChild);
   }
 
-  isProcessing = false;
   if (isListening) {
     setStatus('listening', 'Listening...');
-    analyzeNowBtn.disabled = accumulatedText.trim().length === 0;
   } else {
     setStatus('ready', 'Ready');
-    analyzeNowBtn.disabled = true;
   }
 }
 
 // ============================================
-// Speech Recognition
+// Audio capture (mirrors offscreen.js pattern)
 // ============================================
 
-function initSpeechRecognition() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    warningNoSpeech.style.display = 'block';
+async function initAudioCapture() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+
+    audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.3;
+    source.connect(analyser);
+
+    // Suspend until user click (Chrome autoplay policy)
+    audioContext.suspend();
+  } catch (err) {
+    if (err.name === 'NotAllowedError') {
+      warningNoMic.textContent = 'Microphone access denied. Please allow mic access and reload.';
+    } else {
+      warningNoMic.textContent = 'Failed to access microphone: ' + err.message;
+    }
+    warningNoMic.style.display = 'block';
     micBtn.disabled = true;
+  }
+}
+
+function startNewRecording() {
+  recordedChunks = [];
+  segmentStart = Date.now();
+
+  mediaRecorder = new MediaRecorder(mediaStream, {
+    mimeType: 'audio/webm;codecs=opus'
+  });
+
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0) {
+      recordedChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    if (recordedChunks.length > 0) {
+      const blob = new Blob(recordedChunks, { type: 'audio/webm;codecs=opus' });
+      processAudioSegment(blob);
+    }
+  };
+
+  mediaRecorder.start(100);
+  silenceStart = null;
+}
+
+function checkSilence() {
+  if (!analyser || !isListening) return;
+
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteTimeDomainData(dataArray);
+
+  // Calculate RMS volume
+  let sum = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    const val = (dataArray[i] - 128) / 128;
+    sum += val * val;
+  }
+  currentRMS = Math.sqrt(sum / dataArray.length) * 255;
+
+  updateAudioLevel();
+
+  if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+
+  const now = Date.now();
+  const segmentDuration = now - segmentStart;
+
+  // Force segment boundary at max duration
+  if (segmentDuration >= MAX_SEGMENT_DURATION) {
+    finalizeSegment();
     return;
   }
 
-  recognition = new SpeechRecognition();
-  recognition.lang = 'ja-JP';
-  recognition.continuous = true;
-  recognition.interimResults = true;
-
-  recognition.onresult = (event) => {
-    let interim = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        accumulatedText += transcript;
-        appendFinalTranscript(transcript);
-        analyzeNowBtn.disabled = false;
-        resetSilenceTimer();
-      } else {
-        interim += transcript;
-      }
+  if (currentRMS < SILENCE_RMS_THRESHOLD) {
+    if (!silenceStart) {
+      silenceStart = now;
+    } else if (now - silenceStart >= silenceThreshold && segmentDuration >= MIN_SEGMENT_DURATION) {
+      finalizeSegment();
     }
-    updateTranscriptDisplay(interim);
-  };
-
-  recognition.onend = () => {
-    if (shouldRestart && isListening) {
-      try {
-        recognition.start();
-      } catch (e) {
-        // Already started
-      }
-    }
-  };
-
-  recognition.onerror = (event) => {
-    if (event.error === 'no-speech') {
-      // Normal — just restart
-      return;
-    }
-    if (event.error === 'not-allowed') {
-      setStatus('error', 'Microphone access denied');
-      stopListening();
-      return;
-    }
-    if (event.error === 'network') {
-      setStatus('error', 'Network error');
-      return;
-    }
-    if (event.error === 'aborted') {
-      return;
-    }
-    setStatus('error', `Error: ${event.error}`);
-  };
-}
-
-function resetSilenceTimer() {
-  if (silenceTimer) clearTimeout(silenceTimer);
-  silenceTimer = setTimeout(() => {
-    if (accumulatedText.trim()) {
-      const text = accumulatedText;
-      accumulatedText = '';
-      sendForAnalysis(text);
-    }
-  }, silenceThreshold);
-}
-
-function startListening() {
-  if (!recognition) return;
-  isListening = true;
-  shouldRestart = true;
-  accumulatedText = '';
-
-  // Clear transcript area for new session
-  transcriptArea.querySelectorAll('.transcript-final, .transcript-interim').forEach(el => el.remove());
-  transcriptPlaceholder.style.display = '';
-
-  try {
-    recognition.start();
-  } catch (e) {
-    // Already started
+  } else {
+    silenceStart = null;
   }
+}
+
+function finalizeSegment() {
+  if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+
+  mediaRecorder.stop();
+
+  // Start new recording after brief delay
+  setTimeout(() => {
+    if (mediaStream && mediaStream.active && isListening) {
+      startNewRecording();
+    }
+  }, 50);
+}
+
+// ============================================
+// Start / Stop
+// ============================================
+
+async function startListening() {
+  if (!audioContext || !mediaStream) return;
+
+  isListening = true;
+  accumulatedTranscript = '';
+
+  await audioContext.resume();
+  startNewRecording();
+  silenceCheckInterval = setInterval(checkSilence, 100);
 
   micBtn.classList.add('listening');
   setStatus('listening', 'Listening...');
@@ -506,33 +660,27 @@ function startListening() {
 
 function stopListening() {
   isListening = false;
-  shouldRestart = false;
 
-  if (silenceTimer) {
-    clearTimeout(silenceTimer);
-    silenceTimer = null;
+  if (silenceCheckInterval) {
+    clearInterval(silenceCheckInterval);
+    silenceCheckInterval = null;
   }
 
-  if (recognition) {
-    try {
-      recognition.stop();
-    } catch (e) {
-      // Already stopped
-    }
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop(); // triggers final segment processing
   }
 
   micBtn.classList.remove('listening');
+  currentRMS = 0;
+  updateAudioLevel();
 
-  // Send remaining text if any
-  if (accumulatedText.trim()) {
-    const text = accumulatedText;
-    accumulatedText = '';
-    sendForAnalysis(text);
+  if (accumulatedTranscript.trim()) {
+    analyzeNowBtn.disabled = false;
   } else {
-    setStatus('ready', 'Ready');
+    analyzeNowBtn.disabled = true;
   }
 
-  analyzeNowBtn.disabled = true;
+  setStatus('ready', 'Ready');
 }
 
 // ============================================
@@ -548,13 +696,9 @@ micBtn.addEventListener('click', () => {
 });
 
 analyzeNowBtn.addEventListener('click', () => {
-  if (accumulatedText.trim()) {
-    if (silenceTimer) {
-      clearTimeout(silenceTimer);
-      silenceTimer = null;
-    }
-    const text = accumulatedText;
-    accumulatedText = '';
+  if (accumulatedTranscript.trim()) {
+    const text = accumulatedTranscript;
+    accumulatedTranscript = '';
     analyzeNowBtn.disabled = true;
     sendForAnalysis(text);
   }
@@ -591,7 +735,7 @@ async function init() {
     warningNoKey.style.display = 'block';
   }
 
-  initSpeechRecognition();
+  await initAudioCapture();
 }
 
 init();
