@@ -6,7 +6,8 @@ import { debugLog } from '../core/debug.js';
  */
 export function isGoogleChat() {
   return window.location.hostname === 'chat.google.com' ||
-         (window.location.hostname === 'mail.google.com' && window.location.pathname.startsWith('/chat'));
+         (window.location.hostname === 'mail.google.com' &&
+           (window.location.pathname.startsWith('/chat') || window.location.hash.startsWith('#chat')));
 }
 
 /**

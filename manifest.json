@@ -34,6 +34,12 @@
       "128": "assets/icons/icon128.png"
     }
   },
+  "commands": {
+    "translate-to-japanese": {
+      "suggested_key": { "default": "Alt+J", "mac": "Alt+J" },
+      "description": "Translate selected text to Japanese"
+    }
+  },
   "content_scripts": [
     {
       "matches": [

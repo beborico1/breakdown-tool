@@ -1456,6 +1456,69 @@
   animation-delay: 0.3s;
 }
 
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+
+.gcwb-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  z-index: 100003;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  animation: gcwbToastEnter 0.25s ease-out;
+  pointer-events: none;
+}
+
+.gcwb-toast-info {
+  background: #1F1F1F;
+  color: #E8EAED;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gcwb-toast-success {
+  background: #1b4332;
+  color: #95d5b2;
+  border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.gcwb-toast-error {
+  background: #3c1111;
+  color: #f4a0a0;
+  border: 1px solid rgba(234, 67, 53, 0.3);
+}
+
+.gcwb-toast-exit {
+  animation: gcwbToastExit 0.2s ease-in forwards;
+}
+
+@keyframes gcwbToastEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes gcwbToastExit {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+}
+
 /* Adjust cached-word hover background for Gmail's light theme */
 .a3s.aiL .gcwb-cached-word:hover {
   background-color: rgba(99, 40, 137, 0.12);

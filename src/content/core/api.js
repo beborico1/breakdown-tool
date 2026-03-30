@@ -422,3 +422,68 @@ export async function translateWithGemini(text, options = {}) {
   debugLog('API', `OUTPUT (${translatedText.trim().length} chars):`, translatedText.trim());
   return translatedText.trim();
 }
+
+/**
+ * Translate text to Japanese using Gemini
+ * @param {string} text - Text to translate to Japanese
+ * @returns {Promise<string>} - Japanese translation
+ */
+export async function translateToJapaneseWithGemini(text) {
+  const apiKey = await getApiKey();
+
+  if (!apiKey) {
+    throw new Error('No API key. Set it in the extension popup.');
+  }
+
+  const model = await getModel();
+  const callNum = incrementApiCallCount();
+
+  const prompt = `Translate the following text to Japanese. Only output the translation, nothing else. If the text is already in Japanese, output it as-is.\n\nText: ${text}`;
+
+  debugLog('API', `Call #${callNum} (TO-JAPANESE)`);
+  debugLog('API', `INPUT (${text.length} chars):`, text);
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 65536,
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    debugLog('API', 'Error response:', error);
+    throw new Error(error.error?.message || 'Translation to Japanese failed');
+  }
+
+  const data = await response.json();
+  const translatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  // Track token usage
+  const usageMetadata = data.usageMetadata;
+  if (usageMetadata?.totalTokenCount) {
+    updateTokenUsage(usageMetadata.totalTokenCount);
+  }
+
+  if (!translatedText) {
+    debugLog('API', 'No translation in response:', data);
+    throw new Error('No translation returned');
+  }
+
+  debugLog('API', `OUTPUT (${translatedText.trim().length} chars):`, translatedText.trim());
+  return translatedText.trim();
+}

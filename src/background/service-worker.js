@@ -151,6 +151,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Handle keyboard shortcut commands
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'translate-to-japanese') {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const isChatPage = tab?.url?.includes('chat.google.com') ||
+      (tab?.url?.includes('mail.google.com') && tab?.url?.includes('#chat'));
+    if (!isChatPage) {
+      return;
+    }
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action: 'translate-to-japanese' });
+    } catch (e) {
+      // Content script may not be loaded
+    }
+  }
+});
+
 // Clean up when the captured tab is closed
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const { audioMode } = await chrome.storage.session.get('audioMode');

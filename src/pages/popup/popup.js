@@ -7,6 +7,7 @@ const keyStatusEl = document.getElementById('keyStatus');
 const viewAllWordsBtn = document.getElementById('viewAllWords');
 const liveTranscribeBtn = document.getElementById('liveTranscribe');
 const audioModeToggleBtn = document.getElementById('audioModeToggle');
+const translateToJapaneseBtn = document.getElementById('translateToJapanese');
 const tokenCountEl = document.getElementById('tokenCount');
 const tokenCostEl = document.getElementById('tokenCost');
 const resetUsageBtn = document.getElementById('resetUsage');
@@ -319,6 +320,54 @@ function loadAudioModeState() {
     }
   });
 }
+
+// Translate to Japanese button
+translateToJapaneseBtn.addEventListener('click', async () => {
+  // Check API key first
+  const keyResult = await new Promise(resolve =>
+    chrome.storage.sync.get(['geminiApiKey'], resolve)
+  );
+  if (!keyResult.geminiApiKey) {
+    showStatus('Set a Gemini API key first', false);
+    return;
+  }
+
+  // Check active tab is Google Chat
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const isChatPage = tab?.url?.includes('chat.google.com') ||
+    (tab?.url?.includes('mail.google.com') && tab?.url?.includes('#chat'));
+  if (!isChatPage) {
+    showStatus('Please open Google Chat first', false);
+    return;
+  }
+
+  // Show loading state
+  translateToJapaneseBtn.disabled = true;
+  translateToJapaneseBtn.textContent = 'Translating...';
+
+  try {
+    const response = await new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tab.id, { action: 'translate-to-japanese' }, (resp) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error('Refresh the Chat page and try again'));
+          return;
+        }
+        resolve(resp);
+      });
+    });
+
+    if (response?.success) {
+      showStatus(response.message, true);
+    } else {
+      showStatus(response?.message || 'Translation failed', false);
+    }
+  } catch (err) {
+    showStatus(err.message, false);
+  } finally {
+    translateToJapaneseBtn.disabled = false;
+    translateToJapaneseBtn.textContent = 'Translate Selection to Japanese';
+  }
+});
 
 // Transcription page
 liveTranscribeBtn.addEventListener('click', () => {
