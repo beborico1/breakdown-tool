@@ -8,8 +8,8 @@ export function extractCaptions() {
 
   containers.forEach(container => {
     const nameEl = container.querySelector('.NWpY1d');
-    const messageEl = container.querySelector('.ygicle.VbkSUe[data-translated]')
-                   || container.querySelector('.ygicle.VbkSUe');
+    const messageEl = container.querySelector('.ygicle.VbkSUe[data-shadow-original]')
+                   || container.querySelector('.ygicle.VbkSUe:not([data-translated])');
 
     const name = nameEl?.textContent?.trim() || '';
     const message = messageEl?.textContent?.trim() || '';
