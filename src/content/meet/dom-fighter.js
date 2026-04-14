@@ -9,7 +9,9 @@ import {
   getObserverCallCount,
   getObserverCallWindowStart,
   incrementObserverCallCount,
-  resetObserverCallCount
+  resetObserverCallCount,
+  sessionTranscript,
+  containerToTranscriptIndex
 } from '../core/state.js';
 import { findCachedTranslation } from '../core/cache.js';
 import { hideOriginalElement } from '../utils/dom.js';
@@ -42,6 +44,40 @@ export function getObserver() {
 }
 
 /**
+ * Record (or update) a caption in the session transcript.
+ * Called liberally — each caption container is keyed via WeakMap so
+ * subsequent updates to the same container overwrite its entry rather
+ * than appending a duplicate.
+ * @param {HTMLElement} container
+ */
+export function recordCaptionToTranscript(container) {
+  if (!container || !container.classList?.contains('nMcdL')) return;
+
+  const nameEl = container.querySelector('.NWpY1d');
+  const messageEl = container.querySelector('.ygicle.VbkSUe[data-shadow-original]')
+                 || container.querySelector('.ygicle.VbkSUe:not([data-translated])');
+  if (!messageEl) return;
+
+  const text = messageEl.textContent?.trim() || '';
+  if (!text) return;
+
+  const speaker = nameEl?.textContent?.trim() || '';
+
+  if (containerToTranscriptIndex.has(container)) {
+    const idx = containerToTranscriptIndex.get(container);
+    const entry = sessionTranscript[idx];
+    if (entry) {
+      entry.text = text;
+      if (speaker) entry.speaker = speaker;
+    }
+  } else {
+    const idx = sessionTranscript.length;
+    containerToTranscriptIndex.set(container, idx);
+    sessionTranscript.push({ speaker, text, firstSeen: Date.now() });
+  }
+}
+
+/**
  * Setup caption click handlers and auto-apply cached translations
  */
 export function setupCaptionClickHandlers() {
@@ -61,6 +97,8 @@ export function setupCaptionClickHandlers() {
     const messageEl = container.querySelector('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original])');
     const speaker = nameEl?.textContent?.trim() || '(unknown)';
     const originalText = messageEl?.textContent?.trim() || '';
+
+    recordCaptionToTranscript(container);
 
     debugLog('SETUP', `New container: speaker="${speaker}", text="${originalText.slice(0, 40)}..."`);
 
@@ -150,6 +188,12 @@ export function handleMutations(mutations, observerConfig) {
 
     // Handle characterData mutations for visual delta display (no auto-translation)
     if (mutation.type === 'characterData') {
+      // Keep the session transcript in sync whenever any caption's text grows.
+      const captionContainer = mutation.target.parentElement?.closest('.nMcdL');
+      if (captionContainer) {
+        recordCaptionToTranscript(captionContainer);
+      }
+
       // Check if this mutation is inside a shadow original element
       const shadowEl = mutation.target.parentElement?.closest('[data-shadow-original]');
       if (shadowEl) {
@@ -359,6 +403,13 @@ export function handleMutations(mutations, observerConfig) {
 
   // Wire up any new containers
   setupCaptionClickHandlers();
+
+  // Catch-all: sweep every visible caption so the session transcript
+  // captures text changes even when they don't surface as a characterData
+  // mutation we routed above (e.g., Meet replacing the text node wholesale).
+  for (const container of document.querySelectorAll('.nMcdL')) {
+    recordCaptionToTranscript(container);
+  }
 }
 
 /**

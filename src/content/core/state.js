@@ -115,3 +115,17 @@ export function setOverlayCreatedAt(value) {
 // Track inline breakdown state per message element
 // Value: { originalHTML, breakdownData, isShowingBreakdown, loadingIndicator }
 export const inlineBreakdownState = new Map();
+
+// Session-long transcript accumulator for auto-download on meeting end.
+// Entries live in insertion order (order captions first appeared).
+// Each entry: { speaker, text, firstSeen }
+export const sessionTranscript = [];
+
+// Maps a caption container element to its index in sessionTranscript,
+// so later text updates mutate the same entry instead of appending a new one.
+export const containerToTranscriptIndex = new WeakMap();
+
+export function resetSessionTranscript() {
+  sessionTranscript.length = 0;
+  // WeakMap entries are released as their container elements are GC'd.
+}

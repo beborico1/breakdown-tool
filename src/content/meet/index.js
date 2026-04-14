@@ -8,7 +8,9 @@ import {
   lastCopiedIndex,
   setWordBlockFontSize,
   wordBlockFontSize,
-  setSentenceChunkSize
+  setSentenceChunkSize,
+  sessionTranscript,
+  resetSessionTranscript
 } from '../core/state.js';
 import { pruneTranslationCache } from '../core/cache.js';
 import { loadMinimalisticMode, removeMinimalisticOverlay } from './minimalistic-mode.js';
@@ -16,6 +18,11 @@ import { removeOverlay } from './caption-handler.js';
 import { setupCaptionClickHandlers, handleMutations, setObserver } from './dom-fighter.js';
 import { extractCaptions, formatCaptions } from './caption-extractor.js';
 import { applyWordBlockFontSize } from './panel-mode.js';
+import { triggerTranscriptDownload } from './transcript-download.js';
+
+// Google Meet room URLs look like /xxx-yyyy-zzz. When we transition out
+// of one, the user has left the meeting — that's our auto-download signal.
+const MEETING_PATH_RE = /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\b/;
 
 // Create the MutationObserver
 const observer = new MutationObserver((mutations) => {
@@ -53,6 +60,28 @@ function initializeObserver() {
 
   // Prune translation cache periodically (every minute)
   setInterval(pruneTranslationCache, 60 * 1000);
+
+  // Watch for SPA navigation away from the meeting room — fires when the
+  // user clicks "Leave call" and Meet swaps the URL to the landing page.
+  let lastWasInMeeting = MEETING_PATH_RE.test(location.pathname);
+  setInterval(() => {
+    const nowInMeeting = MEETING_PATH_RE.test(location.pathname);
+    if (lastWasInMeeting && !nowInMeeting) {
+      debugLog('MEETING-END', 'detected URL change out of meeting, auto-downloading transcript');
+      triggerTranscriptDownload({ reason: 'url-change' });
+      resetSessionTranscript();
+    }
+    lastWasInMeeting = nowInMeeting;
+  }, 2000);
+
+  // Best-effort fallback for tab close / full page navigation. Chrome may
+  // cancel the download if the document is tearing down too fast — the
+  // popup's manual button is the guaranteed path for that case.
+  window.addEventListener('beforeunload', () => {
+    if (MEETING_PATH_RE.test(location.pathname) && sessionTranscript.length > 0) {
+      triggerTranscriptDownload({ reason: 'beforeunload' });
+    }
+  });
 
   debugLog('SETUP', 'Observer initialized');
 }
@@ -104,6 +133,22 @@ export function initializeGoogleMeet() {
         message: `Copied ${newCaptions.length} new caption(s)`,
         text: formatted
       });
+      return;
+    }
+
+    if (request.action === 'downloadTranscript') {
+      const started = triggerTranscriptDownload({ reason: 'manual' });
+      if (started) {
+        sendResponse({
+          success: true,
+          message: `Downloading ${sessionTranscript.length} caption(s)`
+        });
+      } else {
+        sendResponse({
+          success: false,
+          message: 'No captions captured yet in this meeting'
+        });
+      }
       return;
     }
   });

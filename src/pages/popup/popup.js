@@ -1,6 +1,7 @@
 const statusEl = document.getElementById('status');
 const copyAllBtn = document.getElementById('copyAll');
 const copyNewBtn = document.getElementById('copyNew');
+const downloadTranscriptBtn = document.getElementById('downloadTranscript');
 const apiKeyInput = document.getElementById('apiKey');
 const saveKeyBtn = document.getElementById('saveKey');
 const keyStatusEl = document.getElementById('keyStatus');
@@ -154,6 +155,7 @@ apiKeyInput.addEventListener('blur', () => {
 
 copyAllBtn.addEventListener('click', () => sendAction('copyAll'));
 copyNewBtn.addEventListener('click', () => sendAction('copyNew'));
+downloadTranscriptBtn.addEventListener('click', () => sendAction('downloadTranscript'));
 saveKeyBtn.addEventListener('click', saveApiKey);
 
 // Allow Enter key to save
