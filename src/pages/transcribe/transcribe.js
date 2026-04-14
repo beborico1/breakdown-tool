@@ -496,7 +496,7 @@ function createPendingCard(label) {
   return card;
 }
 
-function createErrorCard(label, error) {
+function createErrorCard(label, error, retryFn) {
   const card = document.createElement('div');
   card.className = 'segment-card error';
 
@@ -514,6 +514,17 @@ function createErrorCard(label, error) {
   errorDiv.className = 'segment-error';
   errorDiv.textContent = error;
   card.appendChild(errorDiv);
+
+  if (retryFn) {
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn-retry';
+    retryBtn.textContent = 'Retry';
+    retryBtn.addEventListener('click', () => {
+      card.remove();
+      retryFn();
+    });
+    card.appendChild(retryBtn);
+  }
 
   return card;
 }
@@ -560,7 +571,7 @@ async function processAudioSegment(blob) {
     wordsAnalyzedEl.textContent = wordCount;
   } catch (error) {
     pendingCard.remove();
-    const errorCard = createErrorCard(durationLabel, error.message);
+    const errorCard = createErrorCard(durationLabel, error.message, () => processAudioSegment(blob));
     historyContainer.insertBefore(errorCard, historyContainer.firstChild);
   }
 }
@@ -591,7 +602,7 @@ async function sendForAnalysis(text) {
     wordsAnalyzedEl.textContent = wordCount;
   } catch (error) {
     pendingCard.remove();
-    const errorCard = createErrorCard(text, error.message);
+    const errorCard = createErrorCard(text, error.message, () => sendForAnalysis(text));
     historyContainer.insertBefore(errorCard, historyContainer.firstChild);
   }
 
