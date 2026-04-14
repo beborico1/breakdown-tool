@@ -41,10 +41,13 @@ let silenceStart = null;
 let segmentStart = null;
 let silenceCheckInterval = null;
 let currentRMS = 0;
+let speechSamples = 0;
+let totalSamples = 0;
 
 const SILENCE_RMS_THRESHOLD = 15;   // 0-255 scale
 const MIN_SEGMENT_DURATION = 500;   // ms
 const MAX_SEGMENT_DURATION = 30000; // ms
+const MIN_SPEECH_RATIO = 0.10;      // Skip transcription if < 10% of samples had speech
 
 // ============================================
 // Duplicated utilities (from api.js, text.js, frequency-tracker.js)
@@ -566,6 +569,8 @@ async function initAudioCapture() {
 
 function startNewRecording() {
   recordedChunks = [];
+  speechSamples = 0;
+  totalSamples = 0;
   segmentStart = Date.now();
 
   mediaRecorder = new MediaRecorder(mediaStream, {
@@ -580,8 +585,11 @@ function startNewRecording() {
 
   mediaRecorder.onstop = () => {
     if (recordedChunks.length > 0) {
-      const blob = new Blob(recordedChunks, { type: 'audio/webm;codecs=opus' });
-      processAudioSegment(blob);
+      const speechRatio = totalSamples > 0 ? speechSamples / totalSamples : 0;
+      if (speechRatio >= MIN_SPEECH_RATIO) {
+        const blob = new Blob(recordedChunks, { type: 'audio/webm;codecs=opus' });
+        processAudioSegment(blob);
+      }
     }
   };
 
@@ -602,6 +610,11 @@ function checkSilence() {
     sum += val * val;
   }
   currentRMS = Math.sqrt(sum / dataArray.length) * 255;
+
+  totalSamples++;
+  if (currentRMS >= SILENCE_RMS_THRESHOLD) {
+    speechSamples++;
+  }
 
   updateAudioLevel();
 

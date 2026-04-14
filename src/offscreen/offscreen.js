@@ -18,6 +18,10 @@ let silenceStart = null;
 let segmentStart = null;
 let isRecording = false;
 let silenceCheckInterval = null;
+let speechSamples = 0;
+let totalSamples = 0;
+
+const MIN_SPEECH_RATIO = 0.10; // Skip transcription if < 10% of samples had speech
 
 /**
  * Start capturing audio from the tab stream
@@ -59,6 +63,8 @@ async function startCapture(streamId) {
  */
 function startNewRecording() {
   recordedChunks = [];
+  speechSamples = 0;
+  totalSamples = 0;
   segmentStart = Date.now();
 
   mediaRecorder = new MediaRecorder(mediaStream, {
@@ -73,8 +79,11 @@ function startNewRecording() {
 
   mediaRecorder.onstop = () => {
     if (recordedChunks.length > 0) {
-      const blob = new Blob(recordedChunks, { type: 'audio/webm;codecs=opus' });
-      sendAudioSegment(blob);
+      const speechRatio = totalSamples > 0 ? speechSamples / totalSamples : 0;
+      if (speechRatio >= MIN_SPEECH_RATIO) {
+        const blob = new Blob(recordedChunks, { type: 'audio/webm;codecs=opus' });
+        sendAudioSegment(blob);
+      }
     }
   };
 
@@ -99,6 +108,11 @@ function checkSilence() {
     sum += val * val;
   }
   const rms = Math.sqrt(sum / dataArray.length) * 255;
+
+  totalSamples++;
+  if (rms >= SILENCE_THRESHOLD) {
+    speechSamples++;
+  }
 
   const now = Date.now();
   const segmentDuration = now - segmentStart;
