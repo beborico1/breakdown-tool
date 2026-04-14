@@ -3,6 +3,7 @@ import {
   setActiveGcwbContextMenu
 } from '../core/state.js';
 import { showInlineBreakdown } from './inline-breakdown.js';
+import { isPageLightMode } from '../utils/dom.js';
 
 /**
  * Show custom context menu at cursor position
@@ -21,6 +22,7 @@ export function showCustomContextMenu(event, messageEl, text, options = {}) {
   // Create context menu
   const menu = document.createElement('div');
   menu.className = 'gcwb-context-menu';
+  if (isPageLightMode()) menu.classList.add('gcwb-light');
 
   // Build menu items
   let menuHTML = `

@@ -1,5 +1,6 @@
 import { debugLog } from '../core/debug.js';
 import { getWordTypeClass } from '../utils/text.js';
+import { isPageLightMode } from '../utils/dom.js';
 
 /**
  * Word Tooltip Module
@@ -40,6 +41,7 @@ function showTooltip(wordEl) {
   // Create tooltip element
   const tooltip = document.createElement('div');
   tooltip.className = 'gcwb-word-tooltip';
+  if (isPageLightMode()) tooltip.classList.add('gcwb-light');
 
   const typeClass = getWordTypeClass(type);
   const readingDisplay = reading && reading !== word ? reading : '';

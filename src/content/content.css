@@ -1715,3 +1715,69 @@ body[class*="controller-"] .gcwb-loading-indicator .gcwb-dot {
   background: #632889;
 }
 
+/* ============================================
+   GOOGLE CHAT LIGHT MODE (JS-detected)
+   ============================================ */
+
+/* Context menu — light theme */
+.gcwb-context-menu.gcwb-light {
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.gcwb-context-menu.gcwb-light .gcwb-context-menu-item {
+  color: #333;
+}
+
+.gcwb-context-menu.gcwb-light .gcwb-context-menu-item:hover {
+  background: rgba(99, 40, 137, 0.1);
+}
+
+.gcwb-context-menu.gcwb-light .gcwb-context-menu-divider {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Word popover — light theme */
+.gcwb-word-popover.gcwb-light {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.gcwb-word-popover.gcwb-light .gcwb-popover-arrow {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.gcwb-word-popover.gcwb-light .gcwb-popover-romaji {
+  color: #555;
+}
+
+.gcwb-word-popover.gcwb-light .gcwb-popover-meaning {
+  color: #666;
+}
+
+/* Word tooltip — light theme */
+.gcwb-word-tooltip.gcwb-light {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.gcwb-word-tooltip.gcwb-light .gcwb-tooltip-arrow {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.gcwb-word-tooltip.gcwb-light .gcwb-tooltip-reading {
+  color: #555;
+}
+
+.gcwb-word-tooltip.gcwb-light .gcwb-tooltip-romaji {
+  color: #555;
+}
+
+.gcwb-word-tooltip.gcwb-light .gcwb-tooltip-meaning {
+  color: #666;
+}
+

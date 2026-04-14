@@ -12,6 +12,7 @@ import { forceHideTooltip } from './word-tooltip.js';
 import { getPreHighlightHTML as getChatPreHighlightHTML } from './word-highlight.js';
 import { getPreHighlightHTML as getRedminePreHighlightHTML } from '../redmine/word-highlight.js';
 import { getPreHighlightHTML as getGmailPreHighlightHTML } from '../gmail/word-highlight.js';
+import { isPageLightMode } from '../utils/dom.js';
 
 /**
  * Remove the loading indicator.
@@ -264,6 +265,7 @@ function showInlinePopover(wordEl) {
   // Create popover element
   const popover = document.createElement('div');
   popover.className = 'gcwb-word-popover';
+  if (isPageLightMode()) popover.classList.add('gcwb-light');
 
   popover.innerHTML = `
     <div class="gcwb-popover-arrow"></div>

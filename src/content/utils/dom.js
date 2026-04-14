@@ -1,4 +1,17 @@
 /**
+ * Detect whether the page is using a light colour scheme by sampling
+ * the computed background-color of document.body.
+ * @returns {boolean}
+ */
+export function isPageLightMode() {
+  const bg = window.getComputedStyle(document.body).backgroundColor;
+  const match = bg.match(/\d+/g);
+  if (!match || match.length < 3) return false;
+  const [r, g, b] = match.map(Number);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 128;
+}
+
+/**
  * Hide the original element and mark it as shadow
  * @param {HTMLElement} originalEl
  */
