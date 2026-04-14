@@ -21,6 +21,9 @@ const segmentsProcessedEl = document.getElementById('segmentsProcessed');
 const wordsAnalyzedEl = document.getElementById('wordsAnalyzed');
 const historyContainer = document.getElementById('historyContainer');
 const historyEmpty = document.getElementById('historyEmpty');
+const copyJapaneseBtn = document.getElementById('copyJapanese');
+const copyEnglishBtn = document.getElementById('copyEnglish');
+const downloadTxtBtn = document.getElementById('downloadTxt');
 
 // --- State ---
 let apiKey = null;
@@ -771,6 +774,61 @@ function stopListening() {
 
   setStatus('ready', 'Ready');
 }
+
+// ============================================
+// Copy / Download transcript
+// ============================================
+
+function collectTranscriptData() {
+  const cards = Array.from(
+    historyContainer.querySelectorAll('.segment-card:not(.pending):not(.error)')
+  ).reverse(); // DOM is newest-first, reverse for chronological
+  return cards.map(card => ({
+    timestamp: card.querySelector('.segment-timestamp')?.textContent || '',
+    japanese: card.querySelector('.segment-original')?.textContent || '',
+    english: (card.querySelector('.breakdown-translation')?.textContent || '').replace(/^"|"$/g, '')
+  }));
+}
+
+function flashCopied(btn) {
+  const orig = btn.textContent;
+  btn.textContent = 'Copied!';
+  btn.classList.add('copied');
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.classList.remove('copied');
+  }, 1500);
+}
+
+copyJapaneseBtn.addEventListener('click', () => {
+  const data = collectTranscriptData();
+  if (!data.length) return;
+  navigator.clipboard.writeText(data.map(d => d.japanese).join('\n'));
+  flashCopied(copyJapaneseBtn);
+});
+
+copyEnglishBtn.addEventListener('click', () => {
+  const data = collectTranscriptData();
+  if (!data.length) return;
+  navigator.clipboard.writeText(data.map(d => d.english).join('\n'));
+  flashCopied(copyEnglishBtn);
+});
+
+downloadTxtBtn.addEventListener('click', () => {
+  const data = collectTranscriptData();
+  if (!data.length) return;
+  const lines = data.map(d => `[${d.timestamp}]\n${d.japanese}\n${d.english}\n`);
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `transcript-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
 
 // ============================================
 // Event listeners

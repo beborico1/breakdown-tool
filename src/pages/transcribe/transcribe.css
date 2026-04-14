@@ -305,6 +305,46 @@ body {
   margin-bottom: 12px;
 }
 
+/* History toolbar */
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.history-toolbar .section-title {
+  margin-bottom: 0;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid #3D3D3D;
+  border-radius: 4px;
+  background: #2D2D2D;
+  color: #9CA3AF;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-sm:hover {
+  background: #3D3D3D;
+  color: #E8EAED;
+}
+
+.btn-sm.copied {
+  background: #166534;
+  border-color: #22c55e;
+  color: #4ade80;
+}
+
 /* History container */
 .history-container {
   display: flex;
