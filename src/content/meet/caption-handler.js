@@ -6,7 +6,7 @@ import {
   activeContentKeys,
   pendingDeltas
 } from '../core/state.js';
-import { findCachedTranslation, generateContentKey, getTimeBucket } from '../core/cache.js';
+import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
@@ -262,6 +262,7 @@ export async function handleCaptionClick(event) {
       speaker,
       originalText
     });
+    cacheBreakdown(originalText, breakdownData);
     debugLog('CACHE-SET', `Cached breakdown: ${contentKey.slice(0, 50)}`);
 
     debugLog('TRANSLATE', 'Breakdown panel rendered');

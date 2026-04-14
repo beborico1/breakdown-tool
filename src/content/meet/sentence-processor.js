@@ -7,7 +7,7 @@ import {
   wordBlockFontSize,
   sentenceChunkSize
 } from '../core/state.js';
-import { findCachedTranslation, generateContentKey, getTimeBucket } from '../core/cache.js';
+import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
@@ -305,6 +305,7 @@ async function processSentenceQueue(container) {
           speaker: state.speakerName,
           originalText: sentence.text
         });
+        cacheBreakdown(sentence.text, breakdownData);
       }
 
       debugLog('SENTENCE-DONE', `Processed: "${sentence.text.slice(0, 30)}" → "${breakdownData.translation?.slice(0, 40)}"`);

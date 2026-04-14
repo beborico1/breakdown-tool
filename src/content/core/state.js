@@ -32,6 +32,11 @@ export const pendingDeltas = new Map();
 // Value: { translatedText, breakdownData, timestamp, speaker, originalText }
 export const translationCache = new Map();
 
+// Text-only breakdown cache (keyed by hashText(text), no time bucket)
+// Ensures identical text always produces the same tokenization on re-processing
+// Value: { breakdownData, timestamp }
+export const breakdownCache = new Map();
+
 // Track which content keys are currently displayed (user hasn't toggled off)
 export const activeContentKeys = new Set();
 

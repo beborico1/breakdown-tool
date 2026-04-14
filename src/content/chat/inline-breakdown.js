@@ -5,7 +5,7 @@ import {
   activeContentKeys
 } from '../core/state.js';
 import { getWordTypeClass } from '../utils/text.js';
-import { findCachedTranslation, generateContentKey, getTimeBucket } from '../core/cache.js';
+import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { cacheWords } from '../core/word-cache.js';
 import { forceHideTooltip } from './word-tooltip.js';
@@ -101,6 +101,7 @@ export async function showInlineBreakdown(messageEl, text) {
         speaker: 'GCWB',
         originalText: text
       });
+      cacheBreakdown(text, breakdownData);
       activeContentKeys.add(contentKey);
       debugLog('GCWB-INLINE', `Cached breakdown: ${contentKey.slice(0, 40)}`);
 

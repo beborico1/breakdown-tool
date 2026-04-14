@@ -1,5 +1,5 @@
 import { debugLog } from './debug.js';
-import { translationCache, activeContentKeys, CACHE_MAX_AGE_MS } from './state.js';
+import { translationCache, activeContentKeys, CACHE_MAX_AGE_MS, breakdownCache } from './state.js';
 import { hashText } from '../utils/text.js';
 
 /**
@@ -42,7 +42,33 @@ export function findCachedTranslation(speaker, text) {
       };
     }
   }
+
+  // Fallback: text-only breakdown cache (ensures consistent tokenization)
+  const textHash = hashText(text);
+  const fallback = breakdownCache.get(textHash);
+  if (fallback?.breakdownData) {
+    debugLog('CACHE-FALLBACK', `Text-only cache hit for: ${text.slice(0, 40)}`);
+    return {
+      translatedText: fallback.breakdownData.translation,
+      contentKey: generateContentKey(speaker, text, currentBucket),
+      breakdownData: fallback.breakdownData
+    };
+  }
+
   return null;
+}
+
+/**
+ * Store breakdown data in the text-only cache for consistent re-processing
+ * @param {string} text - Original text
+ * @param {Object} breakdownData - Breakdown data from API
+ */
+export function cacheBreakdown(text, breakdownData) {
+  const textHash = hashText(text);
+  breakdownCache.set(textHash, {
+    breakdownData,
+    timestamp: Date.now()
+  });
 }
 
 /**
@@ -56,5 +82,10 @@ export function pruneTranslationCache() {
     if (now - value.timestamp < CACHE_MAX_AGE_MS) continue;
     translationCache.delete(key);
     debugLog('CACHE-PRUNE', `Removed stale entry: ${key.slice(0, 50)}`);
+  }
+  // Prune text-only breakdown cache
+  for (const [hash, value] of breakdownCache) {
+    if (now - value.timestamp < CACHE_MAX_AGE_MS) continue;
+    breakdownCache.delete(hash);
   }
 }

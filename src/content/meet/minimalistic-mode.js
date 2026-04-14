@@ -6,7 +6,7 @@ import {
   activeContentKeys
 } from '../core/state.js';
 import { getWordTypeClass } from '../utils/text.js';
-import { findCachedTranslation, generateContentKey, getTimeBucket } from '../core/cache.js';
+import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
@@ -271,6 +271,7 @@ async function processMinimalisticText(container, text, speaker) {
         originalText: text
       });
     });
+    cacheBreakdown(text, breakdownData);
 
     // Apply the breakdown
     applyMinimalisticBreakdown(container, text, breakdownData);

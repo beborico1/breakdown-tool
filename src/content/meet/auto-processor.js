@@ -5,7 +5,7 @@ import {
   translationCache,
   activeContentKeys
 } from '../core/state.js';
-import { findCachedTranslation, generateContentKey, getTimeBucket } from '../core/cache.js';
+import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
@@ -161,6 +161,7 @@ export async function autoProcessPreviousCard() {
       speaker,
       originalText
     });
+    cacheBreakdown(originalText, breakdownData);
     debugLog('AUTO-PROCESS', 'Breakdown complete and cached');
 
   } catch (error) {

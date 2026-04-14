@@ -1,7 +1,7 @@
 import { debugLog } from '../core/debug.js';
 import { translationState, translationCache, activeContentKeys, wordBlockFontSize } from '../core/state.js';
 import { getWordTypeClass } from '../utils/text.js';
-import { generateContentKey, getTimeBucket } from '../core/cache.js';
+import { generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 
@@ -133,6 +133,7 @@ export async function reprocessBreakdown(container, text, speakerName) {
         cacheEntry.timestamp = Date.now();
       }
     }
+    cacheBreakdown(text, breakdownData);
 
     debugLog('REPROCESS', 'Breakdown panel updated with new analysis');
   } catch (error) {
