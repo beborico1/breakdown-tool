@@ -10,7 +10,7 @@ import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdow
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
-import { renderBreakdownPanel, toggleBreakdownPanel, reprocessBreakdown } from './panel-mode.js';
+import { renderBreakdownPanel, reprocessBreakdown } from './panel-mode.js';
 import { queueDeltaTranslation } from './delta-translation.js';
 import { handleMinimalisticCaptionClick } from './minimalistic-mode.js';
 
@@ -29,7 +29,7 @@ export function removeOverlay(container) {
   }
 
   // Remove breakdown panel if present
-  const breakdownPanel = container.querySelector('.breakdown-panel');
+  const breakdownPanel = container.querySelector('.breakdown-wrapper:not([data-sentence-mode])');
   if (breakdownPanel) {
     breakdownPanel.remove();
   }
@@ -115,7 +115,7 @@ export async function handleCaptionClick(event) {
         state.originalText = currentText;
         state.breakdownData = null; // Clear old breakdown
         // Remove old panel and show loading
-        const panel = container.querySelector('.breakdown-panel');
+        const panel = container.querySelector('.breakdown-wrapper:not([data-sentence-mode])');
         if (panel) panel.remove();
         // Show loading indicator
         state.translatedEl.style.display = '';
@@ -126,12 +126,9 @@ export async function handleCaptionClick(event) {
         return;
       }
 
-      // Otherwise toggle expand/collapse as before
-      const panel = container.querySelector('.breakdown-panel');
-      if (panel) {
-        toggleBreakdownPanel(container);
-        return;
-      }
+      // No new text - toggle off (remove overlay)
+      removeOverlay(container);
+      return;
     }
 
     // Check if shadow element has new text (delta available) - for legacy mode

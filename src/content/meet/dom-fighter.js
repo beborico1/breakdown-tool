@@ -320,7 +320,7 @@ export function handleMutations(mutations, observerConfig) {
     }
 
     // (D) Re-insert breakdown panel if dislodged (only for panel mode, not minimalistic)
-    if (!state.minimalisticState && !state.sentenceState && state.breakdownData && !container.querySelector('.breakdown-panel')) {
+    if (!state.minimalisticState && !state.sentenceState && state.breakdownData && !container.querySelector('.breakdown-wrapper:not([data-sentence-mode])')) {
       if (!didFight) { observer.disconnect(); didFight = true; }
       renderBreakdownPanel(container, state.breakdownData, state.speakerName, state.isExpanded);
     }

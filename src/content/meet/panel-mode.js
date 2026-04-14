@@ -155,7 +155,7 @@ export async function reprocessBreakdown(container, text, speakerName) {
  * @param {HTMLElement} container - Caption container
  */
 export function toggleBreakdownPanel(container) {
-  const panel = container.querySelector('.breakdown-panel');
+  const panel = container.querySelector('.breakdown-wrapper:not([data-sentence-mode])');
   if (!panel) return;
 
   const state = translationState.get(container);
