@@ -46,7 +46,7 @@ let totalSamples = 0;
 
 const SILENCE_RMS_THRESHOLD = 15;   // 0-255 scale
 const MIN_SEGMENT_DURATION = 500;   // ms
-const MAX_SEGMENT_DURATION = 30000; // ms
+const MAX_SEGMENT_DURATION = 15000; // ms
 const MIN_SPEECH_RATIO = 0.10;      // Skip transcription if < 10% of samples had speech
 
 // ============================================
@@ -216,21 +216,72 @@ Text: ${text}`;
 // Gemini Audio Analysis (duplicated from api.js)
 // ============================================
 
-function parseBreakdownResponse(responseText) {
-  let text = responseText.trim();
+function sanitizeTranscription(text) {
+  if (!text) return text;
+
+  // Fix hex-encoded UTF-8 bytes: <0xE3><0x81><0xAA> → な
+  text = text.replace(/(?:<0x([0-9A-Fa-f]{2})>)+/g, (match) => {
+    const bytes = [];
+    match.replace(/<0x([0-9A-Fa-f]{2})>/g, (_, hex) => {
+      bytes.push(parseInt(hex, 16));
+    });
+    try {
+      return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+    } catch { return match; }
+  });
+
+  // Strip hallucinated timestamps: 00時00分00秒, 00:00:00, etc.
+  text = text.replace(/\d{1,2}時\d{1,2}分\d{1,2}秒/g, '');
+  text = text.replace(/\d{1,2}:\d{2}(:\d{2})?/g, '');
+
+  // Clean up dangling particles left after removed timestamps
+  text = text.replace(/^\s*(?:から|まで|にかけて)\s*/g, '');
+  text = text.replace(/\s*(?:から|まで|にかけて)\s*(?=(?:から|まで|にかけて|、|。|$))/g, '');
+
+  // Collapse leftover punctuation and whitespace
+  text = text.replace(/[、。]\s*[、。]/g, '、');
+  text = text.replace(/^\s*[、。]\s*/, '');
+  text = text.replace(/\s+/g, ' ');
+
+  return text.trim();
+}
+
+function stripCodeFences(text) {
+  text = text.trim();
   if (text.startsWith('```json')) text = text.slice(7);
   else if (text.startsWith('```')) text = text.slice(3);
   if (text.endsWith('```')) text = text.slice(0, -3);
-  text = text.trim();
+  return text.trim();
+}
 
-  const breakdown = JSON.parse(text);
-  if (!breakdown.original && breakdown.original !== '') {
-    throw new Error('Missing original field');
+function extractOriginalFromTruncated(text) {
+  const match = text.match(/"original"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (!match) return null;
+  const raw = match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  return sanitizeTranscription(raw);
+}
+
+function parseBreakdownResponse(responseText) {
+  const text = stripCodeFences(responseText);
+
+  try {
+    const breakdown = JSON.parse(text);
+    if (!breakdown.original && breakdown.original !== '') {
+      throw new Error('Missing original field');
+    }
+    if (!Array.isArray(breakdown.words)) {
+      throw new Error('Missing words array');
+    }
+    breakdown.original = sanitizeTranscription(breakdown.original);
+    return breakdown;
+  } catch (e) {
+    // Try to extract the original text from truncated JSON
+    const original = extractOriginalFromTruncated(text);
+    if (original) {
+      return { original, translation: '', words: [], truncated: true };
+    }
+    throw e;
   }
-  if (!Array.isArray(breakdown.words)) {
-    throw new Error('Missing words array');
-  }
-  return breakdown;
 }
 
 async function analyzeAudioWithGemini(base64Audio, mimeType) {
@@ -253,6 +304,8 @@ async function analyzeAudioWithGemini(base64Audio, mimeType) {
 
 Important:
 - If no Japanese speech is detected, return {"original": "", "translation": "", "words": []}
+- Do NOT include timestamps, timecodes, or time references (00:00, 00時00分) from audio metadata — only transcribe spoken words
+- All text must be readable Japanese/English characters — never output raw byte sequences or hex codes
 - Break down ALL words including particles (は, が, を, に, etc.)
 - For particles, use their grammatical function as english (e.g., "topic marker", "subject marker", "object marker")
 - Keep word order matching the original sentence
@@ -279,6 +332,7 @@ Important:
         generationConfig: {
           temperature: 0.1,
           maxOutputTokens: 65536,
+          responseMimeType: 'application/json',
         }
       })
     }
@@ -297,9 +351,20 @@ Important:
     updateTokenUsage(usageMetadata.totalTokenCount);
   }
 
-  if (!responseText) throw new Error('No audio analysis returned');
+  if (!responseText) {
+    const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+    throw new Error(blockReason ? `Audio blocked: ${blockReason}` : 'No audio analysis returned — try shorter segments');
+  }
 
-  return parseBreakdownResponse(responseText);
+  const finishReason = data.candidates?.[0]?.finishReason;
+  const breakdown = parseBreakdownResponse(responseText);
+
+  // If truncated (MAX_TOKENS or partial JSON), re-analyze the transcribed text via chunking
+  if ((finishReason === 'MAX_TOKENS' || breakdown.truncated) && breakdown.original) {
+    return analyzeJapaneseChunked(breakdown.original);
+  }
+
+  return breakdown;
 }
 
 function recordWordFrequencies(words) {
