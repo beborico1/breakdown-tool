@@ -12,12 +12,15 @@ const translateToJapaneseBtn = document.getElementById('translateToJapanese');
 const tokenCountEl = document.getElementById('tokenCount');
 const tokenCostEl = document.getElementById('tokenCost');
 const resetUsageBtn = document.getElementById('resetUsage');
+const usageSinceEl = document.getElementById('usageSince');
 const modelSelectEl = document.getElementById('modelSelect');
 const modelCostHintEl = document.getElementById('modelCostHint');
 const fontSizeSlider = document.getElementById('fontSizeSlider');
 const fontSizeValueEl = document.getElementById('fontSizeValue');
 const chunkSizeSlider = document.getElementById('chunkSizeSlider');
 const chunkSizeValueEl = document.getElementById('chunkSizeValue');
+const apiKeyHelpLink = document.getElementById('apiKeyHelp');
+const apiKeyTutorialEl = document.getElementById('apiKeyTutorial');
 
 const GEMINI_MODELS = {
   'gemini-2.5-flash':      { label: 'Gemini 2.5 Flash',      costPer1M: 0.15 },
@@ -151,6 +154,12 @@ apiKeyInput.addEventListener('blur', () => {
   if (apiKeyInput.dataset.hasKey === 'true' && apiKeyInput.value === '') {
     apiKeyInput.value = '••••••••••••••••';
   }
+});
+
+// Toggle API key tutorial
+apiKeyHelpLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  apiKeyTutorialEl.classList.toggle('open');
 });
 
 copyAllBtn.addEventListener('click', () => sendAction('copyAll'));
@@ -443,12 +452,30 @@ function updateUsageDisplay(tokens, animate = false) {
 }
 
 /**
+ * Format a timestamp as "since Mon DD, YYYY"
+ * @param {number} timestamp
+ * @returns {string}
+ */
+function formatSinceDate(timestamp) {
+  const date = new Date(timestamp);
+  return 'since ' + date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
  * Load token usage from storage
  */
 function loadUsage() {
-  chrome.storage.local.get(['tokenUsage'], (result) => {
+  chrome.storage.local.get(['tokenUsage', 'tokenUsageSince'], (result) => {
     const tokens = result.tokenUsage || 0;
     updateUsageDisplay(tokens);
+
+    if (result.tokenUsageSince) {
+      usageSinceEl.textContent = formatSinceDate(result.tokenUsageSince);
+    } else {
+      const now = Date.now();
+      chrome.storage.local.set({ tokenUsageSince: now });
+      usageSinceEl.textContent = formatSinceDate(now);
+    }
   });
 }
 
@@ -460,8 +487,10 @@ function resetUsage() {
     return;
   }
 
-  chrome.storage.local.set({ tokenUsage: 0 }, () => {
+  const now = Date.now();
+  chrome.storage.local.set({ tokenUsage: 0, tokenUsageSince: now }, () => {
     updateUsageDisplay(0, true);
+    usageSinceEl.textContent = formatSinceDate(now);
     showStatus('Token usage reset', true);
   });
 }
@@ -516,8 +545,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
-// Reset usage button handler
-resetUsageBtn.addEventListener('click', resetUsage);
+// Reset usage button handler — stop propagation to prevent collapsible toggle
+resetUsageBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  resetUsage();
+});
 
 /**
  * Load font size setting from storage
@@ -553,6 +585,28 @@ chunkSizeSlider.addEventListener('input', () => {
   const size = parseInt(chunkSizeSlider.value, 10);
   chunkSizeValueEl.textContent = size;
   chrome.storage.sync.set({ sentenceChunkSize: size });
+});
+
+// Collapsible section toggle
+document.querySelectorAll('.collapsible-header').forEach(header => {
+  header.addEventListener('click', () => {
+    const collapsible = header.closest('.collapsible');
+    const body = collapsible.querySelector('.collapsible-body');
+    if (collapsible.classList.contains('expanded')) {
+      body.style.maxHeight = body.scrollHeight + 'px';
+      body.offsetHeight; // force reflow
+      body.style.maxHeight = '0';
+      collapsible.classList.remove('expanded');
+    } else {
+      collapsible.classList.add('expanded');
+      body.style.maxHeight = body.scrollHeight + 'px';
+      body.addEventListener('transitionend', () => {
+        if (collapsible.classList.contains('expanded')) {
+          body.style.maxHeight = 'none';
+        }
+      }, { once: true });
+    }
+  });
 });
 
 // Load saved key and model on popup open

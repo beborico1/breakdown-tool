@@ -94,6 +94,42 @@ h1 {
   margin: 4px 0;
 }
 
+/* Collapsible sections */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapsible-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collapsible-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #5f6368;
+  transition: transform 0.3s ease;
+}
+
+.collapsible.expanded .collapsible-chevron {
+  transform: rotate(180deg);
+}
+
+.collapsible-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
 .settings {
   display: flex;
   flex-direction: column;
@@ -173,6 +209,47 @@ select.input {
 .key-status.error {
   background-color: #fce8e6;
   color: #c5221f;
+}
+
+/* API Key tutorial */
+.api-key-help-link {
+  font-size: 11px;
+  color: #632889;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.api-key-help-link:hover {
+  text-decoration: underline;
+}
+
+.api-key-tutorial {
+  display: none;
+  padding: 8px 10px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #632889;
+}
+
+.api-key-tutorial.open {
+  display: block;
+}
+
+.tutorial-steps {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #202124;
+  line-height: 1.6;
+}
+
+.tutorial-steps a {
+  color: #632889;
+  text-decoration: none;
+}
+
+.tutorial-steps a:hover {
+  text-decoration: underline;
 }
 
 /* Font size slider section */
@@ -455,6 +532,12 @@ select.input {
   color: #5f6368;
   letter-spacing: 0.3px;
   margin-top: 2px;
+}
+
+.usage-since {
+  font-size: 11px;
+  color: #5f6368;
+  text-align: center;
 }
 
 .usage-stat-value.updating {

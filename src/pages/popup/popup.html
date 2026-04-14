@@ -18,49 +18,69 @@
 
     <hr class="divider">
 
-    <div class="settings">
-      <div class="setting-header">
-        <span class="setting-title">Gemini API Key</span>
-        <span class="setting-hint" id="modelCostHint">Uses Gemini 2.5 Flash (~$0.15/1M tokens)</span>
+    <div class="collapsible settings">
+      <div class="collapsible-header">
+        <div class="setting-header">
+          <span class="setting-title">Gemini API Key</span>
+          <span class="setting-hint" id="modelCostHint">Uses Gemini 2.5 Flash (~$0.15/1M tokens)</span>
+        </div>
+        <svg class="collapsible-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </div>
-      <div class="api-key-group">
-        <input type="password" id="apiKey" placeholder="Gemini API Key" class="input">
-        <button id="saveKey" class="btn btn-small">Save</button>
-      </div>
-      <div id="keyStatus" class="key-status"></div>
-      <div class="model-selector">
-        <label class="setting-hint" for="modelSelect">Model</label>
-        <select id="modelSelect" class="input">
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-          <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
-        </select>
+      <div class="collapsible-body">
+        <a href="#" id="apiKeyHelp" class="api-key-help-link">How to get a key?</a>
+        <div id="apiKeyTutorial" class="api-key-tutorial">
+          <ol class="tutorial-steps">
+            <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a></li>
+            <li>Sign in with your Google account</li>
+            <li>Click <strong>Create API Key</strong></li>
+            <li>Copy the key and paste it above</li>
+          </ol>
+        </div>
+        <div class="api-key-group">
+          <input type="password" id="apiKey" placeholder="Gemini API Key" class="input">
+          <button id="saveKey" class="btn btn-small">Save</button>
+        </div>
+        <div id="keyStatus" class="key-status"></div>
+        <div class="model-selector">
+          <label class="setting-hint" for="modelSelect">Model</label>
+          <select id="modelSelect" class="input">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+          </select>
+        </div>
       </div>
     </div>
 
     <hr class="divider">
 
-    <div class="usage-section">
-      <div class="usage-header">
+    <div class="collapsible usage-section">
+      <div class="collapsible-header">
         <span class="setting-title">Token Usage</span>
-        <button class="usage-reset" id="resetUsage" title="Reset usage counter">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-            <path d="M3 3v5h5"/>
-          </svg>
-        </button>
+        <div class="collapsible-header-actions">
+          <button class="usage-reset" id="resetUsage" title="Reset usage counter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+          </button>
+          <svg class="collapsible-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
       </div>
-      <div class="usage-stats">
-        <div class="usage-stat">
-          <span class="usage-stat-value" id="tokenCount">0</span>
-          <span class="usage-stat-label">tokens used</span>
+      <div class="collapsible-body">
+        <div class="usage-stats">
+          <div class="usage-stat">
+            <span class="usage-stat-value" id="tokenCount">0</span>
+            <span class="usage-stat-label">tokens used</span>
+          </div>
+          <div class="usage-stat">
+            <span class="usage-stat-value" id="tokenCost">~$0.00</span>
+            <span class="usage-stat-label">est. cost</span>
+          </div>
         </div>
-        <div class="usage-stat">
-          <span class="usage-stat-value" id="tokenCost">~$0.00</span>
-          <span class="usage-stat-label">est. cost</span>
-        </div>
+        <span class="usage-since" id="usageSince"></span>
       </div>
     </div>
 
