@@ -602,6 +602,185 @@ body {
   font-size: 12px;
 }
 
+/* AnkiConnect Setup Guide */
+.anki-guide {
+  background: #2D2D2D;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.anki-guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.anki-guide-header:hover {
+  background: #353535;
+}
+
+.anki-guide-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.anki-guide-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #E8EAED;
+}
+
+.anki-guide-subtitle {
+  font-size: 12px;
+  color: #9CA3AF;
+}
+
+.anki-guide-chevron {
+  width: 20px;
+  height: 20px;
+  color: #9CA3AF;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.anki-guide-chevron.open {
+  transform: rotate(180deg);
+}
+
+.anki-guide-body {
+  display: none;
+  padding: 0 20px 20px;
+}
+
+.anki-guide-body.open {
+  display: block;
+}
+
+.anki-guide-step {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid #3D3D3D;
+}
+
+.anki-guide-step-number {
+  width: 28px;
+  height: 28px;
+  background: #632889;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.anki-guide-step-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anki-guide-step-content strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #E8EAED;
+}
+
+.anki-guide-step-content p {
+  font-size: 13px;
+  color: #9CA3AF;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.anki-guide-step-content a {
+  color: #A78BFA;
+  text-decoration: none;
+}
+
+.anki-guide-step-content a:hover {
+  text-decoration: underline;
+}
+
+.anki-guide-code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.anki-guide-code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: #A78BFA;
+  background: #1F1F1F;
+  padding: 6px 14px;
+  border-radius: 6px;
+  letter-spacing: 1px;
+  user-select: all;
+}
+
+.anki-guide-copy-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.anki-guide-note {
+  font-size: 12px;
+  color: #9CA3AF;
+  background: rgba(99, 40, 137, 0.1);
+  border-left: 3px solid #632889;
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.anki-guide-note code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #A78BFA;
+  background: #1F1F1F;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.anki-guide-status-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #9CA3AF;
+  margin: 2px 0;
+}
+
+.anki-guide-test-result {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.anki-guide-test-result.success {
+  background: rgba(52, 168, 83, 0.15);
+  color: #34A853;
+}
+
+.anki-guide-test-result.error {
+  background: rgba(234, 67, 53, 0.15);
+  color: #EA4335;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   body {

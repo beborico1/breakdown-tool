@@ -25,6 +25,14 @@ const ankiProgressContainer = document.getElementById('ankiProgressContainer');
 const ankiProgressFill = document.getElementById('ankiProgressFill');
 const ankiSyncResult = document.getElementById('ankiSyncResult');
 
+// Guide DOM Elements
+const ankiGuideToggle = document.getElementById('ankiGuideToggle');
+const ankiGuideBody = document.getElementById('ankiGuideBody');
+const ankiGuideChevron = document.getElementById('ankiGuideChevron');
+const copyAnkiCodeBtn = document.getElementById('copyAnkiCode');
+const ankiGuideTestBtn = document.getElementById('ankiGuideTestBtn');
+const ankiGuideTestResult = document.getElementById('ankiGuideTestResult');
+
 // State
 let allWords = [];
 let filteredWords = [];
@@ -593,6 +601,52 @@ document.addEventListener('click', (e) => {
   if (!wrapper.contains(e.target)) {
     ankiSettingsPanel.style.display = 'none';
   }
+});
+
+// Guide toggle
+ankiGuideToggle.addEventListener('click', () => {
+  ankiGuideBody.classList.toggle('open');
+  ankiGuideChevron.classList.toggle('open');
+});
+
+// Copy AnkiConnect addon code
+copyAnkiCodeBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  try {
+    await navigator.clipboard.writeText('2055492159');
+    copyAnkiCodeBtn.textContent = 'Copied!';
+    setTimeout(() => { copyAnkiCodeBtn.textContent = 'Copy'; }, 2000);
+  } catch {
+    copyAnkiCodeBtn.textContent = 'Failed';
+    setTimeout(() => { copyAnkiCodeBtn.textContent = 'Copy'; }, 2000);
+  }
+});
+
+// Test connection from guide
+ankiGuideTestBtn.addEventListener('click', async () => {
+  ankiGuideTestBtn.disabled = true;
+  ankiGuideTestBtn.textContent = 'Testing...';
+  ankiGuideTestResult.style.display = 'none';
+
+  try {
+    const version = await ankiConnect('version');
+    ankiGuideTestResult.textContent = `Connected! AnkiConnect v${version}`;
+    ankiGuideTestResult.className = 'anki-guide-test-result success';
+    ankiConnected = true;
+    ankiStatusEl.className = 'anki-status-dot connected';
+    ankiStatusEl.title = 'AnkiConnect: connected';
+  } catch {
+    ankiGuideTestResult.textContent = 'Could not connect. Make sure Anki is running with AnkiConnect installed.';
+    ankiGuideTestResult.className = 'anki-guide-test-result error';
+    ankiConnected = false;
+    ankiStatusEl.className = 'anki-status-dot disconnected';
+    ankiStatusEl.title = 'AnkiConnect: disconnected';
+  }
+
+  ankiGuideTestResult.style.display = 'block';
+  ankiGuideTestBtn.disabled = false;
+  ankiGuideTestBtn.textContent = 'Test Connection Now';
+  updateAnkiSelectedCount();
 });
 
 // Sync Now

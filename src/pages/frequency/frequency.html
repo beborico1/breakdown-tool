@@ -37,6 +37,84 @@
       </div>
     </header>
 
+    <div class="anki-guide">
+      <div class="anki-guide-header" id="ankiGuideToggle">
+        <div class="anki-guide-title-area">
+          <span class="anki-guide-title">AnkiConnect Setup Guide</span>
+          <span class="anki-guide-subtitle">Learn how to connect Anki to sync your vocabulary</span>
+        </div>
+        <svg class="anki-guide-chevron" id="ankiGuideChevron" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </div>
+
+      <div class="anki-guide-body" id="ankiGuideBody">
+        <div class="anki-guide-step">
+          <div class="anki-guide-step-number">1</div>
+          <div class="anki-guide-step-content">
+            <strong>Install Anki</strong>
+            <p>Download and install <a href="https://apps.ankiweb.net/" target="_blank" rel="noopener">Anki</a>
+               (free, open-source flashcard app) if you don't have it already.</p>
+          </div>
+        </div>
+
+        <div class="anki-guide-step">
+          <div class="anki-guide-step-number">2</div>
+          <div class="anki-guide-step-content">
+            <strong>Install the AnkiConnect Add-on</strong>
+            <p>In Anki, go to <strong>Tools &rarr; Add-ons &rarr; Get Add-ons...</strong> and enter this code:</p>
+            <div class="anki-guide-code-row">
+              <code class="anki-guide-code">2055492159</code>
+              <button class="btn btn-secondary anki-guide-copy-btn" id="copyAnkiCode" title="Copy code">Copy</button>
+            </div>
+            <p>Click <strong>OK</strong> to install, then restart Anki.</p>
+          </div>
+        </div>
+
+        <div class="anki-guide-step">
+          <div class="anki-guide-step-number">3</div>
+          <div class="anki-guide-step-content">
+            <strong>Keep Anki Running</strong>
+            <p>AnkiConnect works by running a local server on your computer. Anki must be open and running
+               whenever you want to sync words from this extension.</p>
+            <div class="anki-guide-note">
+              <strong>Note:</strong> No extra configuration is needed. AnkiConnect works out of the box
+              on <code>localhost:8765</code>.
+            </div>
+          </div>
+        </div>
+
+        <div class="anki-guide-step">
+          <div class="anki-guide-step-number">4</div>
+          <div class="anki-guide-step-content">
+            <strong>Verify the Connection</strong>
+            <p>Look at the status dot next to the "Sync to Anki" button above:</p>
+            <div class="anki-guide-status-legend">
+              <span class="anki-status-dot connected"></span>
+              <span>Green = Anki is running and connected</span>
+            </div>
+            <div class="anki-guide-status-legend">
+              <span class="anki-status-dot disconnected"></span>
+              <span>Red = Anki is not running or AnkiConnect is not installed</span>
+            </div>
+            <button class="btn btn-secondary" id="ankiGuideTestBtn">Test Connection Now</button>
+            <div id="ankiGuideTestResult" class="anki-guide-test-result" style="display: none;"></div>
+          </div>
+        </div>
+
+        <div class="anki-guide-step">
+          <div class="anki-guide-step-number">5</div>
+          <div class="anki-guide-step-content">
+            <strong>Sync Your Words</strong>
+            <p>Select words using the checkboxes on each word card, then click <strong>Sync to Anki</strong>
+               to choose a deck and send them to Anki as flashcards. You can use
+               <strong>Select All</strong> / <strong>Deselect All</strong> to quickly manage selections.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="summary-cards">
       <div class="summary-card">
         <span class="summary-value" id="totalWordsValue">0</span>
