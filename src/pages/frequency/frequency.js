@@ -24,6 +24,19 @@ const ankiSyncCancelBtn = document.getElementById('ankiSyncCancel');
 const ankiProgressContainer = document.getElementById('ankiProgressContainer');
 const ankiProgressFill = document.getElementById('ankiProgressFill');
 const ankiSyncResult = document.getElementById('ankiSyncResult');
+const ankiCardSettingsToggle = document.getElementById('ankiCardSettingsToggle');
+const ankiCardSettingsBody = document.getElementById('ankiCardSettingsBody');
+const ankiCardSettingsChevron = document.getElementById('ankiCardSettingsChevron');
+const ankiIncludeFuriganaInput = document.getElementById('ankiIncludeFurigana');
+const ankiIncludePartOfSpeechInput = document.getElementById('ankiIncludePartOfSpeech');
+const ankiIncludeRomajiInput = document.getElementById('ankiIncludeRomaji');
+const ankiIncludeCountInput = document.getElementById('ankiIncludeCount');
+const ankiFuriganaFormatSelect = document.getElementById('ankiFuriganaFormat');
+const ankiModelNameInput = document.getElementById('ankiModelName');
+const ankiFrontFieldInput = document.getElementById('ankiFrontField');
+const ankiBackFieldInput = document.getElementById('ankiBackField');
+const ankiCustomTagsInput = document.getElementById('ankiCustomTags');
+const ankiAutoTagByTypeInput = document.getElementById('ankiAutoTagByType');
 
 // Guide DOM Elements
 const ankiGuideToggle = document.getElementById('ankiGuideToggle');
@@ -43,7 +56,21 @@ let searchQuery = '';
 // Anki State
 let ankiSelectedWords = new Set();
 let ankiConnected = false;
-let ankiDeckName = 'Kaigi Meeting';
+
+const DEFAULT_ANKI_SETTINGS = {
+  deckName: 'Kaigi Meeting',
+  includeFurigana: true,
+  includePartOfSpeech: true,
+  includeRomaji: true,
+  includeCount: false,
+  furiganaFormat: 'parentheses',
+  modelName: 'Basic',
+  frontFieldName: 'Front',
+  backFieldName: 'Back',
+  customTags: 'kaigi-meeting',
+  autoTagByType: true
+};
+let ankiSettings = { ...DEFAULT_ANKI_SETTINGS };
 
 // Type colors for chart
 const typeColors = {
@@ -101,9 +128,7 @@ function saveAnkiSelections() {
 async function loadAnkiSettings() {
   return new Promise(resolve => {
     chrome.storage.sync.get(['ankiSettings'], (result) => {
-      if (result.ankiSettings) {
-        ankiDeckName = result.ankiSettings.deckName || 'Kaigi Meeting';
-      }
+      ankiSettings = { ...DEFAULT_ANKI_SETTINGS, ...(result.ankiSettings || {}) };
       resolve();
     });
   });
@@ -113,7 +138,49 @@ async function loadAnkiSettings() {
  * Save Anki settings to chrome.storage.sync
  */
 function saveAnkiSettings() {
-  chrome.storage.sync.set({ ankiSettings: { deckName: ankiDeckName } });
+  chrome.storage.sync.set({ ankiSettings });
+}
+
+/**
+ * Build an AnkiConnect note payload from a word and the user's settings.
+ */
+function buildAnkiNote(word, settings) {
+  const type = normalizeType(word.type);
+
+  let front;
+  if (settings.includeFurigana && word.reading) {
+    front = settings.furiganaFormat === 'ruby'
+      ? `${word.japanese}[${word.reading}]`
+      : `${word.japanese} (${word.reading})`;
+  } else {
+    front = word.japanese;
+  }
+
+  const backLines = [];
+  if (word.english) backLines.push(word.english);
+  if (settings.includePartOfSpeech) backLines.push(`Type: ${type}`);
+  if (settings.includeRomaji && word.romaji) backLines.push(`Romaji: ${word.romaji}`);
+  if (settings.includeCount && typeof word.count === 'number') {
+    backLines.push(`Count: ${word.count}x`);
+  }
+  const back = backLines.join('<br>');
+
+  const frontField = (settings.frontFieldName || 'Front').trim() || 'Front';
+  const backField = (settings.backFieldName || 'Back').trim() || 'Back';
+  const modelName = (settings.modelName || 'Basic').trim() || 'Basic';
+
+  const tags = (settings.customTags || '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(Boolean);
+  if (settings.autoTagByType) tags.push(type);
+
+  return {
+    deckName: settings.deckName,
+    modelName,
+    fields: { [frontField]: front, [backField]: back },
+    tags
+  };
 }
 
 /**
@@ -446,7 +513,7 @@ async function init() {
   ]);
 
   console.log('[Anki] Loaded selections:', ankiSelectedWords.size, 'words');
-  console.log('[Anki] Loaded settings, deck:', ankiDeckName);
+  console.log('[Anki] Loaded settings, deck:', ankiSettings.deckName);
 
   // Check Anki connection (fire-and-forget)
   checkAnkiConnection();
@@ -542,6 +609,22 @@ deselectAllBtn.addEventListener('click', () => {
   applyFiltersAndRender();
 });
 
+/**
+ * Populate the card-settings inputs from the current ankiSettings object.
+ */
+function hydrateAnkiSettingsInputs() {
+  ankiIncludeFuriganaInput.checked = ankiSettings.includeFurigana;
+  ankiIncludePartOfSpeechInput.checked = ankiSettings.includePartOfSpeech;
+  ankiIncludeRomajiInput.checked = ankiSettings.includeRomaji;
+  ankiIncludeCountInput.checked = ankiSettings.includeCount;
+  ankiFuriganaFormatSelect.value = ankiSettings.furiganaFormat;
+  ankiModelNameInput.value = ankiSettings.modelName;
+  ankiFrontFieldInput.value = ankiSettings.frontFieldName;
+  ankiBackFieldInput.value = ankiSettings.backFieldName;
+  ankiCustomTagsInput.value = ankiSettings.customTags;
+  ankiAutoTagByTypeInput.checked = ankiSettings.autoTagByType;
+}
+
 // Sync to Anki button -> show settings panel and populate decks
 syncToAnkiBtn.addEventListener('click', async () => {
   console.log('[Anki] Sync button clicked, opening settings panel');
@@ -549,6 +632,8 @@ syncToAnkiBtn.addEventListener('click', async () => {
   ankiSyncResult.style.display = 'none';
   ankiProgressContainer.style.display = 'none';
   ankiProgressFill.style.width = '0%';
+
+  hydrateAnkiSettingsInputs();
 
   // Re-check connection when panel opens
   await checkAnkiConnection();
@@ -561,7 +646,7 @@ syncToAnkiBtn.addEventListener('click', async () => {
       const opt = document.createElement('option');
       opt.value = deck;
       opt.textContent = deck;
-      if (deck === ankiDeckName) opt.selected = true;
+      if (deck === ankiSettings.deckName) opt.selected = true;
       ankiDeckSelect.appendChild(opt);
     }
     // Add option to create new
@@ -585,10 +670,35 @@ ankiDeckSelect.addEventListener('change', () => {
       ankiDeckSelect.insertBefore(opt, ankiDeckSelect.lastElementChild);
       ankiDeckSelect.value = name.trim();
     } else {
-      ankiDeckSelect.value = ankiDeckName;
+      ankiDeckSelect.value = ankiSettings.deckName;
     }
   }
 });
+
+// Card settings collapse toggle
+ankiCardSettingsToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const isOpen = ankiCardSettingsBody.classList.toggle('open');
+  ankiCardSettingsChevron.classList.toggle('open', isOpen);
+});
+
+// Persist card settings whenever any input changes
+function bindSettingChange(el, key, getValue) {
+  el.addEventListener('change', () => {
+    ankiSettings[key] = getValue(el);
+    saveAnkiSettings();
+  });
+}
+bindSettingChange(ankiIncludeFuriganaInput, 'includeFurigana', el => el.checked);
+bindSettingChange(ankiIncludePartOfSpeechInput, 'includePartOfSpeech', el => el.checked);
+bindSettingChange(ankiIncludeRomajiInput, 'includeRomaji', el => el.checked);
+bindSettingChange(ankiIncludeCountInput, 'includeCount', el => el.checked);
+bindSettingChange(ankiAutoTagByTypeInput, 'autoTagByType', el => el.checked);
+bindSettingChange(ankiFuriganaFormatSelect, 'furiganaFormat', el => el.value);
+bindSettingChange(ankiModelNameInput, 'modelName', el => el.value.trim() || 'Basic');
+bindSettingChange(ankiFrontFieldInput, 'frontFieldName', el => el.value.trim() || 'Front');
+bindSettingChange(ankiBackFieldInput, 'backFieldName', el => el.value.trim() || 'Back');
+bindSettingChange(ankiCustomTagsInput, 'customTags', el => el.value);
 
 ankiSyncCancelBtn.addEventListener('click', () => {
   ankiSettingsPanel.style.display = 'none';
@@ -657,7 +767,7 @@ ankiSyncNowBtn.addEventListener('click', async () => {
   const total = ankiSelectedWords.size;
   console.log('[Anki] Sync Now clicked, deck:', deckName, 'words:', total);
 
-  ankiDeckName = deckName;
+  ankiSettings.deckName = deckName;
   saveAnkiSettings();
 
   ankiSyncNowBtn.disabled = true;
@@ -690,9 +800,12 @@ ankiSyncNowBtn.addEventListener('click', async () => {
       }
 
       try {
-        // Check for duplicates
+        // Check for duplicates — key on the kanji via the configured front field.
+        // Wildcard suffix handles all furigana formats (plain, parentheses, ruby)
+        // since all three start with the kanji.
+        const frontField = (ankiSettings.frontFieldName || 'Front').trim() || 'Front';
         const existing = await ankiConnect('findNotes', {
-          query: `deck:"${deckName}" front:"${word.japanese}"`
+          query: `deck:"${deckName}" ${frontField}:${word.japanese}*`
         });
 
         if (existing && existing.length > 0) {
@@ -700,23 +813,8 @@ ankiSyncNowBtn.addEventListener('click', async () => {
           skipped++;
           syncedKeys.push(key);
         } else {
-          const front = word.reading
-            ? `${word.japanese} (${word.reading})`
-            : word.japanese;
-          const back = [
-            word.english,
-            `Type: ${type}`,
-            `Romaji: ${word.romaji}`
-          ].join('<br>');
-
-          await ankiConnect('addNote', {
-            note: {
-              deckName,
-              modelName: 'Basic',
-              fields: { Front: front, Back: back },
-              tags: ['kaigi-meeting', type]
-            }
-          });
+          const note = buildAnkiNote(word, ankiSettings);
+          await ankiConnect('addNote', { note });
           console.log('[Anki] Added note:', japanese);
           added++;
           syncedKeys.push(key);

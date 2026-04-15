@@ -72,8 +72,7 @@ export function initializeSentenceProcessing(container) {
     isProcessing: false,
     lastProcessedIndex: 0,
     debounceTimer: null,
-    fullText: initialText,
-    enderCount: 0
+    fullText: initialText
   };
 
   // Store state on the container
@@ -174,12 +173,13 @@ function scanForSentenceEnders(container) {
       return;
     }
 
-    // Accumulate ender count and check against chunk size threshold
-    ss.enderCount += confirmedEnders.length;
-
-    if (ss.enderCount < sentenceChunkSize) {
-      // Not enough enders yet — just update live text, don't queue
-      debugLog('SENTENCE-CHUNK', `Ender count ${ss.enderCount}/${sentenceChunkSize}, waiting for more`);
+    // confirmedEnders is a full rescan of the unprocessed buffer from
+    // lastProcessedIndex, so its length IS the number of sentence-ending
+    // marks currently pending. Compare directly against the threshold —
+    // do not accumulate across debounce fires, which would re-count the
+    // same 。 every time Meet restreams mid-sentence text.
+    if (confirmedEnders.length < sentenceChunkSize) {
+      debugLog('SENTENCE-CHUNK', `${confirmedEnders.length}/${sentenceChunkSize} enders in unprocessed buffer, waiting for more`);
       updateLiveText(container);
       return;
     }
@@ -193,11 +193,9 @@ function scanForSentenceEnders(container) {
         startIndex: ss.lastProcessedIndex,
         endIndex: lastEnderIdx + 1
       });
-      debugLog('SENTENCE-QUEUE', `Queued chunk (${ss.enderCount} enders): "${chunkText.slice(0, 60)}"`);
+      debugLog('SENTENCE-QUEUE', `Queued chunk (${confirmedEnders.length} enders): "${chunkText.slice(0, 60)}"`);
     }
 
-    // Reset ender count and update lastProcessedIndex
-    ss.enderCount = 0;
     ss.lastProcessedIndex = lastEnderIdx + 1;
 
     updateLiveText(container);

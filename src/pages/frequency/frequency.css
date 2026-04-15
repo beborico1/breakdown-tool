@@ -509,7 +509,9 @@ body {
   right: 0;
   z-index: 100;
   margin-top: 8px;
-  min-width: 300px;
+  min-width: 360px;
+  max-height: 80vh;
+  overflow-y: auto;
   background: #2D2D2D;
   border-radius: 12px;
   padding: 20px;
@@ -547,9 +549,95 @@ body {
   cursor: pointer;
 }
 
-.anki-settings-row select:focus {
+.anki-settings-row select:focus,
+.anki-settings-row input[type="text"]:focus {
   outline: none;
   border-color: #632889;
+}
+
+.anki-settings-row input[type="text"] {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid #3D3D3D;
+  border-radius: 6px;
+  background: #1F1F1F;
+  color: #E8EAED;
+  font-family: inherit;
+}
+
+.anki-settings-row input[type="text"]::placeholder {
+  color: #6B7280;
+}
+
+.anki-card-settings-body .anki-settings-row label {
+  min-width: 110px;
+}
+
+/* Card settings collapsible */
+.anki-card-settings {
+  margin-bottom: 16px;
+  border-top: 1px solid #3D3D3D;
+  border-bottom: 1px solid #3D3D3D;
+}
+
+.anki-card-settings-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  background: none;
+  border: none;
+  color: #E8EAED;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.anki-card-settings-toggle:hover {
+  color: #C7A0E8;
+}
+
+.anki-card-settings-chevron {
+  width: 18px;
+  height: 18px;
+  color: #9CA3AF;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.anki-card-settings-chevron.open {
+  transform: rotate(180deg);
+}
+
+.anki-card-settings-body {
+  display: none;
+  padding: 4px 0 12px;
+}
+
+.anki-card-settings-body.open {
+  display: block;
+}
+
+.anki-settings-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #E8EAED;
+  cursor: pointer;
+  user-select: none;
+}
+
+.anki-settings-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #632889;
+  cursor: pointer;
+  margin: 0;
 }
 
 .anki-settings-actions {

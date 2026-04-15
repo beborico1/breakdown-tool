@@ -22,6 +22,65 @@
                 <option value="Kaigi Meeting">Kaigi Meeting</option>
               </select>
             </div>
+
+            <div class="anki-card-settings">
+              <button type="button" class="anki-card-settings-toggle" id="ankiCardSettingsToggle">
+                <span>Card Settings</span>
+                <svg id="ankiCardSettingsChevron" class="anki-card-settings-chevron" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+              <div id="ankiCardSettingsBody" class="anki-card-settings-body">
+                <label class="anki-settings-check">
+                  <input type="checkbox" id="ankiIncludeFurigana">
+                  <span>Include furigana (reading)</span>
+                </label>
+                <label class="anki-settings-check">
+                  <input type="checkbox" id="ankiIncludePartOfSpeech">
+                  <span>Include part of speech</span>
+                </label>
+                <label class="anki-settings-check">
+                  <input type="checkbox" id="ankiIncludeRomaji">
+                  <span>Include romaji</span>
+                </label>
+                <label class="anki-settings-check">
+                  <input type="checkbox" id="ankiIncludeCount">
+                  <span>Include frequency count</span>
+                </label>
+
+                <div class="anki-settings-row">
+                  <label for="ankiFuriganaFormat">Furigana format:</label>
+                  <select id="ankiFuriganaFormat">
+                    <option value="parentheses">漢字 (かんじ)</option>
+                    <option value="ruby">漢字[かんじ] (Anki ruby)</option>
+                  </select>
+                </div>
+
+                <div class="anki-settings-row">
+                  <label for="ankiModelName">Note type:</label>
+                  <input type="text" id="ankiModelName" placeholder="Basic">
+                </div>
+                <div class="anki-settings-row">
+                  <label for="ankiFrontField">Front field:</label>
+                  <input type="text" id="ankiFrontField" placeholder="Front">
+                </div>
+                <div class="anki-settings-row">
+                  <label for="ankiBackField">Back field:</label>
+                  <input type="text" id="ankiBackField" placeholder="Back">
+                </div>
+
+                <div class="anki-settings-row">
+                  <label for="ankiCustomTags">Tags:</label>
+                  <input type="text" id="ankiCustomTags" placeholder="kaigi-meeting, jlpt-n3">
+                </div>
+                <label class="anki-settings-check">
+                  <input type="checkbox" id="ankiAutoTagByType">
+                  <span>Also tag by word type (noun, verb, ...)</span>
+                </label>
+              </div>
+            </div>
+
             <div class="anki-settings-actions">
               <button id="ankiSyncNow" class="btn btn-primary">Sync Now</button>
               <button id="ankiSyncCancel" class="btn btn-secondary">Cancel</button>
