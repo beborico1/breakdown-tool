@@ -192,6 +192,16 @@ function updateAnkiSelectedCount() {
   console.log('[Anki] Updated count:', ankiSelectedWords.size, 'button disabled:', syncToAnkiBtn.disabled);
 }
 
+const ANKI_ORIGIN = 'http://localhost:8765/*';
+
+async function hasAnkiPermission() {
+  return chrome.permissions.contains({ origins: [ANKI_ORIGIN] });
+}
+
+async function requestAnkiPermission() {
+  return chrome.permissions.request({ origins: [ANKI_ORIGIN] });
+}
+
 /**
  * AnkiConnect API helper
  */
@@ -217,6 +227,14 @@ async function ankiConnect(action, params = {}) {
  */
 async function checkAnkiConnection() {
   console.log('[Anki] Checking connection...');
+  if (!(await hasAnkiPermission())) {
+    ankiConnected = false;
+    ankiStatusEl.className = 'anki-status-dot disconnected';
+    ankiStatusEl.title = 'AnkiConnect: permission not granted (click Sync to Anki to enable)';
+    console.log('[Anki] No localhost permission; skipping connection check');
+    updateAnkiSelectedCount();
+    return;
+  }
   try {
     const result = await ankiConnect('version');
     ankiConnected = true;
@@ -628,6 +646,14 @@ function hydrateAnkiSettingsInputs() {
 // Sync to Anki button -> show settings panel and populate decks
 syncToAnkiBtn.addEventListener('click', async () => {
   console.log('[Anki] Sync button clicked, opening settings panel');
+
+  const granted = await requestAnkiPermission();
+  if (!granted) {
+    alert('Anki sync needs permission to talk to AnkiConnect on http://localhost:8765. ' +
+      'Click "Sync to Anki" again and choose "Allow" to enable it.');
+    return;
+  }
+
   ankiSettingsPanel.style.display = 'block';
   ankiSyncResult.style.display = 'none';
   ankiProgressContainer.style.display = 'none';
@@ -737,6 +763,16 @@ ankiGuideTestBtn.addEventListener('click', async () => {
   ankiGuideTestBtn.disabled = true;
   ankiGuideTestBtn.textContent = 'Testing...';
   ankiGuideTestResult.style.display = 'none';
+
+  const granted = await requestAnkiPermission();
+  if (!granted) {
+    ankiGuideTestResult.textContent = 'Permission denied. Allow access to http://localhost:8765 to test AnkiConnect.';
+    ankiGuideTestResult.className = 'anki-guide-test-result error';
+    ankiGuideTestResult.style.display = 'block';
+    ankiGuideTestBtn.disabled = false;
+    ankiGuideTestBtn.textContent = 'Test Connection Now';
+    return;
+  }
 
   try {
     const version = await ankiConnect('version');

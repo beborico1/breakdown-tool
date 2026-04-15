@@ -101,6 +101,10 @@ export function setupChatContextMenu() {
 // Cache the last non-empty text selection (popup steals focus and clears window.getSelection())
 let cachedSelectionText = '';
 
+// Cache the last focused compose area so translation targets the thread input, not just the first
+// contenteditable on the page (popup steals focus, so document.activeElement is unreliable at translate time)
+let lastFocusedComposeArea = null;
+
 /**
  * Show a toast notification on the page
  * @param {string} message - Toast message
@@ -138,8 +142,12 @@ async function handleTranslateToJapanese() {
     return { success: false, message: 'No text selected' };
   }
 
-  // Find the compose area
-  const composeArea = document.querySelector('div[contenteditable="true"][role="textbox"]');
+  // Prefer the last focused compose area so thread inputs work; fall back to the first one if
+  // nothing was focused or the cached reference was detached (e.g., thread panel closed)
+  let composeArea = lastFocusedComposeArea;
+  if (!composeArea || !composeArea.isConnected) {
+    composeArea = document.querySelector('div[contenteditable="true"][role="textbox"]');
+  }
   if (!composeArea) {
     return { success: false, message: 'No compose area found' };
   }
@@ -165,6 +173,58 @@ async function handleTranslateToJapanese() {
     return { success: true, message: 'Translation appended' };
   } catch (error) {
     debugLog('TRANSLATE-JP', 'Error:', error.message);
+    showToast('Translation failed: ' + error.message, 'error');
+    return { success: false, message: error.message };
+  }
+}
+
+function findEditableHost(node) {
+  let el = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+  while (el) {
+    if (el.matches?.('div[contenteditable="true"][role="textbox"]')) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Replace the currently selected text with its Japanese translation.
+ * Only works when the selection sits inside a contenteditable compose area.
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+async function handleTranslateToJapaneseReplace() {
+  const selection = window.getSelection();
+  const selectedText = selection.toString().trim();
+
+  // Content script runs in every frame (all_frames: true), so frames without a
+  // selection must stay silent — otherwise they toast while a sibling frame succeeds.
+  if (!selectedText || selection.rangeCount === 0) {
+    return { success: false, message: 'No text selected' };
+  }
+
+  const range = selection.getRangeAt(0);
+  const editableHost = findEditableHost(range.commonAncestorContainer);
+
+  if (!editableHost) {
+    showToast('Select text in your message input to replace', 'error');
+    return { success: false, message: 'Selection is not in a compose area' };
+  }
+
+  showToast('Translating to Japanese...', 'info');
+
+  try {
+    const japaneseText = await translateToJapaneseWithGemini(selectedText);
+
+    editableHost.focus();
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('insertText', false, japaneseText);
+
+    showToast('Translation inserted!', 'success');
+    return { success: true, message: 'Translation inserted' };
+  } catch (error) {
+    debugLog('TRANSLATE-JP-REPLACE', 'Error:', error.message);
     showToast('Translation failed: ' + error.message, 'error');
     return { success: false, message: error.message };
   }
@@ -197,10 +257,22 @@ export async function initializeGoogleChat() {
       }
     });
 
+    // Track the last focused compose area (main channel vs thread input)
+    document.addEventListener('focusin', (event) => {
+      const target = event.target;
+      if (target?.matches?.('div[contenteditable="true"][role="textbox"]')) {
+        lastFocusedComposeArea = target;
+      }
+    });
+
     // Listen for translate-to-japanese messages from popup or service worker
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.action === 'translate-to-japanese') {
         handleTranslateToJapanese().then(sendResponse);
+        return true; // async response
+      }
+      if (message.action === 'translate-to-japanese-replace') {
+        handleTranslateToJapaneseReplace().then(sendResponse);
         return true; // async response
       }
     });

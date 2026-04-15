@@ -1,177 +1,65 @@
-/**
- * Service Worker for Japanese Audio Mode
- * Manages tab audio capture, offscreen document, and content script injection.
- */
-
-const OFFSCREEN_URL = 'src/offscreen/offscreen.html';
-
-/**
- * Check if an offscreen document already exists
- */
-async function hasOffscreenDocument() {
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT'],
-    documentUrls: [chrome.runtime.getURL(OFFSCREEN_URL)]
-  });
-  return contexts.length > 0;
-}
-
-/**
- * Create the offscreen document if it doesn't exist
- */
-async function ensureOffscreenDocument() {
-  if (await hasOffscreenDocument()) return;
-
-  await chrome.offscreen.createDocument({
-    url: OFFSCREEN_URL,
-    reasons: ['USER_MEDIA'],
-    justification: 'Capture tab audio for Japanese transcription'
-  });
-}
-
-/**
- * Remove the offscreen document
- */
-async function removeOffscreenDocument() {
-  if (await hasOffscreenDocument()) {
-    await chrome.offscreen.closeDocument();
-  }
-}
-
-/**
- * Start audio capture for the given tab
- */
-async function startAudioCapture(tabId) {
-  try {
-    // Get the media stream ID for the tab
-    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
-
-    // Create offscreen document
-    await ensureOffscreenDocument();
-
-    // Send stream ID to offscreen document
-    chrome.runtime.sendMessage({
-      type: 'offscreen-start-capture',
-      streamId,
-      tabId
-    });
-
-    // Inject the audio content script and CSS into the tab
-    await chrome.scripting.insertCSS({
-      target: { tabId },
-      files: ['src/content/content.css']
-    });
-
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['dist/audio-content.js']
-    });
-
-    // Store state
-    await chrome.storage.session.set({
-      audioMode: { active: true, tabId }
-    });
-
-    return { success: true };
-  } catch (error) {
-    console.error('[AudioMode] Start failed:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Stop audio capture
- */
-async function stopAudioCapture() {
-  try {
-    const { audioMode } = await chrome.storage.session.get('audioMode');
-    const tabId = audioMode?.tabId;
-
-    // Tell offscreen to stop
-    chrome.runtime.sendMessage({ type: 'offscreen-stop-capture' });
-
-    // Tell content script to remove panel
-    if (tabId) {
-      try {
-        await chrome.tabs.sendMessage(tabId, { type: 'audio-mode-stopped' });
-      } catch (e) {
-        // Tab may have been closed
-      }
-    }
-
-    // Clean up offscreen document
-    await removeOffscreenDocument();
-
-    // Clear state
-    await chrome.storage.session.set({
-      audioMode: { active: false, tabId: null }
-    });
-
-    return { success: true };
-  } catch (error) {
-    console.error('[AudioMode] Stop failed:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Message handler
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'start-audio-capture') {
-    startAudioCapture(message.tabId).then(sendResponse);
-    return true; // async response
-  }
-
-  if (message.type === 'stop-audio-capture') {
-    stopAudioCapture().then(sendResponse);
-    return true;
-  }
-
-  if (message.type === 'audio-segment') {
-    // Relay audio segment from offscreen → content script
-    chrome.storage.session.get('audioMode', ({ audioMode }) => {
-      if (audioMode?.tabId) {
-        chrome.tabs.sendMessage(audioMode.tabId, {
-          type: 'audio-segment',
-          audio: message.audio,
-          mimeType: message.mimeType
-        }).catch(() => {
-          // Tab may have been closed, stop capture
-          stopAudioCapture();
-        });
-      }
-    });
-    return false;
-  }
-
-  if (message.type === 'get-audio-mode-state') {
-    chrome.storage.session.get('audioMode', ({ audioMode }) => {
-      sendResponse(audioMode || { active: false, tabId: null });
-    });
-    return true;
-  }
-});
-
-// Handle keyboard shortcut commands
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command === 'translate-to-japanese') {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const isChatPage = tab?.url?.includes('chat.google.com') ||
-      (tab?.url?.includes('mail.google.com') && tab?.url?.includes('#chat'));
-    if (!isChatPage) {
-      return;
-    }
-    try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'translate-to-japanese' });
-    } catch (e) {
-      // Content script may not be loaded
-    }
+  if (command !== 'translate-to-japanese' && command !== 'translate-to-japanese-replace') return;
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const isChatPage = tab?.url?.includes('chat.google.com') ||
+    (tab?.url?.includes('mail.google.com') && tab?.url?.includes('#chat'));
+  if (!isChatPage) return;
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, { action: command });
+  } catch (e) {
+    // Content script not loaded; nothing to do
   }
 });
 
-// Clean up when the captured tab is closed
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const { audioMode } = await chrome.storage.session.get('audioMode');
-  if (audioMode?.active && audioMode.tabId === tabId) {
-    stopAudioCapture();
+async function registerCustomSitesFromStorage() {
+  const { customSites = [] } = await chrome.storage.sync.get('customSites');
+  if (customSites.length === 0) return;
+
+  const existing = await chrome.scripting.getRegisteredContentScripts();
+  const existingIds = new Set(existing.map(s => s.id));
+
+  const toRegister = [];
+  for (const site of customSites) {
+    if (existingIds.has(site.id)) continue;
+    const has = await chrome.permissions.contains({ origins: [site.origin] });
+    if (!has) continue;
+    toRegister.push({
+      id: site.id,
+      matches: [site.origin],
+      js: ['dist/content.js'],
+      css: ['src/content/content.css'],
+      runAt: 'document_end',
+      allFrames: true
+    });
   }
+
+  if (toRegister.length > 0) {
+    try {
+      await chrome.scripting.registerContentScripts(toRegister);
+    } catch (e) {
+      console.warn('[CustomSites] registerContentScripts failed:', e);
+    }
+  }
+}
+
+chrome.runtime.onInstalled.addListener(registerCustomSitesFromStorage);
+chrome.runtime.onStartup.addListener(registerCustomSitesFromStorage);
+
+chrome.permissions.onRemoved.addListener(async ({ origins = [] }) => {
+  if (origins.length === 0) return;
+  const { customSites = [] } = await chrome.storage.sync.get('customSites');
+  const matching = customSites.filter(s => origins.includes(s.origin));
+  if (matching.length === 0) return;
+
+  const ids = matching.map(s => s.id);
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids });
+  } catch (e) {
+    console.warn('[CustomSites] unregisterContentScripts failed:', e);
+  }
+
+  const remaining = customSites.filter(s => !origins.includes(s.origin));
+  await chrome.storage.sync.set({ customSites: remaining });
 });

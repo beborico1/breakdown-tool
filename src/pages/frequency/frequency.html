@@ -147,7 +147,11 @@
         <div class="anki-guide-step">
           <div class="anki-guide-step-number">4</div>
           <div class="anki-guide-step-content">
-            <strong>Verify the Connection</strong>
+            <strong>Grant Permission &amp; Verify the Connection</strong>
+            <p>The first time you click <strong>Sync to Anki</strong> or <strong>Test Connection Now</strong>,
+               Chrome will ask permission to access <code>http://localhost:8765</code>. Click
+               <strong>Allow</strong> to enable AnkiConnect. If you click Deny, the buttons
+               will prompt you again the next time you click them.</p>
             <p>Look at the status dot next to the "Sync to Anki" button above:</p>
             <div class="anki-guide-status-legend">
               <span class="anki-status-dot connected"></span>
@@ -155,7 +159,7 @@
             </div>
             <div class="anki-guide-status-legend">
               <span class="anki-status-dot disconnected"></span>
-              <span>Red = Anki is not running or AnkiConnect is not installed</span>
+              <span>Red = Permission not granted, Anki not running, or AnkiConnect not installed</span>
             </div>
             <button class="btn btn-secondary" id="ankiGuideTestBtn">Test Connection Now</button>
             <div id="ankiGuideTestResult" class="anki-guide-test-result" style="display: none;"></div>

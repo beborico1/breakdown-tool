@@ -7,8 +7,10 @@ const saveKeyBtn = document.getElementById('saveKey');
 const keyStatusEl = document.getElementById('keyStatus');
 const viewAllWordsBtn = document.getElementById('viewAllWords');
 const liveTranscribeBtn = document.getElementById('liveTranscribe');
-// const audioModeToggleBtn = document.getElementById('audioModeToggle');
 const translateToJapaneseBtn = document.getElementById('translateToJapanese');
+const customSiteUrlInput = document.getElementById('customSiteUrl');
+const addCustomSiteBtn = document.getElementById('addCustomSite');
+const customSitesListEl = document.getElementById('customSitesList');
 const tokenCountEl = document.getElementById('tokenCount');
 const tokenCostEl = document.getElementById('tokenCost');
 const resetUsageBtn = document.getElementById('resetUsage');
@@ -257,81 +259,6 @@ function openFrequencyPage() {
   chrome.tabs.create({ url: 'src/pages/frequency/frequency.html' });
 }
 
-// // Audio Mode toggle
-// audioModeToggleBtn.addEventListener('click', async () => {
-//   // Check API key first
-//   const result = await new Promise(resolve =>
-//     chrome.storage.sync.get(['geminiApiKey'], resolve)
-//   );
-//   if (!result.geminiApiKey) {
-//     showStatus('Set a Gemini API key first', false);
-//     return;
-//   }
-//
-//   // Check current state
-//   const state = await new Promise(resolve =>
-//     chrome.runtime.sendMessage({ type: 'get-audio-mode-state' }, resolve)
-//   );
-//
-//   if (state?.active) {
-//     // Stop
-//     audioModeToggleBtn.disabled = true;
-//     audioModeToggleBtn.textContent = 'Stopping...';
-//     const response = await new Promise(resolve =>
-//       chrome.runtime.sendMessage({ type: 'stop-audio-capture' }, resolve)
-//     );
-//     audioModeToggleBtn.disabled = false;
-//     if (response?.success) {
-//       setAudioButtonState(false);
-//     } else {
-//       showStatus('Failed to stop: ' + (response?.error || 'Unknown error'), false);
-//     }
-//   } else {
-//     // Start - get active tab
-//     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-//     if (!tab?.id) {
-//       showStatus('No active tab found', false);
-//       return;
-//     }
-//
-//     audioModeToggleBtn.disabled = true;
-//     audioModeToggleBtn.textContent = 'Starting...';
-//     const response = await new Promise(resolve =>
-//       chrome.runtime.sendMessage({ type: 'start-audio-capture', tabId: tab.id }, resolve)
-//     );
-//     audioModeToggleBtn.disabled = false;
-//     if (response?.success) {
-//       setAudioButtonState(true);
-//     } else {
-//       showStatus('Failed to start: ' + (response?.error || 'Unknown error'), false);
-//     }
-//   }
-// });
-//
-// /**
-//  * Set the audio mode button state
-//  */
-// function setAudioButtonState(active) {
-//   if (active) {
-//     audioModeToggleBtn.textContent = 'Stop Listening';
-//     audioModeToggleBtn.className = 'btn btn-danger-audio';
-//   } else {
-//     audioModeToggleBtn.textContent = 'Start Listening';
-//     audioModeToggleBtn.className = 'btn btn-primary';
-//   }
-// }
-//
-// /**
-//  * Load audio mode state on popup open
-//  */
-// function loadAudioModeState() {
-//   chrome.runtime.sendMessage({ type: 'get-audio-mode-state' }, (state) => {
-//     if (state?.active) {
-//       setAudioButtonState(true);
-//     }
-//   });
-// }
-
 // Translate to Japanese button
 translateToJapaneseBtn.addEventListener('click', async () => {
   // Check API key first
@@ -383,6 +310,122 @@ translateToJapaneseBtn.addEventListener('click', async () => {
 // Transcription page
 liveTranscribeBtn.addEventListener('click', () => {
   chrome.tabs.create({ url: 'src/pages/transcribe/transcribe.html' });
+});
+
+function customSiteId(origin) {
+  let hash = 0;
+  for (let i = 0; i < origin.length; i++) {
+    hash = ((hash << 5) - hash + origin.charCodeAt(i)) | 0;
+  }
+  return `custom-${Math.abs(hash).toString(36)}`;
+}
+
+async function renderCustomSites() {
+  const { customSites = [] } = await chrome.storage.sync.get('customSites');
+  customSitesListEl.innerHTML = '';
+  if (customSites.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'custom-sites-empty';
+    empty.textContent = 'No custom sites yet';
+    customSitesListEl.appendChild(empty);
+    return;
+  }
+  for (const site of customSites) {
+    const row = document.createElement('div');
+    row.className = 'custom-site-row';
+
+    const label = document.createElement('span');
+    label.className = 'custom-site-url';
+    label.textContent = site.origin;
+    label.title = site.origin;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'custom-site-remove';
+    removeBtn.textContent = '×';
+    removeBtn.title = 'Remove';
+    removeBtn.addEventListener('click', () => removeCustomSite(site));
+
+    row.appendChild(label);
+    row.appendChild(removeBtn);
+    customSitesListEl.appendChild(row);
+  }
+}
+
+async function addCustomSite() {
+  const raw = customSiteUrlInput.value.trim();
+  if (!raw) return;
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    showStatus('Enter a valid URL (e.g. https://redmine.example.com/)', false);
+    return;
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    showStatus('URL must start with http:// or https://', false);
+    return;
+  }
+
+  const origin = `${parsed.protocol}//${parsed.host}/*`;
+  const { customSites = [] } = await chrome.storage.sync.get('customSites');
+  if (customSites.some(s => s.origin === origin)) {
+    showStatus('Site already added', false);
+    return;
+  }
+
+  const granted = await chrome.permissions.request({ origins: [origin] });
+  if (!granted) {
+    showStatus('Permission denied', false);
+    return;
+  }
+
+  const id = customSiteId(origin);
+  try {
+    await chrome.scripting.registerContentScripts([{
+      id,
+      matches: [origin],
+      js: ['dist/content.js'],
+      css: ['src/content/content.css'],
+      runAt: 'document_end',
+      allFrames: true
+    }]);
+  } catch (err) {
+    await chrome.permissions.remove({ origins: [origin] }).catch(() => {});
+    showStatus('Failed to register: ' + err.message, false);
+    return;
+  }
+
+  customSites.push({ id, origin });
+  await chrome.storage.sync.set({ customSites });
+  customSiteUrlInput.value = '';
+  showStatus('Site added. Reload the page to start analyzing.', true);
+  renderCustomSites();
+}
+
+async function removeCustomSite(site) {
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [site.id] });
+  } catch {
+    // Already unregistered or never registered; continue with cleanup.
+  }
+  try {
+    await chrome.permissions.remove({ origins: [site.origin] });
+  } catch {
+    // Permission already gone; continue.
+  }
+  const { customSites = [] } = await chrome.storage.sync.get('customSites');
+  const remaining = customSites.filter(s => s.origin !== site.origin);
+  await chrome.storage.sync.set({ customSites: remaining });
+  renderCustomSites();
+}
+
+addCustomSiteBtn.addEventListener('click', addCustomSite);
+customSiteUrlInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addCustomSite();
+  }
 });
 
 // Frequency section event listeners
@@ -614,9 +657,7 @@ loadApiKey();
 loadModel();
 loadFontSize();
 loadChunkSize();
-// loadAudioModeState();
-// loadMinimalisticMode();
-// loadFrequencyStats();
+renderCustomSites();
 
 // Initialize popup state
 init();
