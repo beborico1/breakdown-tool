@@ -14,82 +14,6 @@
         <div class="anki-sync-wrapper">
           <span id="ankiStatus" class="anki-status-dot disconnected" title="AnkiConnect status"></span>
           <button id="syncToAnki" class="btn btn-primary" disabled>Sync to Anki</button>
-          <div id="ankiSettingsPanel" class="anki-settings-panel" style="display: none;">
-            <h3>Anki Sync Settings</h3>
-            <div class="anki-settings-row">
-              <label for="ankiDeckSelect">Deck:</label>
-              <select id="ankiDeckSelect">
-                <option value="Kaigi Meeting">Kaigi Meeting</option>
-              </select>
-            </div>
-
-            <div class="anki-card-settings">
-              <button type="button" class="anki-card-settings-toggle" id="ankiCardSettingsToggle">
-                <span>Card Settings</span>
-                <svg id="ankiCardSettingsChevron" class="anki-card-settings-chevron" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M6 9l6 6 6-6"/>
-                </svg>
-              </button>
-              <div id="ankiCardSettingsBody" class="anki-card-settings-body">
-                <label class="anki-settings-check">
-                  <input type="checkbox" id="ankiIncludeFurigana">
-                  <span>Include furigana (reading)</span>
-                </label>
-                <label class="anki-settings-check">
-                  <input type="checkbox" id="ankiIncludePartOfSpeech">
-                  <span>Include part of speech</span>
-                </label>
-                <label class="anki-settings-check">
-                  <input type="checkbox" id="ankiIncludeRomaji">
-                  <span>Include romaji</span>
-                </label>
-                <label class="anki-settings-check">
-                  <input type="checkbox" id="ankiIncludeCount">
-                  <span>Include frequency count</span>
-                </label>
-
-                <div class="anki-settings-row">
-                  <label for="ankiFuriganaFormat">Furigana format:</label>
-                  <select id="ankiFuriganaFormat">
-                    <option value="parentheses">漢字 (かんじ)</option>
-                    <option value="ruby">漢字[かんじ] (Anki ruby)</option>
-                  </select>
-                </div>
-
-                <div class="anki-settings-row">
-                  <label for="ankiModelName">Note type:</label>
-                  <input type="text" id="ankiModelName" placeholder="Basic">
-                </div>
-                <div class="anki-settings-row">
-                  <label for="ankiFrontField">Front field:</label>
-                  <input type="text" id="ankiFrontField" placeholder="Front">
-                </div>
-                <div class="anki-settings-row">
-                  <label for="ankiBackField">Back field:</label>
-                  <input type="text" id="ankiBackField" placeholder="Back">
-                </div>
-
-                <div class="anki-settings-row">
-                  <label for="ankiCustomTags">Tags:</label>
-                  <input type="text" id="ankiCustomTags" placeholder="kaigi-meeting, jlpt-n3">
-                </div>
-                <label class="anki-settings-check">
-                  <input type="checkbox" id="ankiAutoTagByType">
-                  <span>Also tag by word type (noun, verb, ...)</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="anki-settings-actions">
-              <button id="ankiSyncNow" class="btn btn-primary">Sync Now</button>
-              <button id="ankiSyncCancel" class="btn btn-secondary">Cancel</button>
-            </div>
-            <div id="ankiProgressContainer" class="anki-progress-bar" style="display: none;">
-              <div id="ankiProgressFill" class="anki-progress-fill" style="width: 0%;"></div>
-            </div>
-            <div id="ankiSyncResult" class="anki-sync-result" style="display: none;"></div>
-          </div>
         </div>
         <button id="exportJson" class="btn btn-secondary">Export JSON</button>
         <button id="exportCsv" class="btn btn-secondary">Export CSV</button>
@@ -213,6 +137,7 @@
         <div class="anki-batch-controls">
           <button id="selectAll" class="btn btn-secondary">Select All</button>
           <button id="deselectAll" class="btn btn-secondary">Deselect All</button>
+          <button id="ignoreSelected" class="btn btn-secondary">Ignore Selected</button>
         </div>
         <div class="sort-controls">
           <label>Sort by:</label>
@@ -226,6 +151,14 @@
           <input type="text" id="searchInput" placeholder="Search words...">
         </div>
       </div>
+    </div>
+
+    <div id="ignoredPanel" class="ignored-panel" style="display: none;">
+      <div class="ignored-header">
+        <span class="ignored-title">Ignored Words (<span id="ignoredCount">0</span>)</span>
+        <button id="unignoreAll" class="btn btn-secondary">Unignore All</button>
+      </div>
+      <div id="ignoredChips" class="ignored-chips"></div>
     </div>
 
     <div class="type-distribution">
@@ -248,6 +181,150 @@
     </div>
 
   </div>
-  <script src="frequency.js"></script>
+
+  <dialog id="ankiSettingsModal" class="anki-modal" aria-labelledby="ankiModalTitle">
+    <form method="dialog" class="anki-modal-form">
+      <header class="anki-modal-header">
+        <div class="anki-modal-title-group">
+          <h2 id="ankiModalTitle">Sync to Anki</h2>
+          <span id="ankiModalCount" class="anki-modal-subtitle">0 words selected</span>
+        </div>
+        <button type="button" class="anki-modal-close" id="ankiModalClose" aria-label="Close">&times;</button>
+      </header>
+
+      <div class="anki-modal-body">
+        <section class="anki-modal-section">
+          <h3>Preset</h3>
+          <p class="anki-modal-hint">Pick a starting point. You can still tweak anything below.</p>
+          <div class="anki-preset-chips" role="group" aria-label="Card presets">
+            <button type="button" class="chip anki-preset" data-preset="minimal" aria-pressed="false">
+              <span class="anki-preset-title">Minimal</span>
+              <span class="anki-preset-desc">Kanji &rarr; English</span>
+            </button>
+            <button type="button" class="chip anki-preset" data-preset="reading" aria-pressed="true">
+              <span class="anki-preset-title">With Reading</span>
+              <span class="anki-preset-desc">Kanji + furigana &rarr; English + type</span>
+            </button>
+            <button type="button" class="chip anki-preset" data-preset="detailed" aria-pressed="false">
+              <span class="anki-preset-title">Detailed</span>
+              <span class="anki-preset-desc">Ruby furigana + romaji + count</span>
+            </button>
+            <button type="button" class="chip anki-preset" data-preset="pronunciation" aria-pressed="false">
+              <span class="anki-preset-title">Pronunciation</span>
+              <span class="anki-preset-desc">Kanji &rarr; Reading + romaji</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="anki-modal-section">
+          <h3>Destination</h3>
+          <div id="ankiConnStatusRow" class="anki-conn-status" hidden></div>
+          <div class="anki-settings-row">
+            <label for="ankiDeckSelect">Deck</label>
+            <select id="ankiDeckSelect"><option value="Kaigi Meeting">Kaigi Meeting</option></select>
+          </div>
+          <div class="anki-settings-row">
+            <label for="ankiModelSelect">Note type</label>
+            <select id="ankiModelSelect"><option value="Basic">Basic</option></select>
+          </div>
+          <div class="anki-settings-row">
+            <label for="ankiFrontFieldSelect">Front field</label>
+            <select id="ankiFrontFieldSelect"><option value="Front">Front</option></select>
+          </div>
+          <div class="anki-settings-row">
+            <label for="ankiBackFieldSelect">Back field</label>
+            <select id="ankiBackFieldSelect"><option value="Back">Back</option></select>
+          </div>
+          <div id="ankiFieldWarning" class="anki-field-warning" hidden></div>
+        </section>
+
+        <section class="anki-modal-section">
+          <h3>Reading (furigana)</h3>
+          <label class="anki-settings-check">
+            <input type="checkbox" id="ankiIncludeFurigana">
+            <span>Include reading on the front of the card</span>
+          </label>
+          <div class="anki-settings-row">
+            <label for="ankiFuriganaFormat">Format</label>
+            <select id="ankiFuriganaFormat">
+              <option value="parentheses">漢字 (かんじ)</option>
+              <option value="ruby">漢字[かんじ] &mdash; Anki ruby</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="anki-modal-section">
+          <h3>Back content</h3>
+          <p class="anki-modal-hint">English is always included. Toggle the extras you want on the back.</p>
+          <label class="anki-settings-check">
+            <input type="checkbox" id="ankiIncludePartOfSpeech">
+            <span>Part of speech <span class="anki-inline-example">(Type: noun)</span></span>
+          </label>
+          <label class="anki-settings-check">
+            <input type="checkbox" id="ankiIncludeRomaji">
+            <span>Romaji <span class="anki-inline-example">(Romaji: kaigi)</span></span>
+          </label>
+          <label class="anki-settings-check">
+            <input type="checkbox" id="ankiIncludeCount">
+            <span>Frequency count <span class="anki-inline-example">(Count: 12x)</span></span>
+          </label>
+        </section>
+
+        <section class="anki-modal-section">
+          <h3>Tags</h3>
+          <div class="anki-settings-row">
+            <label for="ankiCustomTags">Custom tags</label>
+            <input type="text" id="ankiCustomTags" placeholder="kaigi-meeting, jlpt-n3">
+          </div>
+          <label class="anki-settings-check">
+            <input type="checkbox" id="ankiAutoTagByType">
+            <span>Also tag by word type (noun, verb, &hellip;)</span>
+          </label>
+        </section>
+
+        <details class="anki-modal-advanced">
+          <summary>Advanced</summary>
+          <div class="anki-modal-advanced-body">
+            <div id="ankiTestResult" class="anki-modal-test-result" hidden></div>
+            <div class="anki-modal-advanced-actions">
+              <button type="button" id="ankiTestConnection" class="btn btn-secondary">Test connection</button>
+              <button type="button" id="ankiResetDefaults" class="btn btn-secondary">Reset to defaults</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <aside class="anki-modal-preview" aria-live="polite" aria-label="Card preview">
+        <div class="anki-preview-label">
+          Preview &mdash; <span id="ankiPreviewWordLabel">会議</span>
+        </div>
+        <div class="anki-preview-card">
+          <div class="anki-preview-side">
+            <span class="anki-preview-side-label">Front</span>
+            <div id="ankiPreviewFront" class="anki-preview-content"></div>
+          </div>
+          <div class="anki-preview-divider"></div>
+          <div class="anki-preview-side">
+            <span class="anki-preview-side-label">Back</span>
+            <div id="ankiPreviewBack" class="anki-preview-content"></div>
+          </div>
+          <div class="anki-preview-tags" id="ankiPreviewTags"></div>
+        </div>
+      </aside>
+
+      <footer class="anki-modal-footer">
+        <div id="ankiProgressContainer" class="anki-progress-bar" hidden>
+          <div id="ankiProgressFill" class="anki-progress-fill"></div>
+        </div>
+        <div id="ankiSyncResult" class="anki-sync-result" hidden></div>
+        <div class="anki-modal-footer-actions">
+          <button type="button" id="ankiSyncCancel" class="btn btn-secondary">Cancel</button>
+          <button type="button" id="ankiSyncNow" class="btn btn-primary">Sync</button>
+        </div>
+      </footer>
+    </form>
+  </dialog>
+
+  <script type="module" src="frequency.js"></script>
 </body>
 </html>

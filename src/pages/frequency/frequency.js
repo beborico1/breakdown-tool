@@ -17,26 +17,56 @@ const ankiStatusEl = document.getElementById('ankiStatus');
 const syncToAnkiBtn = document.getElementById('syncToAnki');
 const selectAllBtn = document.getElementById('selectAll');
 const deselectAllBtn = document.getElementById('deselectAll');
-const ankiSettingsPanel = document.getElementById('ankiSettingsPanel');
+
+// Modal shell
+const ankiSettingsModal = document.getElementById('ankiSettingsModal');
+const ankiModalCount = document.getElementById('ankiModalCount');
+const ankiModalClose = document.getElementById('ankiModalClose');
+
+// Destination
+const ankiConnStatusRow = document.getElementById('ankiConnStatusRow');
 const ankiDeckSelect = document.getElementById('ankiDeckSelect');
+const ankiModelSelect = document.getElementById('ankiModelSelect');
+const ankiFrontFieldSelect = document.getElementById('ankiFrontFieldSelect');
+const ankiBackFieldSelect = document.getElementById('ankiBackFieldSelect');
+const ankiFieldWarning = document.getElementById('ankiFieldWarning');
+
+// Reading + back + tags
+const ankiIncludeFuriganaInput = document.getElementById('ankiIncludeFurigana');
+const ankiFuriganaFormatSelect = document.getElementById('ankiFuriganaFormat');
+const ankiIncludePartOfSpeechInput = document.getElementById('ankiIncludePartOfSpeech');
+const ankiIncludeRomajiInput = document.getElementById('ankiIncludeRomaji');
+const ankiIncludeCountInput = document.getElementById('ankiIncludeCount');
+const ankiCustomTagsInput = document.getElementById('ankiCustomTags');
+const ankiAutoTagByTypeInput = document.getElementById('ankiAutoTagByType');
+
+// Advanced
+const ankiTestConnectionBtn = document.getElementById('ankiTestConnection');
+const ankiResetDefaultsBtn = document.getElementById('ankiResetDefaults');
+const ankiTestResult = document.getElementById('ankiTestResult');
+
+// Preview
+const ankiPreviewFront = document.getElementById('ankiPreviewFront');
+const ankiPreviewBack = document.getElementById('ankiPreviewBack');
+const ankiPreviewTags = document.getElementById('ankiPreviewTags');
+const ankiPreviewWordLabel = document.getElementById('ankiPreviewWordLabel');
+
+// Footer
 const ankiSyncNowBtn = document.getElementById('ankiSyncNow');
 const ankiSyncCancelBtn = document.getElementById('ankiSyncCancel');
 const ankiProgressContainer = document.getElementById('ankiProgressContainer');
 const ankiProgressFill = document.getElementById('ankiProgressFill');
 const ankiSyncResult = document.getElementById('ankiSyncResult');
-const ankiCardSettingsToggle = document.getElementById('ankiCardSettingsToggle');
-const ankiCardSettingsBody = document.getElementById('ankiCardSettingsBody');
-const ankiCardSettingsChevron = document.getElementById('ankiCardSettingsChevron');
-const ankiIncludeFuriganaInput = document.getElementById('ankiIncludeFurigana');
-const ankiIncludePartOfSpeechInput = document.getElementById('ankiIncludePartOfSpeech');
-const ankiIncludeRomajiInput = document.getElementById('ankiIncludeRomaji');
-const ankiIncludeCountInput = document.getElementById('ankiIncludeCount');
-const ankiFuriganaFormatSelect = document.getElementById('ankiFuriganaFormat');
-const ankiModelNameInput = document.getElementById('ankiModelName');
-const ankiFrontFieldInput = document.getElementById('ankiFrontField');
-const ankiBackFieldInput = document.getElementById('ankiBackField');
-const ankiCustomTagsInput = document.getElementById('ankiCustomTags');
-const ankiAutoTagByTypeInput = document.getElementById('ankiAutoTagByType');
+
+// Presets
+const ankiPresetButtons = document.querySelectorAll('.anki-preset');
+
+// Ignore DOM Elements
+const ignoreSelectedBtn = document.getElementById('ignoreSelected');
+const unignoreAllBtn = document.getElementById('unignoreAll');
+const ignoredPanelEl = document.getElementById('ignoredPanel');
+const ignoredCountEl = document.getElementById('ignoredCount');
+const ignoredChipsEl = document.getElementById('ignoredChips');
 
 // Guide DOM Elements
 const ankiGuideToggle = document.getElementById('ankiGuideToggle');
@@ -57,6 +87,9 @@ let searchQuery = '';
 let ankiSelectedWords = new Set();
 let ankiConnected = false;
 
+// Ignored words state (keys hidden from the word grid)
+let ignoredWords = new Set();
+
 const DEFAULT_ANKI_SETTINGS = {
   deckName: 'Kaigi Meeting',
   includeFurigana: true,
@@ -68,9 +101,54 @@ const DEFAULT_ANKI_SETTINGS = {
   frontFieldName: 'Front',
   backFieldName: 'Back',
   customTags: 'kaigi-meeting',
-  autoTagByType: true
+  autoTagByType: true,
+  lastPresetApplied: 'reading'
 };
 let ankiSettings = { ...DEFAULT_ANKI_SETTINGS };
+
+const ANKI_PRESETS = {
+  minimal: {
+    includeFurigana: false,
+    furiganaFormat: 'parentheses',
+    includePartOfSpeech: false,
+    includeRomaji: false,
+    includeCount: false
+  },
+  reading: {
+    includeFurigana: true,
+    furiganaFormat: 'parentheses',
+    includePartOfSpeech: true,
+    includeRomaji: false,
+    includeCount: false
+  },
+  detailed: {
+    includeFurigana: true,
+    furiganaFormat: 'ruby',
+    includePartOfSpeech: true,
+    includeRomaji: true,
+    includeCount: true
+  },
+  pronunciation: {
+    includeFurigana: true,
+    furiganaFormat: 'parentheses',
+    includePartOfSpeech: false,
+    includeRomaji: true,
+    includeCount: false
+  }
+};
+
+const SAMPLE_WORD = {
+  japanese: '会議',
+  reading: 'かいぎ',
+  romaji: 'kaigi',
+  english: 'meeting',
+  type: 'noun',
+  count: 12
+};
+
+// AnkiConnect model/field cache (cleared when the modal re-opens after TTL).
+let _ankiModelCache = null; // { models: string[], fields: Map<string, string[]>, ts: number }
+const MODEL_CACHE_TTL_MS = 30_000;
 
 // Type colors for chart
 const typeColors = {
@@ -120,6 +198,29 @@ function saveAnkiSelections() {
   console.log('[Anki] Saving', ankiSelectedWords.size, 'selections');
   chrome.storage.local.set({ ankiSelectedWords: [...ankiSelectedWords] });
   updateAnkiSelectedCount();
+}
+
+/**
+ * Load ignored word keys from chrome.storage.local
+ */
+async function loadIgnoredWords() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(['ignoredWords'], (result) => {
+      if (result.ignoredWords) {
+        ignoredWords = new Set(result.ignoredWords);
+      }
+      console.log('[Ignore] Loaded', ignoredWords.size, 'ignored words');
+      resolve();
+    });
+  });
+}
+
+/**
+ * Persist ignored word keys to chrome.storage.local
+ */
+function saveIgnoredWords() {
+  console.log('[Ignore] Saving', ignoredWords.size, 'ignored words');
+  chrome.storage.local.set({ ignoredWords: [...ignoredWords] });
 }
 
 /**
@@ -189,7 +290,43 @@ function buildAnkiNote(word, settings) {
 function updateAnkiSelectedCount() {
   ankiSelectedValueEl.textContent = ankiSelectedWords.size.toLocaleString();
   syncToAnkiBtn.disabled = ankiSelectedWords.size === 0;
+  ignoreSelectedBtn.disabled = ankiSelectedWords.size === 0;
   console.log('[Anki] Updated count:', ankiSelectedWords.size, 'button disabled:', syncToAnkiBtn.disabled);
+  if (ankiSettingsModal && ankiSettingsModal.open) {
+    refreshSelectedCount();
+    renderAnkiPreview();
+  }
+}
+
+/**
+ * Render the Ignored Words panel as chips; hide container when empty.
+ */
+function renderIgnoredPanel() {
+  if (ignoredWords.size === 0) {
+    ignoredPanelEl.style.display = 'none';
+    ignoredChipsEl.innerHTML = '';
+    return;
+  }
+
+  ignoredPanelEl.style.display = 'block';
+  ignoredCountEl.textContent = ignoredWords.size.toLocaleString();
+
+  const wordByKey = new Map();
+  for (const w of allWords) {
+    wordByKey.set(`${w.japanese}|${normalizeType(w.type)}`, w);
+  }
+
+  ignoredChipsEl.innerHTML = [...ignoredWords].map(key => {
+    const word = wordByKey.get(key);
+    const japanese = word ? word.japanese : key.split('|')[0];
+    const type = word ? normalizeType(word.type) : (key.split('|')[1] || 'other');
+    return `
+      <span class="ignored-chip">
+        <span class="ignored-chip-label ${type}">${escapeHtml(japanese)}</span>
+        <button class="ignored-chip-remove" data-word-key="${escapeHtml(key)}" title="Unignore" aria-label="Unignore ${escapeHtml(japanese)}">×</button>
+      </span>
+    `;
+  }).join('');
 }
 
 const ANKI_ORIGIN = 'http://localhost:8765/*';
@@ -448,6 +585,7 @@ function sortWords(words, sortBy) {
  */
 function applyFiltersAndRender() {
   let result = filterWords(allWords, currentFilter);
+  result = result.filter(w => !ignoredWords.has(`${w.japanese}|${normalizeType(w.type)}`));
   result = searchWords(result, searchQuery);
   result = sortWords(result, currentSort);
   filteredWords = result;
@@ -527,6 +665,7 @@ async function init() {
   const [data] = await Promise.all([
     loadData(),
     loadAnkiSelections(),
+    loadIgnoredWords(),
     loadAnkiSettings()
   ]);
 
@@ -545,6 +684,7 @@ async function init() {
     emptyStateEl.style.display = 'block';
     wordGridEl.style.display = 'none';
     typeChartEl.innerHTML = '<p style="color: #6B7280; text-align: center;">No data yet</p>';
+    renderIgnoredPanel();
     updateAnkiSelectedCount();
     return;
   }
@@ -563,6 +703,7 @@ async function init() {
 
   // Render word grid
   applyFiltersAndRender();
+  renderIgnoredPanel();
   updateAnkiSelectedCount();
 }
 
@@ -627,8 +768,49 @@ deselectAllBtn.addEventListener('click', () => {
   applyFiltersAndRender();
 });
 
+// Ignore Selected: hide currently checked words from the grid
+// (also removes them from the Anki queue — a word you don't want to see shouldn't sync)
+ignoreSelectedBtn.addEventListener('click', () => {
+  if (ankiSelectedWords.size === 0) return;
+  const moved = ankiSelectedWords.size;
+  for (const key of ankiSelectedWords) {
+    ignoredWords.add(key);
+  }
+  ankiSelectedWords.clear();
+  console.log('[Ignore] Ignored', moved, 'selected words');
+  saveIgnoredWords();
+  saveAnkiSelections();
+  renderIgnoredPanel();
+  applyFiltersAndRender();
+});
+
+unignoreAllBtn.addEventListener('click', () => {
+  const count = ignoredWords.size;
+  if (count === 0) return;
+  ignoredWords.clear();
+  console.log('[Ignore] Unignored all', count, 'words');
+  saveIgnoredWords();
+  renderIgnoredPanel();
+  applyFiltersAndRender();
+});
+
+// Per-chip unignore (delegated)
+ignoredChipsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.ignored-chip-remove');
+  if (!btn) return;
+  const wordKey = btn.dataset.wordKey;
+  if (!ignoredWords.has(wordKey)) return;
+  ignoredWords.delete(wordKey);
+  console.log('[Ignore] Unignored:', wordKey);
+  saveIgnoredWords();
+  renderIgnoredPanel();
+  applyFiltersAndRender();
+});
+
 /**
  * Populate the card-settings inputs from the current ankiSettings object.
+ * Only touches fields the modal owns — deck/model/field selects are rebuilt
+ * from AnkiConnect responses in openAnkiModal() / onModelChanged().
  */
 function hydrateAnkiSettingsInputs() {
   ankiIncludeFuriganaInput.checked = ankiSettings.includeFurigana;
@@ -636,17 +818,249 @@ function hydrateAnkiSettingsInputs() {
   ankiIncludeRomajiInput.checked = ankiSettings.includeRomaji;
   ankiIncludeCountInput.checked = ankiSettings.includeCount;
   ankiFuriganaFormatSelect.value = ankiSettings.furiganaFormat;
-  ankiModelNameInput.value = ankiSettings.modelName;
-  ankiFrontFieldInput.value = ankiSettings.frontFieldName;
-  ankiBackFieldInput.value = ankiSettings.backFieldName;
   ankiCustomTagsInput.value = ankiSettings.customTags;
   ankiAutoTagByTypeInput.checked = ankiSettings.autoTagByType;
 }
 
-// Sync to Anki button -> show settings panel and populate decks
-syncToAnkiBtn.addEventListener('click', async () => {
-  console.log('[Anki] Sync button clicked, opening settings panel');
+/**
+ * Pick a word to render in the preview.
+ * Prefers the most-frequent selected word so the preview feels live;
+ * falls back to the canned sample when no selection exists yet.
+ */
+function getPreviewWord() {
+  if (ankiSelectedWords.size === 0 || allWords.length === 0) return SAMPLE_WORD;
+  let best = null;
+  for (const key of ankiSelectedWords) {
+    const [japanese, type] = key.split('|');
+    const w = allWords.find(x => x.japanese === japanese && normalizeType(x.type) === type);
+    if (!w) continue;
+    if (!best || (w.count || 0) > (best.count || 0)) best = w;
+  }
+  return best || SAMPLE_WORD;
+}
 
+/**
+ * Render the preview card using buildAnkiNote on the preview word.
+ * Keeps WYSIWYG parity with the real sync.
+ */
+function renderAnkiPreview() {
+  const word = getPreviewWord();
+  const note = buildAnkiNote(word, ankiSettings);
+
+  ankiPreviewWordLabel.textContent = word.japanese;
+
+  const frontField = (ankiSettings.frontFieldName || 'Front').trim() || 'Front';
+  const backField = (ankiSettings.backFieldName || 'Back').trim() || 'Back';
+  ankiPreviewFront.innerHTML = note.fields[frontField] ?? '';
+  ankiPreviewBack.innerHTML = note.fields[backField] ?? '';
+
+  ankiPreviewTags.innerHTML = '';
+  for (const tag of note.tags) {
+    const span = document.createElement('span');
+    span.className = 'anki-preview-tag';
+    span.textContent = tag;
+    ankiPreviewTags.appendChild(span);
+  }
+}
+
+/**
+ * Update `aria-pressed` on preset chips to reflect `lastPresetApplied`.
+ */
+function updatePresetChipStates() {
+  const active = ankiSettings.lastPresetApplied;
+  for (const btn of ankiPresetButtons) {
+    btn.setAttribute('aria-pressed', btn.dataset.preset === active ? 'true' : 'false');
+  }
+}
+
+/**
+ * Apply a preset by merging its values onto ankiSettings and re-rendering.
+ */
+function applyPreset(name) {
+  const preset = ANKI_PRESETS[name];
+  if (!preset) return;
+  ankiSettings = { ...ankiSettings, ...preset, lastPresetApplied: name };
+  saveAnkiSettings();
+  hydrateAnkiSettingsInputs();
+  updatePresetChipStates();
+  renderAnkiPreview();
+}
+
+/**
+ * Reset every card-format setting to the defaults. Preserves the currently
+ * chosen deck so the user doesn't lose their destination.
+ */
+function resetToDefaults() {
+  const keepDeck = ankiSettings.deckName;
+  ankiSettings = { ...DEFAULT_ANKI_SETTINGS, deckName: keepDeck };
+  saveAnkiSettings();
+  hydrateAnkiSettingsInputs();
+  // Re-set selects to match restored values where possible.
+  if ([...ankiDeckSelect.options].some(o => o.value === keepDeck)) {
+    ankiDeckSelect.value = keepDeck;
+  }
+  if ([...ankiModelSelect.options].some(o => o.value === ankiSettings.modelName)) {
+    ankiModelSelect.value = ankiSettings.modelName;
+    onModelChanged();
+  } else {
+    validateSelectedFields();
+  }
+  updatePresetChipStates();
+  renderAnkiPreview();
+}
+
+/**
+ * Update the "N words selected" subtitle and the Sync button label.
+ */
+function refreshSelectedCount() {
+  const n = ankiSelectedWords.size;
+  ankiModalCount.textContent = `${n} word${n === 1 ? '' : 's'} selected`;
+  ankiSyncNowBtn.textContent = n > 0 ? `Sync ${n}` : 'Sync';
+  ankiSyncNowBtn.disabled = n === 0;
+}
+
+/**
+ * Populate the deck select. Keeps the currently-stored deck selected if it
+ * exists on the user's Anki; appends a "+ Create new deck..." sentinel.
+ */
+function populateDeckSelect(decks) {
+  ankiDeckSelect.innerHTML = '';
+  for (const deck of decks) {
+    const opt = document.createElement('option');
+    opt.value = deck;
+    opt.textContent = deck;
+    if (deck === ankiSettings.deckName) opt.selected = true;
+    ankiDeckSelect.appendChild(opt);
+  }
+  const newOpt = document.createElement('option');
+  newOpt.value = '__new__';
+  newOpt.textContent = '+ Create new deck...';
+  ankiDeckSelect.appendChild(newOpt);
+  if (!decks.includes(ankiSettings.deckName) && decks.length > 0) {
+    // Fallback: stored deck doesn't exist; pick the first.
+    ankiDeckSelect.value = decks[0];
+    ankiSettings.deckName = decks[0];
+    saveAnkiSettings();
+  }
+}
+
+/**
+ * Populate the note-type select from AnkiConnect's modelNames.
+ */
+function populateModelSelect(models) {
+  ankiModelSelect.innerHTML = '';
+  for (const model of models) {
+    const opt = document.createElement('option');
+    opt.value = model;
+    opt.textContent = model;
+    if (model === ankiSettings.modelName) opt.selected = true;
+    ankiModelSelect.appendChild(opt);
+  }
+  if (!models.includes(ankiSettings.modelName) && models.length > 0) {
+    ankiModelSelect.value = models[0];
+    ankiSettings.modelName = models[0];
+    saveAnkiSettings();
+  }
+}
+
+/**
+ * Populate Front/Back field selects from a model's field list.
+ * Keeps the stored field choice if present; otherwise snaps to a sensible
+ * default (first field for Front, second or first for Back).
+ */
+function populateFieldSelects(fields) {
+  const build = (select, storedKey, fallbackIndex) => {
+    select.innerHTML = '';
+    for (const field of fields) {
+      const opt = document.createElement('option');
+      opt.value = field;
+      opt.textContent = field;
+      select.appendChild(opt);
+    }
+    const stored = ankiSettings[storedKey];
+    if (fields.includes(stored)) {
+      select.value = stored;
+    } else if (fields.length > 0) {
+      const fb = fields[Math.min(fallbackIndex, fields.length - 1)];
+      select.value = fb;
+      ankiSettings[storedKey] = fb;
+      saveAnkiSettings();
+    }
+  };
+  build(ankiFrontFieldSelect, 'frontFieldName', 0);
+  build(ankiBackFieldSelect, 'backFieldName', 1);
+  validateSelectedFields();
+}
+
+/**
+ * Show or clear the field warning based on whether the configured Front/Back
+ * fields exist on the selected model.
+ */
+function validateSelectedFields() {
+  const missing = [];
+  const frontOptions = [...ankiFrontFieldSelect.options].map(o => o.value);
+  const backOptions = [...ankiBackFieldSelect.options].map(o => o.value);
+  if (frontOptions.length && !frontOptions.includes(ankiSettings.frontFieldName)) missing.push('Front');
+  if (backOptions.length && !backOptions.includes(ankiSettings.backFieldName)) missing.push('Back');
+  if (missing.length === 0) {
+    ankiFieldWarning.hidden = true;
+    return;
+  }
+  ankiFieldWarning.hidden = false;
+  ankiFieldWarning.textContent = `${missing.join(' and ')} field not found on this note type. Pick an existing field or sync will fail.`;
+}
+
+/**
+ * Fetch (with 30s cache) the field list for a given note type.
+ */
+async function loadAnkiModelFields(modelName) {
+  if (_ankiModelCache && _ankiModelCache.fields.has(modelName)) {
+    return _ankiModelCache.fields.get(modelName);
+  }
+  const fields = await ankiConnect('modelFieldNames', { modelName });
+  if (_ankiModelCache) _ankiModelCache.fields.set(modelName, fields);
+  return fields;
+}
+
+/**
+ * Handle model-select changes: refresh fields, validate, re-render preview.
+ */
+async function onModelChanged() {
+  const model = ankiModelSelect.value;
+  ankiSettings.modelName = model;
+  saveAnkiSettings();
+  try {
+    const fields = await loadAnkiModelFields(model);
+    populateFieldSelects(fields);
+  } catch (err) {
+    console.warn('[Anki] Could not fetch fields for', model, err);
+    // Keep current selects; surface a warning.
+    ankiFieldWarning.hidden = false;
+    ankiFieldWarning.textContent = 'Could not read fields for this note type. Make sure Anki is running.';
+  }
+  renderAnkiPreview();
+}
+
+/**
+ * Update the small connection status banner at the top of the Destination
+ * section, reflecting the latest checkAnkiConnection result.
+ */
+function renderConnStatusBanner() {
+  if (!ankiConnStatusRow) return;
+  if (ankiConnected) {
+    ankiConnStatusRow.hidden = true;
+    return;
+  }
+  ankiConnStatusRow.hidden = false;
+  ankiConnStatusRow.className = 'anki-conn-status disconnected';
+  ankiConnStatusRow.textContent = 'Anki not reachable. Deck/note-type lists may be stale. Open Anki and Test connection in Advanced.';
+}
+
+/**
+ * Open the settings modal. Parallel-fetches decks, models, and fields for
+ * the current model; falls back gracefully when AnkiConnect is unreachable.
+ */
+async function openAnkiModal() {
   const granted = await requestAnkiPermission();
   if (!granted) {
     alert('Anki sync needs permission to talk to AnkiConnect on http://localhost:8765. ' +
@@ -654,38 +1068,65 @@ syncToAnkiBtn.addEventListener('click', async () => {
     return;
   }
 
-  ankiSettingsPanel.style.display = 'block';
-  ankiSyncResult.style.display = 'none';
-  ankiProgressContainer.style.display = 'none';
+  // Reset transient UI.
+  ankiSyncResult.hidden = true;
+  ankiProgressContainer.hidden = true;
   ankiProgressFill.style.width = '0%';
+  ankiTestResult.hidden = true;
+  ankiFieldWarning.hidden = true;
 
   hydrateAnkiSettingsInputs();
+  updatePresetChipStates();
+  refreshSelectedCount();
+  renderAnkiPreview();
 
-  // Re-check connection when panel opens
+  ankiSettingsModal.showModal();
+
   await checkAnkiConnection();
+  renderConnStatusBanner();
+
+  // Invalidate stale cache.
+  if (_ankiModelCache && Date.now() - _ankiModelCache.ts > MODEL_CACHE_TTL_MS) {
+    _ankiModelCache = null;
+  }
 
   try {
-    const decks = await ankiConnect('deckNames');
-    console.log('[Anki] Fetched decks:', decks);
-    ankiDeckSelect.innerHTML = '';
-    for (const deck of decks) {
-      const opt = document.createElement('option');
-      opt.value = deck;
-      opt.textContent = deck;
-      if (deck === ankiSettings.deckName) opt.selected = true;
-      ankiDeckSelect.appendChild(opt);
-    }
-    // Add option to create new
-    const newOpt = document.createElement('option');
-    newOpt.value = '__new__';
-    newOpt.textContent = '+ Create new deck...';
-    ankiDeckSelect.appendChild(newOpt);
-  } catch (error) {
-    console.error('[Anki] Failed to fetch decks:', error);
-    ankiDeckSelect.innerHTML = '<option value="Kaigi Meeting">Kaigi Meeting</option>';
+    const [decks, models] = await Promise.all([
+      ankiConnect('deckNames'),
+      ankiConnect('modelNames')
+    ]);
+    _ankiModelCache = _ankiModelCache || { models: [], fields: new Map(), ts: Date.now() };
+    _ankiModelCache.models = models;
+    populateDeckSelect(decks);
+    populateModelSelect(models);
+    const fields = await loadAnkiModelFields(ankiModelSelect.value);
+    populateFieldSelects(fields);
+  } catch (err) {
+    console.warn('[Anki] Could not populate modal selects from AnkiConnect:', err);
+    // Selects already have default options from the HTML; leave them alone.
   }
+
+  renderAnkiPreview();
+}
+
+function closeAnkiModal() {
+  if (ankiSettingsModal.open) ankiSettingsModal.close();
+}
+
+// Sync to Anki button -> open the modal
+syncToAnkiBtn.addEventListener('click', () => {
+  console.log('[Anki] Sync button clicked, opening settings modal');
+  openAnkiModal();
 });
 
+// Close via X button, Cancel button, or backdrop click
+ankiModalClose.addEventListener('click', closeAnkiModal);
+ankiSyncCancelBtn.addEventListener('click', closeAnkiModal);
+ankiSettingsModal.addEventListener('click', (e) => {
+  if (e.target === ankiSettingsModal) closeAnkiModal();
+});
+
+// Deck select: handle "+ Create new deck..." sentinel (same prompt flow as before).
 ankiDeckSelect.addEventListener('change', () => {
   if (ankiDeckSelect.value === '__new__') {
     const name = prompt('Enter new deck name:');
@@ -695,24 +1136,78 @@ ankiDeckSelect.addEventListener('change', () => {
       opt.textContent = name.trim();
       ankiDeckSelect.insertBefore(opt, ankiDeckSelect.lastElementChild);
       ankiDeckSelect.value = name.trim();
+      ankiSettings.deckName = name.trim();
+      saveAnkiSettings();
     } else {
       ankiDeckSelect.value = ankiSettings.deckName;
     }
+  } else {
+    ankiSettings.deckName = ankiDeckSelect.value;
+    saveAnkiSettings();
   }
+  renderAnkiPreview();
 });
 
-// Card settings collapse toggle
-ankiCardSettingsToggle.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const isOpen = ankiCardSettingsBody.classList.toggle('open');
-  ankiCardSettingsChevron.classList.toggle('open', isOpen);
+// Note-type select: fetch fields for the newly chosen model
+ankiModelSelect.addEventListener('change', onModelChanged);
+
+// Front/Back field selects
+ankiFrontFieldSelect.addEventListener('change', () => {
+  ankiSettings.frontFieldName = ankiFrontFieldSelect.value;
+  saveAnkiSettings();
+  validateSelectedFields();
+  renderAnkiPreview();
+});
+ankiBackFieldSelect.addEventListener('change', () => {
+  ankiSettings.backFieldName = ankiBackFieldSelect.value;
+  saveAnkiSettings();
+  validateSelectedFields();
+  renderAnkiPreview();
 });
 
-// Persist card settings whenever any input changes
+// Preset chips
+for (const btn of ankiPresetButtons) {
+  btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+}
+
+// Advanced: test connection inline
+ankiTestConnectionBtn.addEventListener('click', async () => {
+  ankiTestConnectionBtn.disabled = true;
+  const originalLabel = ankiTestConnectionBtn.textContent;
+  ankiTestConnectionBtn.textContent = 'Testing...';
+  ankiTestResult.hidden = true;
+  try {
+    const version = await ankiConnect('version');
+    ankiTestResult.textContent = `Connected. AnkiConnect v${version}`;
+    ankiTestResult.className = 'anki-modal-test-result success';
+    ankiConnected = true;
+    ankiStatusEl.className = 'anki-status-dot connected';
+    ankiStatusEl.title = 'AnkiConnect: connected';
+  } catch (err) {
+    ankiTestResult.textContent = 'Could not connect. Make sure Anki is running with AnkiConnect installed.';
+    ankiTestResult.className = 'anki-modal-test-result error';
+    ankiConnected = false;
+    ankiStatusEl.className = 'anki-status-dot disconnected';
+    ankiStatusEl.title = 'AnkiConnect: disconnected';
+  }
+  ankiTestResult.hidden = false;
+  ankiTestConnectionBtn.disabled = false;
+  ankiTestConnectionBtn.textContent = originalLabel;
+  renderConnStatusBanner();
+  updateAnkiSelectedCount();
+});
+
+// Advanced: reset to defaults
+ankiResetDefaultsBtn.addEventListener('click', resetToDefaults);
+
+// Persist card settings whenever any input changes; re-render preview; clear preset.
 function bindSettingChange(el, key, getValue) {
   el.addEventListener('change', () => {
     ankiSettings[key] = getValue(el);
+    ankiSettings.lastPresetApplied = null;
     saveAnkiSettings();
+    updatePresetChipStates();
+    renderAnkiPreview();
   });
 }
 bindSettingChange(ankiIncludeFuriganaInput, 'includeFurigana', el => el.checked);
@@ -721,23 +1216,7 @@ bindSettingChange(ankiIncludeRomajiInput, 'includeRomaji', el => el.checked);
 bindSettingChange(ankiIncludeCountInput, 'includeCount', el => el.checked);
 bindSettingChange(ankiAutoTagByTypeInput, 'autoTagByType', el => el.checked);
 bindSettingChange(ankiFuriganaFormatSelect, 'furiganaFormat', el => el.value);
-bindSettingChange(ankiModelNameInput, 'modelName', el => el.value.trim() || 'Basic');
-bindSettingChange(ankiFrontFieldInput, 'frontFieldName', el => el.value.trim() || 'Front');
-bindSettingChange(ankiBackFieldInput, 'backFieldName', el => el.value.trim() || 'Back');
 bindSettingChange(ankiCustomTagsInput, 'customTags', el => el.value);
-
-ankiSyncCancelBtn.addEventListener('click', () => {
-  ankiSettingsPanel.style.display = 'none';
-});
-
-// Close settings panel when clicking outside
-document.addEventListener('click', (e) => {
-  if (ankiSettingsPanel.style.display === 'none') return;
-  const wrapper = document.querySelector('.anki-sync-wrapper');
-  if (!wrapper.contains(e.target)) {
-    ankiSettingsPanel.style.display = 'none';
-  }
-});
 
 // Guide toggle
 ankiGuideToggle.addEventListener('click', () => {
@@ -801,6 +1280,7 @@ ankiSyncNowBtn.addEventListener('click', async () => {
   if (!deckName || deckName === '__new__') return;
 
   const total = ankiSelectedWords.size;
+  if (total === 0) return;
   console.log('[Anki] Sync Now clicked, deck:', deckName, 'words:', total);
 
   ankiSettings.deckName = deckName;
@@ -808,8 +1288,8 @@ ankiSyncNowBtn.addEventListener('click', async () => {
 
   ankiSyncNowBtn.disabled = true;
   ankiSyncCancelBtn.disabled = true;
-  ankiProgressContainer.style.display = 'block';
-  ankiSyncResult.style.display = 'none';
+  ankiProgressContainer.hidden = false;
+  ankiSyncResult.hidden = true;
   ankiProgressFill.style.width = '0%';
 
   let added = 0;
@@ -879,15 +1359,15 @@ ankiSyncNowBtn.addEventListener('click', async () => {
     if (skipped > 0) parts.push(`${skipped} already in Anki`);
     if (failed > 0) parts.push(`${failed} failed`);
 
-    ankiSyncResult.textContent = parts.join(', ');
+    ankiSyncResult.textContent = parts.join(', ') || 'Nothing to sync.';
     ankiSyncResult.className = `anki-sync-result ${failed > 0 && added === 0 ? 'error' : 'success'}`;
-    ankiSyncResult.style.display = 'block';
+    ankiSyncResult.hidden = false;
   } catch (err) {
     ankiSyncResult.textContent = `Sync failed: ${err.message}`;
     ankiSyncResult.className = 'anki-sync-result error';
-    ankiSyncResult.style.display = 'block';
+    ankiSyncResult.hidden = false;
   } finally {
-    ankiSyncNowBtn.disabled = false;
+    ankiSyncNowBtn.disabled = ankiSelectedWords.size === 0;
     ankiSyncCancelBtn.disabled = false;
   }
 });
