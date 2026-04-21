@@ -126,6 +126,60 @@
 
     <hr class="divider">
 
+    <div class="collapsible display-settings">
+      <div class="collapsible-header">
+        <div class="setting-header">
+          <span class="setting-title">Display Settings</span>
+          <span class="setting-hint">What to show in breakdowns and popovers</span>
+        </div>
+        <svg class="collapsible-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="collapsible-body">
+        <div class="mode-toggle">
+          <div class="setting-info">
+            <span class="setting-title">Reading (ふりがな)</span>
+            <span class="setting-hint">Show hiragana reading above each word</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="showReadingToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="mode-toggle">
+          <div class="setting-info">
+            <span class="setting-title">Romaji</span>
+            <span class="setting-hint">Show romanized pronunciation</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="showRomajiToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="mode-toggle">
+          <div class="setting-info">
+            <span class="setting-title">Word meaning</span>
+            <span class="setting-hint">Show per-word English meaning</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="showMeaningToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="mode-toggle">
+          <div class="setting-info">
+            <span class="setting-title">Sentence translation</span>
+            <span class="setting-hint">Show full-sentence English translation</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="showTranslationToggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
     <div class="translate-jp-section">
       <div class="setting-info">
         <span class="setting-title">Translate to Japanese</span>
@@ -167,6 +221,6 @@
       <button id="viewAllWords" class="btn btn-secondary" style="width: 100%;">View Word Frequency Dashboard</button>
     </div>
   </div>
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

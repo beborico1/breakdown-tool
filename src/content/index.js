@@ -12,6 +12,10 @@ import { initializeGoogleMeet } from './meet/index.js';
 import { initializeGoogleChat } from './chat/index.js';
 import { initializeGmail } from './gmail/index.js';
 import { initializeRedmine } from './redmine/index.js';
+import { initDisplayPreferences } from './core/display-preferences.js';
+
+// Apply display-preference classes to <html> before any surface renders.
+initDisplayPreferences();
 
 // Initialize features based on current page
 initializeGoogleMeet();

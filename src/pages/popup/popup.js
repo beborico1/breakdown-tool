@@ -1,3 +1,9 @@
+import {
+  initDisplayPreferences,
+  loadDisplayPreferences,
+  saveDisplayPreferences
+} from '../../content/core/display-preferences.js';
+
 const statusEl = document.getElementById('status');
 const copyAllBtn = document.getElementById('copyAll');
 const copyNewBtn = document.getElementById('copyNew');
@@ -658,6 +664,37 @@ loadModel();
 loadFontSize();
 loadChunkSize();
 renderCustomSites();
+
+// Display preferences toggles
+const displayToggleIds = {
+  showReading: 'showReadingToggle',
+  showRomaji: 'showRomajiToggle',
+  showMeaning: 'showMeaningToggle',
+  showTranslation: 'showTranslationToggle'
+};
+
+function syncDisplayToggles(prefs) {
+  for (const [key, id] of Object.entries(displayToggleIds)) {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!prefs[key];
+  }
+}
+
+for (const [key, id] of Object.entries(displayToggleIds)) {
+  const el = document.getElementById(id);
+  if (!el) continue;
+  el.addEventListener('change', () => {
+    saveDisplayPreferences({ [key]: el.checked });
+  });
+}
+
+loadDisplayPreferences().then(syncDisplayToggles);
+initDisplayPreferences();
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'sync' || !changes.displayPreferences) return;
+  syncDisplayToggles(changes.displayPreferences.newValue || {});
+});
 
 // Initialize popup state
 init();

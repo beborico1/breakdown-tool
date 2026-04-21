@@ -565,3 +565,23 @@ body {
 .history-container::-webkit-scrollbar-thumb:hover {
   background: #777;
 }
+
+/* Display preferences — toggles driven by classes on <html>.
+   See src/content/core/display-preferences.js. */
+html.kaigi-hide-reading .word-hiragana,
+html.kaigi-hide-reading .gcwb-word-hiragana,
+html.kaigi-hide-reading .gcwb-tooltip-reading,
+html.kaigi-hide-reading .gcwb-popover-reading { display: none; }
+
+html.kaigi-hide-romaji .word-romaji,
+html.kaigi-hide-romaji .gcwb-word-romaji,
+html.kaigi-hide-romaji .gcwb-tooltip-romaji,
+html.kaigi-hide-romaji .gcwb-popover-romaji { display: none; }
+
+html.kaigi-hide-meaning .word-english,
+html.kaigi-hide-meaning .gcwb-word-english,
+html.kaigi-hide-meaning .gcwb-tooltip-meaning,
+html.kaigi-hide-meaning .gcwb-popover-meaning { display: none; }
+
+html.kaigi-hide-translation .breakdown-translation,
+html.kaigi-hide-translation .gcwb-inline-translation { display: none; }

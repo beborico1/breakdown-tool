@@ -1,8 +1,11 @@
 // ============================================
 // Live Japanese Transcription Page
-// Self-contained (no imports) — matches popup.js / frequency.js pattern
 // Uses MediaRecorder + Gemini audio API for transcription + analysis
 // ============================================
+
+import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+
+initDisplayPreferences();
 
 // --- DOM refs ---
 const micBtn = document.getElementById('micBtn');

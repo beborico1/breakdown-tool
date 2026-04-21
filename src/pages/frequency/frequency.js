@@ -1,3 +1,7 @@
+import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+
+initDisplayPreferences();
+
 // DOM Elements
 const totalWordsEl = document.getElementById('totalWordsValue');
 const uniqueWordsEl = document.getElementById('uniqueWordsValue');
