@@ -195,11 +195,17 @@ function escapeHtml(text) {
  * @param {Object} breakdownData - Breakdown data from API
  */
 function renderInlineContent(messageEl, breakdownData) {
+  let prevType = null;
+  let tone = 0;
   const wordsHtml = breakdownData.words.map((word, index) => {
     const typeClass = getWordTypeClass(word.type);
     const readingText = (word.reading || '').trim() || word.japanese;
     const romajiText = (word.romaji || '').trim() || '-';
     const englishText = (word.english || '').trim() || '-';
+
+    tone = (word.type && word.type === prevType) ? 1 - tone : 0;
+    const toneClass = tone === 1 ? ' gcwb-tone-alt' : '';
+    prevType = word.type;
 
     return `
       <span class="gcwb-word" data-word="${escapeHtml(word.japanese)}"
@@ -208,7 +214,7 @@ function renderInlineContent(messageEl, breakdownData) {
             data-english="${escapeHtml(englishText)}"
             data-type="${escapeHtml(typeClass)}"
             style="animation-delay: ${index * 0.03}s">
-        <span class="gcwb-word-text gcwb-type-${typeClass}">${escapeHtml(word.japanese)}</span>
+        <span class="gcwb-word-text gcwb-type-${typeClass}${toneClass}">${escapeHtml(word.japanese)}</span>
       </span>
     `;
   }).join('');

@@ -697,6 +697,17 @@
 .gcwb-type-copula { color: #2DD4BF; }
 .gcwb-type-other { color: #9CA3AF; }
 
+/* Alternate tones for consecutive same-type words (set by render loop) */
+.gcwb-type-noun.gcwb-tone-alt       { color: #1A5EC4; }
+.gcwb-type-verb.gcwb-tone-alt       { color: #1E7A3B; }
+.gcwb-type-particle.gcwb-tone-alt   { color: #B22F27; }
+.gcwb-type-adjective.gcwb-tone-alt  { color: #C89702; }
+.gcwb-type-adverb.gcwb-tone-alt     { color: #7C6BD4; }
+.gcwb-type-counter.gcwb-tone-alt    { color: #3B7FCC; }
+.gcwb-type-expression.gcwb-tone-alt { color: #C24D8C; }
+.gcwb-type-auxiliary.gcwb-tone-alt  { color: #C84F4F; }
+.gcwb-type-copula.gcwb-tone-alt     { color: #1E9E8E; }
+
 /* Translation Section */
 .gcwb-overlay-translation {
   color: #E8EAED;

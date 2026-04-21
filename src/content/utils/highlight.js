@@ -64,6 +64,8 @@ export function applyHighlightsToTextNode(textNode, matches) {
 
   let currentNode = textNode;
   let consumedOffset = 0;
+  let prevMatch = null;
+  let tone = 0;
 
   for (const match of matches) {
     const relativeStart = match.start - consumedOffset;
@@ -82,7 +84,12 @@ export function applyHighlightsToTextNode(textNode, matches) {
     // Create the highlight span
     const typeClass = getWordTypeClass(match.data.type);
     const span = document.createElement('span');
-    span.className = `gcwb-cached-word gcwb-type-${typeClass}`;
+    const sameRun = prevMatch
+      && match.start === prevMatch.end
+      && match.data.type
+      && match.data.type === prevMatch.data.type;
+    tone = sameRun ? 1 - tone : 0;
+    span.className = `gcwb-cached-word gcwb-type-${typeClass}${tone === 1 ? ' gcwb-tone-alt' : ''}`;
     span.dataset.word = match.word;
     span.dataset.reading = match.data.reading || '';
     span.dataset.romaji = match.data.romaji || '';
@@ -95,5 +102,6 @@ export function applyHighlightsToTextNode(textNode, matches) {
 
     // Continue processing from the remaining text after the match
     currentNode = afterNode;
+    prevMatch = match;
   }
 }
