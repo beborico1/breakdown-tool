@@ -22,7 +22,7 @@ export function showCustomContextMenu(event, messageEl, text, options = {}) {
   // Create context menu
   const menu = document.createElement('div');
   menu.className = 'gcwb-context-menu';
-  if (isPageLightMode()) menu.classList.add('gcwb-light');
+  if (isPageLightMode(messageEl)) menu.classList.add('gcwb-light');
 
   // Build menu items
   let menuHTML = `

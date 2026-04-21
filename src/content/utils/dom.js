@@ -3,12 +3,44 @@
  * the computed background-color of document.body.
  * @returns {boolean}
  */
-export function isPageLightMode() {
-  const bg = window.getComputedStyle(document.body).backgroundColor;
-  const match = bg.match(/\d+/g);
-  if (!match || match.length < 3) return false;
-  const [r, g, b] = match.map(Number);
-  return (0.299 * r + 0.587 * g + 0.114 * b) > 128;
+export function isPageLightMode(referenceEl = null) {
+  // Build referenceEl → root ancestor chain plus body/html as fallbacks.
+  const chain = [];
+  let el = referenceEl;
+  while (el) { chain.push(el); el = el.parentElement; }
+  for (const fb of [document.body, document.documentElement]) {
+    if (fb && !chain.includes(fb)) chain.push(fb);
+  }
+
+  // First opaque background wins. Skip semi-transparent backgrounds — they're
+  // hover/selection overlays (e.g. rgba(0,0,0,0.08) on a right-clicked
+  // message) that would invert the detected theme if we read them as solid.
+  const OPAQUE = 0.5;
+  for (const node of chain) {
+    const bg = window.getComputedStyle(node).backgroundColor;
+    const m = bg.match(/[\d.]+/g);
+    if (!m || m.length < 3) continue;
+    const [r, g, b, a = 1] = m.map(Number);
+    if (a < OPAQUE) continue;
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 128;
+  }
+
+  // Inside threads everything above the message can be transparent. Fall back
+  // to text colour, which Gmail/Chat set per theme. Start from
+  // referenceEl.parentElement so we skip the popover's own anchor (e.g.
+  // .gcwb-word, which we colour ourselves via .gcwb-type-*).
+  let scan = referenceEl?.parentElement || document.body;
+  while (scan) {
+    const fg = window.getComputedStyle(scan).color;
+    const m = fg.match(/[\d.]+/g);
+    if (m && m.length >= 3) {
+      const [r, g, b, a = 1] = m.map(Number);
+      if (a >= OPAQUE) return (0.299 * r + 0.587 * g + 0.114 * b) < 128;
+    }
+    scan = scan.parentElement;
+  }
+
+  return !window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
 /**

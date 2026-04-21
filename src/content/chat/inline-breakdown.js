@@ -271,7 +271,7 @@ function showInlinePopover(wordEl) {
   // Create popover element
   const popover = document.createElement('div');
   popover.className = 'gcwb-word-popover';
-  if (isPageLightMode()) popover.classList.add('gcwb-light');
+  if (isPageLightMode(wordEl)) popover.classList.add('gcwb-light');
 
   popover.innerHTML = `
     <div class="gcwb-popover-arrow"></div>

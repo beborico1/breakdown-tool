@@ -41,7 +41,7 @@ function showTooltip(wordEl) {
   // Create tooltip element
   const tooltip = document.createElement('div');
   tooltip.className = 'gcwb-word-tooltip';
-  if (isPageLightMode()) tooltip.classList.add('gcwb-light');
+  if (isPageLightMode(wordEl)) tooltip.classList.add('gcwb-light');
 
   const typeClass = getWordTypeClass(type);
   const readingDisplay = reading && reading !== word ? reading : '';
