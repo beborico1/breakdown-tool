@@ -165,14 +165,70 @@ const typeColors = {
 };
 
 /**
- * Load data from chrome.storage.local
+ * Load data from chrome.storage.local.
+ * Backfills any wordCache entries missing from wordFrequencyData so the
+ * dashboard reflects words translated in Chat/Gmail, not just Meet.
  */
 async function loadData() {
-  return new Promise(resolve => {
-    chrome.storage.local.get(['wordFrequencyData'], (result) => {
-      resolve(result.wordFrequencyData || null);
-    });
+  const result = await new Promise(resolve => {
+    chrome.storage.local.get(['wordFrequencyData', 'wordCache'], resolve);
   });
+
+  const existingData = result.wordFrequencyData;
+  const wordCache = result.wordCache;
+
+  const hasExistingWords = existingData?.words && Object.keys(existingData.words).length > 0;
+  const hasCacheEntries = wordCache && typeof wordCache === 'object' && Object.keys(wordCache).length > 0;
+
+  if (!hasExistingWords && !hasCacheEntries) return null;
+
+  const data = existingData || {
+    version: 1,
+    lastUpdated: Date.now(),
+    totalWords: 0,
+    uniqueWords: 0,
+    words: {}
+  };
+
+  let addedCount = 0;
+
+  if (hasCacheEntries) {
+    for (const [japanese, entry] of Object.entries(wordCache)) {
+      const type = entry.type || 'other';
+      const key = `${japanese}|${type}`;
+      if (data.words[key]) continue;
+
+      const ts = entry.lastUsed || Date.now();
+      data.words[key] = {
+        japanese,
+        reading: entry.reading || '',
+        romaji: entry.romaji || '',
+        english: entry.english || '',
+        type,
+        count: 1,
+        firstSeen: ts,
+        lastSeen: ts
+      };
+      addedCount++;
+    }
+  }
+
+  if (addedCount > 0) {
+    let totalWords = 0;
+    for (const word of Object.values(data.words)) {
+      totalWords += word.count || 0;
+    }
+    data.totalWords = totalWords;
+    data.uniqueWords = Object.keys(data.words).length;
+    data.lastUpdated = Date.now();
+
+    await new Promise(resolve => {
+      chrome.storage.local.set({ wordFrequencyData: data }, resolve);
+    });
+    console.log(`[Frequency] Backfilled ${addedCount} words from wordCache`);
+  }
+
+  return data;
 }
 
 /**
