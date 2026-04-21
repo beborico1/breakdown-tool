@@ -8,6 +8,7 @@ import { getWordTypeClass } from '../utils/text.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { cacheWords } from '../core/word-cache.js';
+import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { forceHideTooltip } from './word-tooltip.js';
 import { getPreHighlightHTML as getChatPreHighlightHTML } from './word-highlight.js';
 import { getPreHighlightHTML as getRedminePreHighlightHTML } from '../redmine/word-highlight.js';
@@ -109,6 +110,7 @@ export async function showInlineBreakdown(messageEl, text) {
       // Persist individual words to word cache for future highlighting
       if (breakdownData.words && breakdownData.words.length > 0) {
         cacheWords(breakdownData.words);
+        recordWordFrequencies(breakdownData.words, contentKey);
       }
     }
 
