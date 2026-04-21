@@ -9,12 +9,16 @@ import { getWordTypeClass } from './text.js';
  * Collect text nodes from a root element using TreeWalker, skipping:
  * - Nodes inside the exclude container (e.g. quoted blocks)
  * - Nodes inside hidden spans (display: none)
- * - Nodes inside already-highlighted spans (.gcwb-cached-word)
+ * - Nodes inside already-highlighted spans (.gcwb-cached-word) — unless
+ *   `options.includeHighlighted` is true (used by plain-text extractors that
+ *   need the full original message regardless of highlighting state)
  * @param {HTMLElement} root - Root element to walk
  * @param {HTMLElement|null} excludeContainer - Container to skip
+ * @param {{includeHighlighted?: boolean}} [options]
  * @returns {Text[]} - Array of text nodes to process
  */
-export function collectTextNodes(root, excludeContainer) {
+export function collectTextNodes(root, excludeContainer, options = {}) {
+  const { includeHighlighted = false } = options;
   const textNodes = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -29,8 +33,9 @@ export function collectTextNodes(root, excludeContainer) {
             parentEl.closest('span[style*="display: none"], span[style*="display:none"]')) {
           return NodeFilter.FILTER_REJECT;
         }
-        // Skip nodes inside already-highlighted spans
-        if (parentEl.closest('.gcwb-cached-word')) {
+        // Skip nodes inside already-highlighted spans (highlighter-only — text
+        // extractors must opt in via includeHighlighted to receive the full text)
+        if (!includeHighlighted && parentEl.closest('.gcwb-cached-word')) {
           return NodeFilter.FILTER_REJECT;
         }
       }

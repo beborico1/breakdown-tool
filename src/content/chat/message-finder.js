@@ -1,4 +1,5 @@
 import { debugLog } from '../core/debug.js';
+import { collectTextNodes } from '../utils/highlight.js';
 
 /**
  * Detect if current page is Google Chat
@@ -74,44 +75,86 @@ export function findChatMessageElement(target) {
 }
 
 /**
+ * Walk up from a node until its parent is root, returning the direct child of
+ * root that contains it. Returns null if root never appears in the ancestor chain.
+ */
+function walkUpToDirectChild(node, root) {
+  let current = node;
+  while (current && current.parentElement && current.parentElement !== root) {
+    current = current.parentElement;
+  }
+  return current && current.parentElement === root ? current : null;
+}
+
+/**
+ * Find the quoted-reply preview container inside a Google Chat message.
+ * Returns the direct child of messageEl that wraps the quoted preview, or null.
+ *
+ * Google wraps the preview in a div with aria-hidden="true" whose descendants
+ * include spans with the accessibility text "Quoted" / "End Quote". Class names
+ * (wVNE5, Oq47ld, Lphf0c, cPjwNc, …) are obfuscated and change, so we match on
+ * the stable semantic cues instead, tried in order:
+ *   1. <blockquote> or [role="blockquote"].
+ *   2. Element with aria-label matching /quot|reply/i.
+ *   3. Element whose trimmed text is exactly "quoted" / "end quote" — handles
+ *      both `<span style="display:none">` and class-hidden variants.
+ *   4. Direct child of messageEl marked aria-hidden="true" with substantial text.
+ *   5. Direct child containing an <img> (quoted speaker avatar) plus text.
+ */
+export function findQuotedBlockContainer(messageEl) {
+  // 1. Semantic blockquote
+  const blockquote = messageEl.querySelector('blockquote, [role="blockquote"]');
+  if (blockquote) {
+    const child = walkUpToDirectChild(blockquote, messageEl);
+    if (child) return child;
+  }
+
+  // 2. aria-label hint
+  for (const el of messageEl.querySelectorAll('[aria-label]')) {
+    if (/quot|reply/i.test(el.getAttribute('aria-label') || '')) {
+      const child = walkUpToDirectChild(el, messageEl);
+      if (child) return child;
+    }
+  }
+
+  // 3. Accessibility marker text, regardless of how it's hidden
+  for (const el of messageEl.querySelectorAll('span')) {
+    const text = el.textContent?.trim().toLowerCase() || '';
+    if (text === 'quoted' || text === 'end quote' || text === 'quoted text' || text.startsWith('end quote')) {
+      const child = walkUpToDirectChild(el, messageEl);
+      if (child) return child;
+    }
+  }
+
+  // 4. aria-hidden direct child with visible text (Google's current wrapper)
+  for (const child of messageEl.children) {
+    if (child.getAttribute?.('aria-hidden') === 'true' && (child.textContent?.trim().length || 0) > 0) {
+      return child;
+    }
+  }
+
+  // 5. Structural fallback: direct child with an avatar image and some text
+  for (const child of messageEl.children) {
+    if (child.querySelector?.('img') && (child.textContent?.trim().length || 0) > 0) {
+      return child;
+    }
+  }
+
+  debugLog('GCWB-FIND', 'No quoted block detected; messageEl outerHTML:', messageEl.outerHTML.slice(0, 600));
+  return null;
+}
+
+/**
  * Extract text from a Google Chat message element.
- * Strips hidden accessibility spans and quoted reply blocks so only
- * the actual reply text is returned.
+ * Uses the same TreeWalker + exclusion pattern as highlighting so nested
+ * quoted previews and hidden accessibility spans are reliably dropped.
  * @param {HTMLElement} messageEl - Message element
  * @returns {string} - Message text
  */
 export function extractChatMessageText(messageEl) {
-  // Clone to avoid modifying original
-  const clone = messageEl.cloneNode(true);
-
-  // Remove hidden spans (accessibility text like "Quoted", "End Quote")
-  clone.querySelectorAll('span[style*="display: none"], span[style*="display:none"]').forEach(el => el.remove());
-
-  // Remove quoted block container if present.
-  // Google Chat quoted replies have hidden spans with "Quoted"/"End Quote" text.
-  // After removing hidden spans above, detect the quoted container by looking for
-  // a direct child that previously contained those markers. We use the original
-  // element to find the quoted block, then remove the corresponding child from the clone.
-  const hiddenSpans = messageEl.querySelectorAll('span[style*="display: none"], span[style*="display:none"]');
-  for (const span of hiddenSpans) {
-    const text = span.textContent?.trim().toLowerCase() || '';
-    if (text === 'quoted' || text === 'end quote' || text.includes('end quote')) {
-      // Walk up to direct child of messageEl
-      let node = span;
-      while (node.parentElement && node.parentElement !== messageEl) {
-        node = node.parentElement;
-      }
-      if (node.parentElement === messageEl) {
-        // Find the same child in the clone by index
-        const children = Array.from(messageEl.children);
-        const index = children.indexOf(node);
-        if (index >= 0 && clone.children[index]) {
-          clone.children[index].remove();
-        }
-        break;
-      }
-    }
-  }
-
-  return clone.textContent?.trim() || '';
+  const quoted = findQuotedBlockContainer(messageEl);
+  // includeHighlighted: cached-word highlight spans must NOT be stripped here,
+  // or the LLM receives a mutilated message and produces a nonsense translation.
+  const textNodes = collectTextNodes(messageEl, quoted, { includeHighlighted: true });
+  return textNodes.map(n => n.nodeValue).join('').trim();
 }

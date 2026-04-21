@@ -2,7 +2,7 @@ import { debugLog } from '../core/debug.js';
 import { getCachedWords } from '../core/word-cache.js';
 import { inlineBreakdownState } from '../core/state.js';
 import { collectTextNodes, applyHighlightsToTextNode } from '../utils/highlight.js';
-import { findChatMessageElement, extractChatMessageText } from './message-finder.js';
+import { findChatMessageElement, extractChatMessageText, findQuotedBlockContainer } from './message-finder.js';
 
 /**
  * Word Highlight Module
@@ -12,31 +12,6 @@ import { findChatMessageElement, extractChatMessageText } from './message-finder
 
 // Track highlighted messages to avoid re-processing
 const highlightedMessages = new WeakMap();
-
-/**
- * Find the outermost quoted block container within a message element.
- * Google Chat reply messages have hidden spans containing "Quoted" / "End Quote"
- * accessibility text. We find those, then walk up to the direct child of messageEl.
- * @param {HTMLElement} messageEl - Message element
- * @returns {HTMLElement|null} - The quoted block container, or null
- */
-function findQuotedBlockContainer(messageEl) {
-  const hiddenSpans = messageEl.querySelectorAll('span[style*="display: none"], span[style*="display:none"]');
-  for (const span of hiddenSpans) {
-    const text = span.textContent?.trim().toLowerCase() || '';
-    if (text === 'quoted' || text === 'end quote' || text.includes('end quote')) {
-      // Walk up to the direct child of messageEl
-      let node = span;
-      while (node.parentElement && node.parentElement !== messageEl) {
-        node = node.parentElement;
-      }
-      if (node.parentElement === messageEl) {
-        return node;
-      }
-    }
-  }
-  return null;
-}
 
 /**
  * Highlight known words in a message element using DOM-preserving TreeWalker.
