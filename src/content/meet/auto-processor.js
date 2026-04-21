@@ -46,7 +46,7 @@ export async function autoProcessPreviousCard() {
   }
 
   // Find the message element
-  const messageEl = previousContainer.querySelector('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-display])');
+  const messageEl = previousContainer.querySelector('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-colored])');
   if (!messageEl) {
     debugLog('AUTO-PROCESS', 'No message element found in previous card');
     return;

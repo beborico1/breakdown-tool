@@ -333,98 +333,64 @@
    MINIMALISTIC MODE STYLES
    ============================================ */
 
-/* Base character span */
-.mm-char {
-  position: relative;
-  display: inline;
-  cursor: help;
+/* Inline colored word span, painted directly into the original caption
+   element. The surrounding plain text (spaces, punctuation between words)
+   is left unwrapped so the visible text is identical to Meet's original. */
+.mm-word {
+  transition: background-color 0.15s ease;
+  cursor: default;
 }
 
-/* Pending state - white text for unprocessed characters */
-.mm-pending {
-  color: #FFFFFF !important;
-}
+.mm-word.mm-type-noun       { color: #4285F4 !important; }
+.mm-word.mm-type-verb       { color: #34A853 !important; }
+.mm-word.mm-type-particle   { color: #EA4335 !important; }
+.mm-word.mm-type-adjective  { color: #FBBC04 !important; }
+.mm-word.mm-type-adverb     { color: #A78BFA !important; }
+.mm-word.mm-type-counter    { color: #60A5FA !important; }
+.mm-word.mm-type-expression { color: #F472B6 !important; }
+.mm-word.mm-type-auxiliary  { color: #F87171 !important; }
+.mm-word.mm-type-copula     { color: #2DD4BF !important; }
+.mm-word.mm-type-other      { color: inherit; }
 
-/* Processing state - gray text with pulse animation */
-.mm-processing {
-  color: #9CA3AF !important;
-  animation: mm-pulse 1.2s ease-in-out infinite;
-}
+/* Alternate tones for consecutive same-type words (set by render loop) */
+.mm-word.mm-type-noun.mm-tone-alt       { color: #1A5EC4 !important; }
+.mm-word.mm-type-verb.mm-tone-alt       { color: #1E7A3B !important; }
+.mm-word.mm-type-particle.mm-tone-alt   { color: #B22F27 !important; }
+.mm-word.mm-type-adjective.mm-tone-alt  { color: #C89702 !important; }
+.mm-word.mm-type-adverb.mm-tone-alt     { color: #7C6BD4 !important; }
+.mm-word.mm-type-counter.mm-tone-alt    { color: #3B7FCC !important; }
+.mm-word.mm-type-expression.mm-tone-alt { color: #C24D8C !important; }
+.mm-word.mm-type-auxiliary.mm-tone-alt  { color: #C84F4F !important; }
+.mm-word.mm-type-copula.mm-tone-alt     { color: #1E9E8E !important; }
 
+/* Kept: sentence-processor's processing-indicator uses this animation name. */
 @keyframes mm-pulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
 
-/* Word type colors for processed characters */
-.mm-type-noun { color: #4285F4 !important; }
-.mm-type-verb { color: #34A853 !important; }
-.mm-type-particle { color: #EA4335 !important; }
-.mm-type-adjective { color: #FBBC04 !important; }
-.mm-type-adverb { color: #A78BFA !important; }
-.mm-type-counter { color: #60A5FA !important; }
-.mm-type-expression { color: #F472B6 !important; }
-.mm-type-auxiliary { color: #F87171 !important; }
-.mm-type-copula { color: #2DD4BF !important; }
-.mm-type-other { color: #9CA3AF !important; }
-
-/* Tooltip styles using ::after pseudo-element */
-.mm-char[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 50%;
-  bottom: 100%;
-  transform: translateX(-50%) translateY(-4px);
+/* Floating breakdown card shown on hover over a processed caption. */
+.mm-hover-card {
+  position: fixed;
+  z-index: 99999;
   background: #1F1F1F;
-  color: #E8EAED;
-  font-size: 12px;
-  font-weight: 400;
-  padding: 6px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-  z-index: 10000;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  max-width: min(640px, 90vw);
+  max-height: 80vh;
+  overflow: auto;
+  font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic Pro', 'Meiryo', sans-serif;
+  display: none;
+  pointer-events: auto;
 }
 
-.mm-char[data-tooltip]:hover::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(-8px);
+.mm-hover-card.mm-visible {
+  display: block;
 }
 
-/* Sentence-end period (。) with full translation tooltip */
-.mm-sentence-end[data-sentence-translation]::after {
-  content: attr(data-sentence-translation);
-  max-width: 350px;
-  white-space: normal;
-  text-align: center;
-  line-height: 1.4;
-}
-
-/* Minimalistic mode container styling */
-.mm-container {
-  font-size: inherit;
-  line-height: inherit;
-}
-
-/* Hide original text when minimalistic mode is active */
-[data-mm-active] .ygicle.VbkSUe:not([data-mm-display]) {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  height: 0;
-  overflow: hidden;
-}
-
-/* Minimalistic display element */
-.mm-display {
-  display: inline;
+.mm-hover-card .breakdown-wrapper {
+  margin-top: 0;
 }
 
 /* ============================================

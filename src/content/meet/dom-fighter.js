@@ -16,7 +16,7 @@ import {
 import { findCachedTranslation } from '../core/cache.js';
 import { hideOriginalElement } from '../utils/dom.js';
 import { renderBreakdownPanel, applyFontSizeToWrapper } from './panel-mode.js';
-import { renderMinimalisticCaption, handleMinimalisticTextUpdate } from './minimalistic-mode.js';
+import { paintWordColoring } from './minimalistic-mode.js';
 import { updateBreakdownDelta } from './panel-mode.js';
 import { getWordTypeClass } from '../utils/text.js';
 import { updateVisualDelta } from './delta-translation.js';
@@ -203,10 +203,6 @@ export function handleMutations(mutations, observerConfig) {
           if (state.sentenceState) {
             // Handle sentence-level processing text updates
             handleSentenceTextUpdate(container);
-          } else if (state.minimalisticState) {
-            // Handle minimalistic mode text updates
-            const newText = shadowEl.textContent?.trim() || '';
-            handleMinimalisticTextUpdate(container, newText);
           } else if (state.breakdownData) {
             // Show new text in breakdown panel without processing
             updateBreakdownDelta(container);
@@ -214,6 +210,8 @@ export function handleMutations(mutations, observerConfig) {
             // Only update visual display - user must click to translate
             updateVisualDelta(container);
           }
+          // Minimalistic mode only targets already-complete previous captions,
+          // so we don't expect live text growth on those containers.
         }
       }
     }
@@ -337,8 +335,8 @@ export function handleMutations(mutations, observerConfig) {
   for (const [container, state] of translationState) {
     // (A) Remove any original caption elements Meet re-inserted
     // BUT keep shadow original elements (they receive text updates)
-    // Also keep mm-display elements for minimalistic mode
-    const originals = container.querySelectorAll('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-display]):not([data-processing])');
+    // Also keep minimalistic-colored elements (we painted word spans into them)
+    const originals = container.querySelectorAll('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-colored]):not([data-processing])');
     if (originals.length > 0) {
       if (!didFight) { observer.disconnect(); didFight = true; }
       for (const orig of originals) {
@@ -376,12 +374,12 @@ export function handleMutations(mutations, observerConfig) {
       rebuildSentenceWrapper(container, state);
     }
 
-    // (E) Re-render minimalistic display if needed
-    if (state.minimalisticState && state.translatedEl && state.breakdownData) {
-      // Check if display element lost its content (Meet might have cleared it)
-      if (!state.translatedEl.querySelector('.mm-char')) {
+    // (E) Re-paint minimalistic word coloring if Meet stripped our spans.
+    if (state.minimalisticState && state.breakdownData && state.shadowOriginalEl) {
+      const el = state.shadowOriginalEl;
+      if (el.hasAttribute('data-mm-colored') && !el.querySelector('.mm-word')) {
         if (!didFight) { observer.disconnect(); didFight = true; }
-        renderMinimalisticCaption(state.translatedEl, state.originalText, state.minimalisticState);
+        paintWordColoring(el, state.originalText, state.breakdownData.words);
       }
     }
 

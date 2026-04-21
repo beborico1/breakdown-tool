@@ -32,30 +32,22 @@ export function applyWordBlockFontSize(baseFontSize) {
 }
 
 /**
- * Render the breakdown panel for a caption
- * @param {HTMLElement} container - Caption container element
+ * Build a detached .breakdown-wrapper element for a breakdown.
+ * Used both inline (panel mode) and as the body of the hover card.
  * @param {Object} breakdownData - Breakdown data from API
- * @param {string} speakerName - Speaker name
- * @param {boolean} isExpanded - Whether panel should be expanded (default: true)
+ * @param {boolean} isExpanded - Whether the wrapper should be expanded
+ * @returns {HTMLElement}
  */
-export function renderBreakdownPanel(container, breakdownData, speakerName, isExpanded = true) {
-  // Remove any existing breakdown panel
-  const existingPanel = container.querySelector('.breakdown-wrapper');
-  if (existingPanel) {
-    existingPanel.remove();
-  }
-
+export function buildBreakdownPanelElement(breakdownData, isExpanded = true) {
   const panel = document.createElement('div');
   panel.className = 'breakdown-wrapper';
   panel.setAttribute('data-expanded', isExpanded ? 'true' : 'false');
 
-  // Pending text element (for incoming unprocessed text)
   const pendingDiv = document.createElement('div');
   pendingDiv.className = 'breakdown-pending';
-  pendingDiv.style.display = 'none'; // Hidden until there's new text
+  pendingDiv.style.display = 'none';
   panel.appendChild(pendingDiv);
 
-  // Word breakdown - append directly to panel (no flow wrapper)
   breakdownData.words.forEach(word => {
     const block = document.createElement('div');
     block.className = 'word-block';
@@ -70,16 +62,30 @@ export function renderBreakdownPanel(container, breakdownData, speakerName, isEx
     panel.appendChild(block);
   });
 
-  // Full translation
   const translationDiv = document.createElement('div');
   translationDiv.className = 'breakdown-translation';
   translationDiv.textContent = `"${breakdownData.translation}"`;
   panel.appendChild(translationDiv);
 
-  // Apply current font size setting
   applyFontSizeToWrapper(panel, wordBlockFontSize);
 
-  // Insert panel into container
+  return panel;
+}
+
+/**
+ * Render the breakdown panel inline inside a caption container.
+ * @param {HTMLElement} container - Caption container element
+ * @param {Object} breakdownData - Breakdown data from API
+ * @param {string} speakerName - Speaker name
+ * @param {boolean} isExpanded - Whether panel should be expanded (default: true)
+ */
+export function renderBreakdownPanel(container, breakdownData, speakerName, isExpanded = true) {
+  const existingPanel = container.querySelector('.breakdown-wrapper');
+  if (existingPanel) {
+    existingPanel.remove();
+  }
+
+  const panel = buildBreakdownPanelElement(breakdownData, isExpanded);
   container.appendChild(panel);
 }
 

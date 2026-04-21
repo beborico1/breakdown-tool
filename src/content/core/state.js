@@ -6,8 +6,9 @@ export function setLastCopiedIndex(value) {
   lastCopiedIndex = value;
 }
 
-// Minimalistic mode state
-export let minimalisticModeEnabled = false;
+// Minimalistic mode state (default on: original text is kept, words colored
+// in-place, and a floating breakdown card appears on hover)
+export let minimalisticModeEnabled = true;
 export function setMinimalisticModeEnabled(value) {
   minimalisticModeEnabled = value;
 }

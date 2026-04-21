@@ -12,7 +12,6 @@ import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
 import { renderBreakdownPanel, reprocessBreakdown } from './panel-mode.js';
 import { queueDeltaTranslation } from './delta-translation.js';
-import { handleMinimalisticCaptionClick } from './minimalistic-mode.js';
 
 /**
  * Remove overlay and clean up translation state for a container
@@ -82,9 +81,8 @@ export async function handleCaptionClick(event) {
     return;
   }
 
-  // Branch based on minimalistic mode
+  // In minimalistic mode, hovering shows the breakdown card — click is a no-op.
   if (minimalisticModeEnabled) {
-    handleMinimalisticCaptionClick(event, container, removeOverlay);
     return;
   }
 

@@ -23,7 +23,7 @@ const SENTENCE_ENDERS = /[。！？]/;
  * @param {HTMLElement} container
  */
 export function initializeSentenceProcessing(container) {
-  const messageEl = container.querySelector('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-display])');
+  const messageEl = container.querySelector('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-colored])');
   if (!messageEl) return;
 
   const nameEl = container.querySelector('.NWpY1d');
