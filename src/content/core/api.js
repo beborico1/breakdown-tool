@@ -155,6 +155,7 @@ Text: ${text}`;
         generationConfig: {
           temperature: 0.1,
           maxOutputTokens: 65536,
+          responseMimeType: 'application/json',
         }
       })
     }
@@ -309,6 +310,7 @@ Important:
         generationConfig: {
           temperature: 0.1,
           maxOutputTokens: 65536,
+          responseMimeType: 'application/json',
         }
       })
     }
