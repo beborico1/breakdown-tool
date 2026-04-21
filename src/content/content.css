@@ -1282,10 +1282,17 @@
   background: #3c1111;
   color: #f4a0a0;
   border: 1px solid rgba(234, 67, 53, 0.3);
+  top: 24px;
+  bottom: auto;
+  animation-name: gcwbToastEnterTop;
 }
 
 .gcwb-toast-exit {
   animation: gcwbToastExit 0.2s ease-in forwards;
+}
+
+.gcwb-toast-error.gcwb-toast-exit {
+  animation: gcwbToastExitTop 0.2s ease-in forwards;
 }
 
 @keyframes gcwbToastEnter {
@@ -1307,6 +1314,28 @@
   to {
     opacity: 0;
     transform: translateX(-50%) translateY(12px);
+  }
+}
+
+@keyframes gcwbToastEnterTop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes gcwbToastExitTop {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
   }
 }
 
