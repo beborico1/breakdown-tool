@@ -25,7 +25,7 @@ export const translationState = new Map();
 export const DELTA_DEBOUNCE_MS = 500;
 
 // Sentence-level processing debounce (wait for speech recognition to settle)
-export const SENTENCE_DEBOUNCE_MS = 400;
+export const SENTENCE_DEBOUNCE_MS = 800;
 export const pendingDeltas = new Map();
 
 // Cache translations by content key (survives container replacement)
@@ -95,6 +95,12 @@ export function setWordBlockFontSize(value) { wordBlockFontSize = value; }
 // Sentence chunk size (process every N sentence-ending marks)
 export let sentenceChunkSize = 2;
 export function setSentenceChunkSize(value) { sentenceChunkSize = value; }
+
+// How many most-recent sentences to leave unprocessed while the speech engine
+// may still rewrite them. Minimalistic-incremental only processes sentences
+// older than this buffer, so colors don't churn on live captions.
+export let sentenceStabilityBuffer = 3;
+export function setSentenceStabilityBuffer(value) { sentenceStabilityBuffer = value; }
 
 // Google Chat state
 export let activeGcwbOverlay = null;

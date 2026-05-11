@@ -350,6 +350,81 @@ Important:
 }
 
 /**
+ * Fast transcribe-only call: returns just the Japanese transcription text
+ * (no breakdown, no translation) so the UI can show gray text immediately
+ * while the full breakdown call is still in flight.
+ * @param {string} base64Audio - Base64-encoded audio data
+ * @param {string} mimeType - Audio MIME type (e.g., 'audio/webm;codecs=opus')
+ * @returns {Promise<string>} - Raw Japanese transcription text
+ */
+export async function transcribeAudioWithGemini(base64Audio, mimeType) {
+  const apiKey = await getApiKey();
+
+  if (!apiKey) {
+    throw new Error('No API key. Set it in the extension popup.');
+  }
+
+  const model = await getModel();
+  const callNum = incrementApiCallCount();
+
+  const prompt = `Transcribe this Japanese audio. Output ONLY the transcribed Japanese text, nothing else. No translation, no explanation, no quotes, no markdown. If no Japanese speech is detected, output an empty string.`;
+
+  debugLog('API-TRANSCRIBE', `Call #${callNum}`);
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Audio
+              }
+            },
+            {
+              text: prompt
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 2048,
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    debugLog('API-TRANSCRIBE', 'Error response:', error);
+    throw new Error(error.error?.message || 'Transcription failed');
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  const usageMetadata = data.usageMetadata;
+  if (usageMetadata?.totalTokenCount) {
+    updateTokenUsage(usageMetadata.totalTokenCount);
+  }
+
+  if (text === undefined || text === null) {
+    debugLog('API-TRANSCRIBE', 'No response text:', data);
+    throw new Error('No transcription returned');
+  }
+
+  const cleaned = text.trim().replace(/^["「『]|["」』]$/g, '').trim();
+  debugLog('API-TRANSCRIBE', `OUTPUT (${cleaned.length} chars):`, cleaned);
+  return cleaned;
+}
+
+/**
  * Translate text using Gemini 2.5 Flash
  * @param {string} text - Text to translate
  * @param {Object} options - Translation options

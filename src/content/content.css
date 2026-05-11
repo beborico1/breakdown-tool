@@ -333,12 +333,25 @@
    MINIMALISTIC MODE STYLES
    ============================================ */
 
+/* Pending/unprocessed text in minimalistic mode — gray until Gemini returns.
+   Analyzed words override via .mm-word.mm-type-* (higher specificity + !important). */
+[data-mm-colored] {
+  color: #9CA3AF !important;
+}
+
 /* Inline colored word span, painted directly into the original caption
    element. The surrounding plain text (spaces, punctuation between words)
    is left unwrapped so the visible text is identical to Meet's original. */
 .mm-word {
   transition: background-color 0.15s ease;
   cursor: default;
+  pointer-events: auto;
+}
+
+.mm-boundary {
+  color: #ffffff !important;
+  cursor: help;
+  pointer-events: auto;
 }
 
 .mm-word.mm-type-noun       { color: #4285F4 !important; }

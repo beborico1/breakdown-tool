@@ -10,7 +10,10 @@ import { analyzeJapaneseWithGemini } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
 import { renderBreakdownPanel } from './panel-mode.js';
-import { initializeMinimalisticContainer } from './minimalistic-mode.js';
+import {
+  initializeMinimalisticContainer,
+  finalizeMinimalisticIncremental,
+} from './minimalistic-mode.js';
 import { removeOverlay } from './caption-handler.js';
 import { finalizeSentenceProcessing } from './sentence-processor.js';
 
@@ -33,6 +36,11 @@ export async function autoProcessPreviousCard() {
   // If previous container was sentence-processed, finalize it
   if (translationState.has(previousContainer)) {
     const state = translationState.get(previousContainer);
+    if (state.minimalisticIncrementalState) {
+      debugLog('AUTO-PROCESS', 'Finalizing minimalistic-incremental previous card');
+      finalizeMinimalisticIncremental(previousContainer);
+      return;
+    }
     if (state.sentenceState) {
       debugLog('AUTO-PROCESS', 'Finalizing sentence-processed previous card');
       finalizeSentenceProcessing(previousContainer);

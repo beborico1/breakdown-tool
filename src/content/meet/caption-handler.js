@@ -81,8 +81,17 @@ export async function handleCaptionClick(event) {
     return;
   }
 
-  // In minimalistic mode, hovering shows the breakdown card — click is a no-op.
+  // In minimalistic mode, clicking a transcription copies it to clipboard — nothing else.
   if (minimalisticModeEnabled) {
+    event.stopPropagation();
+    const text = (container.textContent || '').trim();
+    if (text) {
+      navigator.clipboard.writeText(text).then(() => {
+        debugLog('MM-COPY', 'Copied transcription:', text.slice(0, 80));
+      }).catch(err => {
+        debugLog('MM-COPY', 'Failed:', err.message);
+      });
+    }
     return;
   }
 

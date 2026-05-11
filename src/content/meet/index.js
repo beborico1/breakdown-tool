@@ -9,10 +9,12 @@ import {
   setWordBlockFontSize,
   wordBlockFontSize,
   setSentenceChunkSize,
+  setSentenceStabilityBuffer,
   sessionTranscript,
   resetSessionTranscript
 } from '../core/state.js';
 import { pruneTranslationCache } from '../core/cache.js';
+import { initWordCache } from '../core/word-cache.js';
 import { loadMinimalisticMode, removeMinimalisticOverlay } from './minimalistic-mode.js';
 import { removeOverlay } from './caption-handler.js';
 import { setupCaptionClickHandlers, handleMutations, setObserver } from './dom-fighter.js';
@@ -35,7 +37,11 @@ setObserver(observer);
 /**
  * Initialize the observer when the page loads
  */
-function initializeObserver() {
+async function initializeObserver() {
+  // Word cache powers minimalistic mode's pre-paint and back-fills itself from
+  // Meet breakdowns. Load it before the observer so early captions see hits.
+  await initWordCache();
+
   observer.observe(document.body, OBSERVER_CONFIG);
   // Initial setup
   setupCaptionClickHandlers();
@@ -55,6 +61,14 @@ function initializeObserver() {
   chrome.storage.sync.get(['sentenceChunkSize'], (result) => {
     if (result.sentenceChunkSize) {
       setSentenceChunkSize(result.sentenceChunkSize);
+    }
+  });
+
+  // Load sentence stability buffer setting (minimalistic mode: skip last N
+  // sentences so the speech engine has time to revise them before we process).
+  chrome.storage.sync.get(['sentenceStabilityBuffer'], (result) => {
+    if (typeof result.sentenceStabilityBuffer === 'number') {
+      setSentenceStabilityBuffer(result.sentenceStabilityBuffer);
     }
   });
 
@@ -168,6 +182,12 @@ export function initializeGoogleMeet() {
       const newSize = changes.sentenceChunkSize.newValue;
       debugLog('STORAGE', `Sentence chunk size changed: ${newSize}`);
       setSentenceChunkSize(newSize);
+    }
+
+    if (changes.sentenceStabilityBuffer) {
+      const newBuffer = changes.sentenceStabilityBuffer.newValue;
+      debugLog('STORAGE', `Sentence stability buffer changed: ${newBuffer}`);
+      setSentenceStabilityBuffer(newBuffer);
     }
 
     if (changes.minimalisticModeEnabled) {

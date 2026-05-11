@@ -14,9 +14,15 @@ import {
   containerToTranscriptIndex
 } from '../core/state.js';
 import { findCachedTranslation } from '../core/cache.js';
+import { getCachedWordBreakdown } from '../core/word-cache.js';
 import { hideOriginalElement } from '../utils/dom.js';
 import { renderBreakdownPanel, applyFontSizeToWrapper } from './panel-mode.js';
-import { paintWordColoring } from './minimalistic-mode.js';
+import {
+  paintWordColoring,
+  initializeMinimalisticIncremental,
+  handleMinimalisticIncrementalUpdate,
+  repaintIncremental,
+} from './minimalistic-mode.js';
 import { updateBreakdownDelta } from './panel-mode.js';
 import { getWordTypeClass } from '../utils/text.js';
 import { updateVisualDelta } from './delta-translation.js';
@@ -150,11 +156,15 @@ export function setupCaptionClickHandlers() {
   if (containers.length > 0) {
     autoProcessPreviousCard();
 
-    // Initialize sentence processing on the last (current) container
-    if (!minimalisticModeEnabled) {
-      const allContainers = document.querySelectorAll('.nMcdL');
-      const lastContainer = allContainers[allContainers.length - 1];
-      if (lastContainer && !translationState.has(lastContainer)) {
+    // Initialize sentence-level processing on the last (current) container.
+    // Minimalistic mode gets the in-place incremental painter; otherwise the
+    // panel-style sentence processor kicks in.
+    const allContainers = document.querySelectorAll('.nMcdL');
+    const lastContainer = allContainers[allContainers.length - 1];
+    if (lastContainer && !translationState.has(lastContainer)) {
+      if (minimalisticModeEnabled) {
+        initializeMinimalisticIncremental(lastContainer);
+      } else {
         initializeSentenceProcessing(lastContainer);
       }
     }
@@ -200,7 +210,10 @@ export function handleMutations(mutations, observerConfig) {
         const container = shadowEl.closest('.nMcdL');
         if (container && translationState.has(container)) {
           const state = translationState.get(container);
-          if (state.sentenceState) {
+          if (state.minimalisticIncrementalState) {
+            // Eager per-sentence processing on the live minimalistic container.
+            handleMinimalisticIncrementalUpdate(container);
+          } else if (state.sentenceState) {
             // Handle sentence-level processing text updates
             handleSentenceTextUpdate(container);
           } else if (state.breakdownData) {
@@ -210,8 +223,6 @@ export function handleMutations(mutations, observerConfig) {
             // Only update visual display - user must click to translate
             updateVisualDelta(container);
           }
-          // Minimalistic mode only targets already-complete previous captions,
-          // so we don't expect live text growth on those containers.
         }
       }
     }
@@ -375,11 +386,29 @@ export function handleMutations(mutations, observerConfig) {
     }
 
     // (E) Re-paint minimalistic word coloring if Meet stripped our spans.
-    if (state.minimalisticState && state.breakdownData && state.shadowOriginalEl) {
+    // Falls back to the persistent word cache while Gemini is still in-flight,
+    // so pre-painted captions don't fade to white on the first Meet rebuild.
+    if (state.minimalisticState && state.shadowOriginalEl && state.originalText) {
+      const el = state.shadowOriginalEl;
+      if (el.hasAttribute('data-mm-colored') && !el.querySelector('.mm-word')) {
+        const words = state.breakdownData?.words
+          || getCachedWordBreakdown(state.originalText);
+        if (words.length > 0) {
+          if (!didFight) { observer.disconnect(); didFight = true; }
+          const sents = state.breakdownData
+            ? [{ startIndex: 0, endIndex: state.originalText.length, breakdownData: state.breakdownData }]
+            : null;
+          paintWordColoring(el, state.originalText, words, sents);
+        }
+      }
+    }
+
+    // (E2) Same as (E) but for the live incremental painter.
+    if (state.minimalisticIncrementalState && state.shadowOriginalEl) {
       const el = state.shadowOriginalEl;
       if (el.hasAttribute('data-mm-colored') && !el.querySelector('.mm-word')) {
         if (!didFight) { observer.disconnect(); didFight = true; }
-        paintWordColoring(el, state.originalText, state.breakdownData.words);
+        repaintIncremental(container);
       }
     }
 
