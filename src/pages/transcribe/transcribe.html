@@ -4,13 +4,38 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Live Transcription - 会議 kaigi meeting</title>
+  <link rel="stylesheet" href="../../content/content.css">
   <link rel="stylesheet" href="transcribe.css">
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1>Live Japanese Transcription</h1>
-      <p class="subtitle">Speak Japanese to get word-by-word breakdowns</p>
+      <button id="settingsBtn" class="settings-btn" type="button" aria-label="Toggle settings" aria-expanded="false" title="Settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <button id="micBtn" class="mic-btn" title="Start listening">
+        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <div class="header-text">
+        <h1>Live Japanese Transcription</h1>
+        <p class="subtitle">Speak Japanese to get word-by-word breakdowns</p>
+        <div class="status-row" id="statusRow">
+          <span class="segment-timer" id="segmentTimer"></span>
+          <span class="status-dot ready" id="statusDot"></span>
+          <div class="audio-level-track">
+            <div class="audio-level-bar" id="audioLevelBar"></div>
+          </div>
+          <span class="status-text" id="statusText">Ready</span>
+        </div>
+      </div>
     </header>
 
     <div id="warningNoKey" class="warning" style="display: none;">
@@ -20,38 +45,41 @@
       Microphone access is required. Please allow mic access and reload.
     </div>
 
-    <div class="controls">
-      <button id="micBtn" class="mic-btn" title="Start listening">
-        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-          <line x1="12" y1="19" x2="12" y2="23"/>
-          <line x1="8" y1="23" x2="16" y2="23"/>
-        </svg>
-      </button>
-      <div class="status-row">
-        <span class="status-dot ready" id="statusDot"></span>
-        <span class="status-text" id="statusText">Ready</span>
+    <div class="silence-controls collapsed" id="silenceControls">
+      <div class="silence-controls-inner">
+        <div class="setting-row">
+          <div class="setting-header">
+            <label for="silenceSlider">Silence threshold</label>
+            <span class="setting-value" id="silenceValue">3s</span>
+          </div>
+          <input type="range" id="silenceSlider" class="silence-slider" min="1" max="6" step="0.5" value="3">
+        </div>
+        <div class="setting-row">
+          <div class="setting-header">
+            <label for="maxDurationSlider">Max segment duration</label>
+            <span class="setting-value" id="maxDurationValue">15s</span>
+          </div>
+          <input type="range" id="maxDurationSlider" class="silence-slider" min="5" max="30" step="1" value="15">
+        </div>
+        <div class="setting-row">
+          <div class="setting-header">
+            <label for="sensitivitySlider">Mic sensitivity (RMS)</label>
+            <span class="setting-value" id="sensitivityValue">15</span>
+          </div>
+          <input type="range" id="sensitivitySlider" class="silence-slider" min="5" max="40" step="1" value="15">
+        </div>
+        <div class="setting-row">
+          <div class="setting-header">
+            <label for="minDurationSlider">Min segment duration</label>
+            <span class="setting-value" id="minDurationValue">500ms</span>
+          </div>
+          <input type="range" id="minDurationSlider" class="silence-slider" min="200" max="2000" step="100" value="500">
+        </div>
+        <button id="analyzeNow" class="btn btn-accent" disabled>Analyze Now</button>
       </div>
     </div>
 
-    <div class="silence-controls">
-      <div class="silence-header">
-        <label for="silenceSlider">Silence threshold</label>
-        <span class="silence-value" id="silenceValue">3s</span>
-      </div>
-      <input type="range" id="silenceSlider" class="silence-slider" min="1" max="6" step="0.5" value="3">
-      <button id="analyzeNow" class="btn btn-accent" disabled>Analyze Now</button>
-    </div>
-
-    <div class="transcript-area" id="transcriptArea">
-      <span class="transcript-placeholder" id="transcriptPlaceholder">Audio level will appear here...</span>
-      <div class="audio-level-track">
-        <div class="audio-level-bar" id="audioLevelBar"></div>
-      </div>
-      <span class="segment-timer" id="segmentTimer"></span>
-    </div>
-
+<!--
     <div class="session-stats">
       <div class="stat">
         <span class="stat-value" id="segmentsProcessed">0</span>
@@ -62,13 +90,39 @@
         <span class="stat-label">Words</span>
       </div>
     </div>
+    -->
+
 
     <div class="history-toolbar">
-      <h2 class="section-title">Breakdown History</h2>
-      <div class="history-actions">
-        <button id="copyJapanese" class="btn btn-sm" title="Copy all Japanese">Copy JP</button>
-        <button id="copyEnglish" class="btn btn-sm" title="Copy all English">Copy EN</button>
-        <button id="downloadTxt" class="btn btn-sm" title="Download transcript as TXT">Download TXT</button>
+      <h2 class="section-title">Transcriptions</h2>
+      <div class="history-actions" id="historyActions">
+        <div class="action-chip">
+          <span class="chip-label">JP</span>
+          <button class="chip-icon" data-action="copy" data-variant="jp" title="Copy Japanese" aria-label="Copy Japanese">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="chip-icon" data-action="download" data-variant="jp" title="Download Japanese" aria-label="Download Japanese">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        </div>
+        <div class="action-chip">
+          <span class="chip-label">EN</span>
+          <button class="chip-icon" data-action="copy" data-variant="en" title="Copy English" aria-label="Copy English">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="chip-icon" data-action="download" data-variant="en" title="Download English" aria-label="Download English">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        </div>
+        <div class="action-chip">
+          <span class="chip-label">EN+JP</span>
+          <button class="chip-icon" data-action="copy" data-variant="both" title="Copy both" aria-label="Copy both">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="chip-icon" data-action="download" data-variant="both" title="Download both" aria-label="Download both">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        </div>
       </div>
     </div>
     <div id="historyContainer" class="history-container">

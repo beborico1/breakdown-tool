@@ -4,6 +4,8 @@
 // ============================================
 
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+import { paintWordColoring } from '../../content/shared/word-render.js';
+import { attachHoverListeners } from '../../content/meet/hover-card.js';
 
 initDisplayPreferences();
 
@@ -11,22 +13,34 @@ initDisplayPreferences();
 const micBtn = document.getElementById('micBtn');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
+const statusRow = document.getElementById('statusRow');
 const warningNoKey = document.getElementById('warningNoKey');
 const warningNoMic = document.getElementById('warningNoMic');
 const silenceSlider = document.getElementById('silenceSlider');
 const silenceValue = document.getElementById('silenceValue');
+const maxDurationSlider = document.getElementById('maxDurationSlider');
+const maxDurationValue = document.getElementById('maxDurationValue');
+const sensitivitySlider = document.getElementById('sensitivitySlider');
+const sensitivityValue = document.getElementById('sensitivityValue');
+const minDurationSlider = document.getElementById('minDurationSlider');
+const minDurationValue = document.getElementById('minDurationValue');
 const analyzeNowBtn = document.getElementById('analyzeNow');
-const transcriptArea = document.getElementById('transcriptArea');
-const transcriptPlaceholder = document.getElementById('transcriptPlaceholder');
 const audioLevelBar = document.getElementById('audioLevelBar');
 const segmentTimerEl = document.getElementById('segmentTimer');
 const segmentsProcessedEl = document.getElementById('segmentsProcessed');
 const wordsAnalyzedEl = document.getElementById('wordsAnalyzed');
 const historyContainer = document.getElementById('historyContainer');
 const historyEmpty = document.getElementById('historyEmpty');
-const copyJapaneseBtn = document.getElementById('copyJapanese');
-const copyEnglishBtn = document.getElementById('copyEnglish');
-const downloadTxtBtn = document.getElementById('downloadTxt');
+const historyActions = document.getElementById('historyActions');
+const settingsBtn = document.getElementById('settingsBtn');
+const silenceControls = document.getElementById('silenceControls');
+if (settingsBtn && silenceControls) {
+  settingsBtn.addEventListener('click', () => {
+    const collapsed = silenceControls.classList.toggle('collapsed');
+    settingsBtn.classList.toggle('active', !collapsed);
+    settingsBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+}
 
 // --- State ---
 let apiKey = null;
@@ -50,10 +64,10 @@ let currentRMS = 0;
 let speechSamples = 0;
 let totalSamples = 0;
 
-const SILENCE_RMS_THRESHOLD = 15;   // 0-255 scale
-const MIN_SEGMENT_DURATION = 500;   // ms
-const MAX_SEGMENT_DURATION = 15000; // ms
-const MIN_SPEECH_RATIO = 0.10;      // Skip transcription if < 10% of samples had speech
+let SILENCE_RMS_THRESHOLD = 15;   // 0-255 scale
+let MIN_SEGMENT_DURATION = 500;   // ms
+let MAX_SEGMENT_DURATION = 15000; // ms
+const MIN_SPEECH_RATIO = 0.10;    // Skip transcription if < 10% of samples had speech
 
 // ============================================
 // Duplicated utilities (from api.js, text.js, frequency-tracker.js)
@@ -256,71 +270,10 @@ function sanitizeTranscription(text) {
   return text.trim();
 }
 
-function stripCodeFences(text) {
-  text = text.trim();
-  if (text.startsWith('```json')) text = text.slice(7);
-  else if (text.startsWith('```')) text = text.slice(3);
-  if (text.endsWith('```')) text = text.slice(0, -3);
-  return text.trim();
-}
-
-function extractOriginalFromTruncated(text) {
-  const match = text.match(/"original"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-  if (!match) return null;
-  const raw = match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-  return sanitizeTranscription(raw);
-}
-
-function parseBreakdownResponse(responseText) {
-  const text = stripCodeFences(responseText);
-
-  try {
-    const breakdown = JSON.parse(text);
-    if (!breakdown.original && breakdown.original !== '') {
-      throw new Error('Missing original field');
-    }
-    if (!Array.isArray(breakdown.words)) {
-      throw new Error('Missing words array');
-    }
-    breakdown.original = sanitizeTranscription(breakdown.original);
-    return breakdown;
-  } catch (e) {
-    // Try to extract the original text from truncated JSON
-    const original = extractOriginalFromTruncated(text);
-    if (original) {
-      return { original, translation: '', words: [], truncated: true };
-    }
-    throw e;
-  }
-}
-
-async function analyzeAudioWithGemini(base64Audio, mimeType) {
+async function transcribeAudioOnly(base64Audio, mimeType) {
   if (!apiKey) throw new Error('No API key. Set it in the extension popup.');
 
-  const prompt = `Listen to this Japanese audio and return ONLY valid JSON (no markdown, no code blocks, no explanation):
-{
-  "original": "the transcribed Japanese text",
-  "translation": "natural English translation of the full sentence",
-  "words": [
-    {
-      "japanese": "word in kanji/kana as it appears",
-      "reading": "hiragana reading (only for words with kanji, empty string for hiragana/katakana-only words)",
-      "romaji": "romanized pronunciation",
-      "english": "English meaning or grammatical function",
-      "type": "noun|verb|particle|adjective|adverb|counter|expression|auxiliary|copula"
-    }
-  ]
-}
-
-Important:
-- If no Japanese speech is detected, return {"original": "", "translation": "", "words": []}
-- Do NOT include timestamps, timecodes, or time references (00:00, 00時00分) from audio metadata — only transcribe spoken words
-- All text must be readable Japanese/English characters — never output raw byte sequences or hex codes
-- Break down ALL words including particles (は, が, を, に, etc.)
-- For particles, use their grammatical function as english (e.g., "topic marker", "subject marker", "object marker")
-- Keep word order matching the original sentence
-- Use lowercase for romaji except for proper nouns
-- For verbs, include the conjugated form as it appears`;
+  const prompt = `Transcribe this Japanese audio. Output ONLY the transcribed Japanese text, nothing else. No translation, no explanation, no quotes, no markdown. Do NOT include timestamps, timecodes, or time references (00:00, 00時00分). If no Japanese speech is detected, output an empty string.`;
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
@@ -330,19 +283,13 @@ Important:
       body: JSON.stringify({
         contents: [{
           parts: [
-            {
-              inlineData: {
-                mimeType: mimeType,
-                data: base64Audio
-              }
-            },
+            { inlineData: { mimeType, data: base64Audio } },
             { text: prompt }
           ]
         }],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 65536,
-          responseMimeType: 'application/json',
+          maxOutputTokens: 2048,
         }
       })
     }
@@ -350,31 +297,23 @@ Important:
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error?.message || 'Audio analysis failed');
+    throw new Error(error.error?.message || 'Transcription failed');
   }
 
   const data = await response.json();
-  const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   const usageMetadata = data.usageMetadata;
   if (usageMetadata?.totalTokenCount) {
     updateTokenUsage(usageMetadata.totalTokenCount);
   }
 
-  if (!responseText) {
+  if (text === undefined || text === null) {
     const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
-    throw new Error(blockReason ? `Audio blocked: ${blockReason}` : 'No audio analysis returned — try shorter segments');
+    throw new Error(blockReason ? `Audio blocked: ${blockReason}` : 'No transcription returned');
   }
 
-  const finishReason = data.candidates?.[0]?.finishReason;
-  const breakdown = parseBreakdownResponse(responseText);
-
-  // If truncated (MAX_TOKENS or partial JSON), re-analyze the transcribed text via chunking
-  if ((finishReason === 'MAX_TOKENS' || breakdown.truncated) && breakdown.original) {
-    return analyzeJapaneseChunked(breakdown.original);
-  }
-
-  return breakdown;
+  return sanitizeTranscription(text.trim().replace(/^["「『]|["」』]$/g, '').trim());
 }
 
 function recordWordFrequencies(words) {
@@ -414,6 +353,7 @@ function recordWordFrequencies(words) {
 function setStatus(state, text) {
   statusDot.className = 'status-dot ' + state;
   statusText.textContent = text;
+  if (statusRow) statusRow.classList.toggle('listening', state === 'listening');
 }
 
 // ============================================
@@ -423,15 +363,14 @@ function setStatus(state, text) {
 function updateAudioLevel() {
   if (!isListening) {
     audioLevelBar.style.width = '0%';
-    segmentTimerEl.textContent = '';
+    if (segmentTimerEl) segmentTimerEl.textContent = '';
     return;
   }
 
-  transcriptPlaceholder.style.display = 'none';
   const pct = Math.min(100, (currentRMS / 80) * 100);
   audioLevelBar.style.width = pct + '%';
 
-  if (segmentStart) {
+  if (segmentTimerEl && segmentStart) {
     const elapsed = ((Date.now() - segmentStart) / 1000).toFixed(1);
     segmentTimerEl.textContent = elapsed + 's';
   }
@@ -441,6 +380,83 @@ function updateAudioLevel() {
 // Card rendering
 // ============================================
 
+function buildWordBlock(word) {
+  const block = document.createElement('div');
+  block.className = 'word-block';
+  const typeClass = getWordTypeClass(word.type);
+  const typeLabel = typeClass.charAt(0).toUpperCase() + typeClass.slice(1);
+  block.innerHTML = `
+    <span class="word-japanese type-${typeClass}" data-type="${typeLabel}">${word.japanese}</span>
+    <span class="word-hiragana">${word.reading || word.japanese}</span>
+    <span class="word-romaji">${word.romaji || '-'}</span>
+    <span class="word-english">${word.english || '-'}</span>
+  `;
+  return block;
+}
+
+function buildChevronToggle(collapsible) {
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'breakdown-toggle';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-label', 'Toggle word breakdown');
+  toggle.innerHTML = '<span class="chevron">▸</span>';
+  toggle.addEventListener('click', () => {
+    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    toggle.classList.toggle('expanded', !expanded);
+    collapsible.classList.toggle('collapsed', expanded);
+  });
+  return toggle;
+}
+
+function buildSegmentHeader(timestampEl, collapsible) {
+  const header = document.createElement('div');
+  header.className = 'segment-header';
+  if (collapsible) header.appendChild(buildChevronToggle(collapsible));
+  header.appendChild(timestampEl);
+  return header;
+}
+
+function buildAnalyzingIndicator() {
+  const el = document.createElement('span');
+  el.className = 'segment-analyzing';
+  el.textContent = 'Analyzing words...';
+  return el;
+}
+
+function showSuccessThenRemove(header) {
+  const success = document.createElement('span');
+  success.className = 'segment-success';
+  success.textContent = '';
+  header.appendChild(success);
+  setTimeout(() => success.remove(), 2300);
+}
+
+function buildCollapsibleBreakdown(breakdown) {
+  const collapsible = document.createElement('div');
+  collapsible.className = 'breakdown-collapsible collapsed';
+
+  const inner = document.createElement('div');
+  inner.className = 'breakdown-collapsible-inner';
+  collapsible.appendChild(inner);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'breakdown-wrapper';
+  breakdown.words.forEach(word => wrapper.appendChild(buildWordBlock(word)));
+  inner.appendChild(wrapper);
+
+  return collapsible;
+}
+
+function buildTranslation(breakdown) {
+  if (!breakdown.translation) return null;
+  const translationDiv = document.createElement('div');
+  translationDiv.className = 'breakdown-translation';
+  translationDiv.textContent = `"${breakdown.translation}"`;
+  return translationDiv;
+}
+
 function createBreakdownCard(breakdown, originalText) {
   const card = document.createElement('div');
   card.className = 'segment-card';
@@ -448,36 +464,19 @@ function createBreakdownCard(breakdown, originalText) {
   const timestamp = document.createElement('div');
   timestamp.className = 'segment-timestamp';
   timestamp.textContent = new Date().toLocaleTimeString();
-  card.appendChild(timestamp);
+
+  const collapsible = buildCollapsibleBreakdown(breakdown);
+  card.appendChild(buildSegmentHeader(timestamp, collapsible));
 
   const original = document.createElement('div');
   original.className = 'segment-original';
   original.textContent = originalText;
   card.appendChild(original);
 
-  const wrapper = document.createElement('div');
-  wrapper.className = 'breakdown-wrapper';
+  card.appendChild(collapsible);
 
-  breakdown.words.forEach(word => {
-    const block = document.createElement('div');
-    block.className = 'word-block';
-    const typeClass = getWordTypeClass(word.type);
-    const typeLabel = typeClass.charAt(0).toUpperCase() + typeClass.slice(1);
-    block.innerHTML = `
-      <span class="word-japanese type-${typeClass}" data-type="${typeLabel}">${word.japanese}</span>
-      <span class="word-hiragana">${word.reading || word.japanese}</span>
-      <span class="word-romaji">${word.romaji || '-'}</span>
-      <span class="word-english">${word.english || '-'}</span>
-    `;
-    wrapper.appendChild(block);
-  });
-
-  card.appendChild(wrapper);
-
-  const translationDiv = document.createElement('div');
-  translationDiv.className = 'breakdown-translation';
-  translationDiv.textContent = `"${breakdown.translation}"`;
-  card.appendChild(translationDiv);
+  const translation = buildTranslation(breakdown);
+  if (translation) card.appendChild(translation);
 
   return card;
 }
@@ -497,13 +496,103 @@ function createPendingCard(label) {
   card.appendChild(original);
 
   const loading = document.createElement('div');
-  loading.textContent = 'Transcribing & analyzing...';
+  loading.textContent = 'Transcribing...';
   loading.style.color = '#9CA3AF';
   loading.style.fontSize = '13px';
   loading.style.fontStyle = 'italic';
   card.appendChild(loading);
 
   return card;
+}
+
+/**
+ * Card shown the moment we have raw transcription text but no breakdown yet.
+ * The text is rendered gray (via [data-mm-colored="false"]); paintWordColoring
+ * later flips it to "true" and replaces innerHTML with colored hoverable spans.
+ */
+function createGrayTranscriptCard(text) {
+  const card = document.createElement('div');
+  card.className = 'segment-card analyzing';
+  card.setAttribute('data-mm-words-root', '');
+
+  const timestamp = document.createElement('div');
+  timestamp.className = 'segment-timestamp';
+  timestamp.textContent = new Date().toLocaleTimeString();
+
+  const header = buildSegmentHeader(timestamp, null);
+  header.appendChild(buildAnalyzingIndicator());
+  card.appendChild(header);
+
+  const original = document.createElement('div');
+  original.className = 'segment-original';
+  original.setAttribute('data-mm-colored', 'false');
+  original.textContent = text;
+  card.appendChild(original);
+
+  return card;
+}
+
+/**
+ * Upgrade a gray card in-place with the full breakdown: colorized text +
+ * hover, per-word block grid, and translation.
+ */
+function upgradeGrayCardWithBreakdown(card, breakdown) {
+  const original = card.querySelector('.segment-original');
+  const loading = card.querySelector('.segment-analyzing');
+  if (original) {
+    paintWordColoring(original, breakdown.original, breakdown.words);
+    attachHoverListeners(card, breakdown);
+  }
+  if (loading) loading.remove();
+  card.classList.remove('analyzing');
+
+  const collapsible = buildCollapsibleBreakdown(breakdown);
+  card.appendChild(collapsible);
+
+  const translation = buildTranslation(breakdown);
+  if (translation) card.appendChild(translation);
+
+  let header = card.querySelector('.segment-header');
+  if (!header) {
+    const timestamp = card.querySelector('.segment-timestamp');
+    if (timestamp) {
+      header = buildSegmentHeader(timestamp, collapsible);
+      card.insertBefore(header, card.firstChild);
+    }
+  } else if (!header.querySelector('.breakdown-toggle')) {
+    header.insertBefore(buildChevronToggle(collapsible), header.firstChild);
+  }
+
+  if (header) showSuccessThenRemove(header);
+}
+
+/**
+ * Replace the "Analyzing words..." line with a small retry affordance while
+ * keeping the gray transcription visible.
+ */
+function markCardBreakdownFailed(card, errorMessage, onRetry) {
+  const loading = card.querySelector('.segment-analyzing');
+  if (loading) loading.remove();
+
+  const errBlock = document.createElement('div');
+  errBlock.className = 'segment-breakdown-error';
+  const msg = document.createElement('span');
+  msg.textContent = errorMessage;
+  errBlock.appendChild(msg);
+
+  const retry = document.createElement('button');
+  retry.className = 'btn-retry';
+  retry.textContent = 'Retry breakdown';
+  retry.addEventListener('click', () => {
+    errBlock.remove();
+    const loadingAgain = buildAnalyzingIndicator();
+    const header = card.querySelector('.segment-header');
+    if (header) header.appendChild(loadingAgain);
+    else card.appendChild(loadingAgain);
+    onRetry();
+  });
+  errBlock.appendChild(retry);
+  card.appendChild(errBlock);
 }
 
 function createErrorCard(label, error, retryFn) {
@@ -547,42 +636,72 @@ async function processAudioSegment(blob) {
   const durationLabel = ((Date.now() - (segmentStart || Date.now())) / 1000).toFixed(1) + 's audio';
 
   historyEmpty.style.display = 'none';
-  const pendingCard = createPendingCard(durationLabel);
-  historyContainer.insertBefore(pendingCard, historyContainer.firstChild);
+  const spinnerCard = createPendingCard(durationLabel);
+  historyContainer.insertBefore(spinnerCard, historyContainer.firstChild);
 
+  let arrayBuffer;
+  let base64;
   try {
-    const arrayBuffer = await blob.arrayBuffer();
-    const base64 = btoa(
+    arrayBuffer = await blob.arrayBuffer();
+    base64 = btoa(
       new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
     );
+  } catch (error) {
+    spinnerCard.remove();
+    const errorCard = createErrorCard(durationLabel, error.message, () => processAudioSegment(blob));
+    historyContainer.insertBefore(errorCard, historyContainer.firstChild);
+    return;
+  }
 
-    const breakdown = await analyzeAudioWithGemini(base64, 'audio/webm;codecs=opus');
+  // Stage 1 — fast transcribe-only call. Shows gray text ASAP.
+  let rawText;
+  try {
+    rawText = await transcribeAudioOnly(base64, 'audio/webm;codecs=opus');
+  } catch (error) {
+    spinnerCard.remove();
+    const errorCard = createErrorCard(durationLabel, error.message, () => processAudioSegment(blob));
+    historyContainer.insertBefore(errorCard, historyContainer.firstChild);
+    return;
+  }
 
-    pendingCard.remove();
+  spinnerCard.remove();
 
-    // Empty response means no speech detected — discard silently
-    if (!breakdown.original || breakdown.original.trim() === '') {
-      return;
-    }
+  // Empty response means no speech detected — discard silently
+  if (!rawText || rawText.trim() === '') {
+    return;
+  }
 
-    const breakdownCard = createBreakdownCard(breakdown, breakdown.original);
-    historyContainer.insertBefore(breakdownCard, historyContainer.firstChild);
+  const grayCard = createGrayTranscriptCard(rawText);
+  historyContainer.insertBefore(grayCard, historyContainer.firstChild);
+
+  accumulatedTranscript += rawText + ' ';
+  if (isListening) {
+    analyzeNowBtn.disabled = false;
+  }
+
+  // Stage 2 — full breakdown analysis. Upgrades the gray card in place.
+  await runBreakdownForCard(grayCard, rawText);
+}
+
+async function runBreakdownForCard(card, text) {
+  try {
+    const breakdown = await analyzeJapaneseWithGemini(text);
+    if (!card.isConnected) return;
+
+    // Ensure breakdown.original matches what we display so word boundaries align.
+    breakdown.original = text;
+
+    upgradeGrayCardWithBreakdown(card, breakdown);
 
     recordWordFrequencies(breakdown.words);
 
-    accumulatedTranscript += breakdown.original + ' ';
-    if (isListening) {
-      analyzeNowBtn.disabled = false;
-    }
-
     segmentCount++;
     wordCount += breakdown.words.length;
-    segmentsProcessedEl.textContent = segmentCount;
-    wordsAnalyzedEl.textContent = wordCount;
+    if (segmentsProcessedEl) segmentsProcessedEl.textContent = segmentCount;
+    if (wordsAnalyzedEl) wordsAnalyzedEl.textContent = wordCount;
   } catch (error) {
-    pendingCard.remove();
-    const errorCard = createErrorCard(durationLabel, error.message, () => processAudioSegment(blob));
-    historyContainer.insertBefore(errorCard, historyContainer.firstChild);
+    if (!card.isConnected) return;
+    markCardBreakdownFailed(card, error.message, () => runBreakdownForCard(card, text));
   }
 }
 
@@ -608,8 +727,8 @@ async function sendForAnalysis(text) {
 
     segmentCount++;
     wordCount += breakdown.words.length;
-    segmentsProcessedEl.textContent = segmentCount;
-    wordsAnalyzedEl.textContent = wordCount;
+    if (segmentsProcessedEl) segmentsProcessedEl.textContent = segmentCount;
+    if (wordsAnalyzedEl) wordsAnalyzedEl.textContent = wordCount;
   } catch (error) {
     pendingCard.remove();
     const errorCard = createErrorCard(text, error.message, () => sendForAnalysis(text));
@@ -798,44 +917,45 @@ function collectTranscriptData() {
 }
 
 function flashCopied(btn) {
-  const orig = btn.textContent;
-  btn.textContent = 'Copied!';
   btn.classList.add('copied');
-  setTimeout(() => {
-    btn.textContent = orig;
-    btn.classList.remove('copied');
-  }, 1500);
+  setTimeout(() => btn.classList.remove('copied'), 1200);
 }
 
-copyJapaneseBtn.addEventListener('click', () => {
-  const data = collectTranscriptData();
-  if (!data.length) return;
-  navigator.clipboard.writeText(data.map(d => d.japanese).join('\n'));
-  flashCopied(copyJapaneseBtn);
-});
+function buildTranscriptText(variant, data) {
+  if (variant === 'jp') return data.map(d => d.japanese).join('\n');
+  if (variant === 'en') return data.map(d => d.english).join('\n');
+  return data.map(d => `[${d.timestamp}]\n${d.japanese}\n${d.english}\n`).join('\n');
+}
 
-copyEnglishBtn.addEventListener('click', () => {
-  const data = collectTranscriptData();
-  if (!data.length) return;
-  navigator.clipboard.writeText(data.map(d => d.english).join('\n'));
-  flashCopied(copyEnglishBtn);
-});
-
-downloadTxtBtn.addEventListener('click', () => {
-  const data = collectTranscriptData();
-  if (!data.length) return;
-  const lines = data.map(d => `[${d.timestamp}]\n${d.japanese}\n${d.english}\n`);
-  const content = lines.join('\n');
-  const blob = new Blob([content], { type: 'text/plain' });
+function downloadText(text, variant) {
+  const blob = new Blob([text], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `transcript-${new Date().toISOString().slice(0, 10)}.txt`;
+  a.download = `transcript-${variant}-${new Date().toISOString().slice(0, 10)}.txt`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-});
+}
+
+if (historyActions) {
+  historyActions.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip-icon');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const variant = btn.dataset.variant;
+    const data = collectTranscriptData();
+    if (!data.length) return;
+    const text = buildTranscriptText(variant, data);
+    if (action === 'copy') {
+      navigator.clipboard.writeText(text);
+      flashCopied(btn);
+    } else if (action === 'download') {
+      downloadText(text, variant);
+    }
+  });
+}
 
 // ============================================
 // Event listeners
@@ -858,10 +978,59 @@ analyzeNowBtn.addEventListener('click', () => {
   }
 });
 
+const SETTINGS_KEYS = ['silenceThreshold', 'maxSegmentDuration', 'silenceRmsThreshold', 'minSegmentDuration'];
+
+function applySilence(seconds) {
+  silenceThreshold = seconds * 1000;
+  silenceSlider.value = seconds;
+  silenceValue.textContent = seconds + 's';
+}
+function applyMaxDuration(seconds) {
+  MAX_SEGMENT_DURATION = seconds * 1000;
+  maxDurationSlider.value = seconds;
+  maxDurationValue.textContent = seconds + 's';
+}
+function applySensitivity(val) {
+  SILENCE_RMS_THRESHOLD = val;
+  sensitivitySlider.value = val;
+  sensitivityValue.textContent = val;
+}
+function applyMinDuration(ms) {
+  MIN_SEGMENT_DURATION = ms;
+  minDurationSlider.value = ms;
+  minDurationValue.textContent = ms + 'ms';
+}
+
+function saveSetting(key, value) {
+  chrome.storage.sync.set({ [key]: value });
+}
+
+chrome.storage.sync.get(SETTINGS_KEYS, (stored) => {
+  if (typeof stored.silenceThreshold === 'number') applySilence(stored.silenceThreshold / 1000);
+  if (typeof stored.maxSegmentDuration === 'number') applyMaxDuration(stored.maxSegmentDuration / 1000);
+  if (typeof stored.silenceRmsThreshold === 'number') applySensitivity(stored.silenceRmsThreshold);
+  if (typeof stored.minSegmentDuration === 'number') applyMinDuration(stored.minSegmentDuration);
+});
+
 silenceSlider.addEventListener('input', () => {
   const val = parseFloat(silenceSlider.value);
-  silenceThreshold = val * 1000;
-  silenceValue.textContent = val + 's';
+  applySilence(val);
+  saveSetting('silenceThreshold', silenceThreshold);
+});
+maxDurationSlider.addEventListener('input', () => {
+  const val = parseInt(maxDurationSlider.value, 10);
+  applyMaxDuration(val);
+  saveSetting('maxSegmentDuration', MAX_SEGMENT_DURATION);
+});
+sensitivitySlider.addEventListener('input', () => {
+  const val = parseInt(sensitivitySlider.value, 10);
+  applySensitivity(val);
+  saveSetting('silenceRmsThreshold', val);
+});
+minDurationSlider.addEventListener('input', () => {
+  const val = parseInt(minDurationSlider.value, 10);
+  applyMinDuration(val);
+  saveSetting('minSegmentDuration', val);
 });
 
 // Listen for storage changes (user sets API key while page is open)
