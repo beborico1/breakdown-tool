@@ -109,20 +109,31 @@
       <input type="range" id="chunkSizeSlider" class="font-size-slider" min="1" max="20" step="1" value="2">
     </div>
 
-    <!-- Minimalistic Mode - commented out
+    <hr class="divider">
+
+    <div class="font-size-section">
+      <div class="setting-header">
+        <div class="font-size-header">
+          <span class="setting-title">Stability Buffer</span>
+          <span class="font-size-value" id="stabilityBufferValue">3</span>
+        </div>
+        <span class="setting-hint">Leave the last N sentences unprocessed (minimalistic mode) so the speech engine can still revise them</span>
+      </div>
+      <input type="range" id="stabilityBufferSlider" class="font-size-slider" min="0" max="10" step="1" value="3">
+    </div>
+
     <hr class="divider">
 
     <div class="mode-toggle">
       <div class="setting-info">
         <span class="setting-title">Minimalistic Mode</span>
-        <span class="setting-hint">Inline colored text with hover tooltips</span>
+        <span class="setting-hint">Inline colored text with per-word hover popovers</span>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="minimalisticToggle">
         <span class="toggle-slider"></span>
       </label>
     </div>
-    -->
 
     <hr class="divider">
 

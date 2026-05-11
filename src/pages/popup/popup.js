@@ -27,6 +27,8 @@ const fontSizeSlider = document.getElementById('fontSizeSlider');
 const fontSizeValueEl = document.getElementById('fontSizeValue');
 const chunkSizeSlider = document.getElementById('chunkSizeSlider');
 const chunkSizeValueEl = document.getElementById('chunkSizeValue');
+const stabilityBufferSlider = document.getElementById('stabilityBufferSlider');
+const stabilityBufferValueEl = document.getElementById('stabilityBufferValue');
 const apiKeyHelpLink = document.getElementById('apiKeyHelp');
 const apiKeyTutorialEl = document.getElementById('apiKeyTutorial');
 
@@ -592,6 +594,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     chunkSizeSlider.value = size;
     chunkSizeValueEl.textContent = size;
   }
+  if (areaName === 'sync' && changes.sentenceStabilityBuffer !== undefined) {
+    const buffer = typeof changes.sentenceStabilityBuffer.newValue === 'number'
+      ? changes.sentenceStabilityBuffer.newValue
+      : 3;
+    stabilityBufferSlider.value = buffer;
+    stabilityBufferValueEl.textContent = buffer;
+  }
 });
 
 // Reset usage button handler — stop propagation to prevent collapsible toggle
@@ -636,6 +645,22 @@ chunkSizeSlider.addEventListener('input', () => {
   chrome.storage.sync.set({ sentenceChunkSize: size });
 });
 
+function loadStabilityBuffer() {
+  chrome.storage.sync.get(['sentenceStabilityBuffer'], (result) => {
+    const buffer = typeof result.sentenceStabilityBuffer === 'number'
+      ? result.sentenceStabilityBuffer
+      : 3;
+    stabilityBufferSlider.value = buffer;
+    stabilityBufferValueEl.textContent = buffer;
+  });
+}
+
+stabilityBufferSlider.addEventListener('input', () => {
+  const buffer = parseInt(stabilityBufferSlider.value, 10);
+  stabilityBufferValueEl.textContent = buffer;
+  chrome.storage.sync.set({ sentenceStabilityBuffer: buffer });
+});
+
 // Collapsible section toggle
 document.querySelectorAll('.collapsible-header').forEach(header => {
   header.addEventListener('click', () => {
@@ -663,6 +688,7 @@ loadApiKey();
 loadModel();
 loadFontSize();
 loadChunkSize();
+loadStabilityBuffer();
 renderCustomSites();
 
 // Display preferences toggles
