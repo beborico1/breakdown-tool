@@ -44,7 +44,7 @@ if (settingsBtn && silenceControls) {
 
 // --- State ---
 let apiKey = null;
-let modelId = 'gemini-2.5-flash';
+let modelId = 'gemini-2.5-flash-lite';
 let isListening = false;
 let silenceThreshold = 3000; // ms
 let segmentCount = 0;
@@ -84,7 +84,7 @@ async function getApiKey() {
 async function getModel() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(['geminiModel'], (result) => {
-      resolve(result.geminiModel || 'gemini-2.5-flash');
+      resolve(result.geminiModel || 'gemini-2.5-flash-lite');
     });
   });
 }
@@ -1041,7 +1041,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       warningNoKey.style.display = apiKey ? 'none' : 'block';
     }
     if (changes.geminiModel) {
-      modelId = changes.geminiModel.newValue || 'gemini-2.5-flash';
+      modelId = changes.geminiModel.newValue || 'gemini-2.5-flash-lite';
     }
   }
 });

@@ -40,7 +40,7 @@ const GEMINI_MODELS = {
   'gemini-2.0-flash-lite': { label: 'Gemini 2.0 Flash Lite', costPer1M: 0.075 },
 };
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 let currentModelId = DEFAULT_MODEL;
 
 /* Commented out - Minimalistic Mode and Word Frequency stats removed

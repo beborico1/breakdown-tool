@@ -14,7 +14,7 @@ export async function getApiKey() {
   });
 }
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 
 /**
  * Get the selected Gemini model from storage
