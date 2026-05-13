@@ -73,18 +73,68 @@ export async function getModel() {
 }
 
 /**
- * Update token usage in storage
- * @param {number} tokens - Number of tokens to add
+ * Extract a per-modality delta from a Gemini `usageMetadata` object.
+ * Returns { textIn, audioIn, imageIn, out, total }. Output includes
+ * thinking tokens, which Google bills as output on 2.5 models.
  */
-async function updateTokenUsage(tokens) {
-  if (!tokens || tokens <= 0) return;
+function deltaFromUsageMetadata(meta) {
+  if (!meta) return null;
+  const delta = { textIn: 0, audioIn: 0, imageIn: 0, out: 0, total: 0 };
+  const details = Array.isArray(meta.promptTokensDetails) ? meta.promptTokensDetails : [];
+  let promptCounted = 0;
+  for (const d of details) {
+    const n = Number(d?.tokenCount) || 0;
+    promptCounted += n;
+    switch (d?.modality) {
+      case 'AUDIO': delta.audioIn += n; break;
+      case 'IMAGE':
+      case 'VIDEO': delta.imageIn += n; break;
+      default: delta.textIn += n; break;
+    }
+  }
+  // Fall back to promptTokenCount when the per-modality breakdown is missing.
+  if (promptCounted === 0 && meta.promptTokenCount) {
+    delta.textIn = Number(meta.promptTokenCount) || 0;
+  }
+  delta.out = (Number(meta.candidatesTokenCount) || 0)
+            + (Number(meta.thoughtsTokenCount) || 0);
+  delta.total = Number(meta.totalTokenCount)
+             || (delta.textIn + delta.audioIn + delta.imageIn + delta.out);
+  return delta;
+}
 
-  chrome.storage.local.get(['tokenUsage'], (result) => {
-    const currentUsage = result.tokenUsage || 0;
-    const newUsage = currentUsage + tokens;
-    chrome.storage.local.set({ tokenUsage: newUsage });
-    debugLog('API', `Token usage updated: +${tokens} (total: ${newUsage})`);
-  });
+const EMPTY_USAGE = { textIn: 0, audioIn: 0, imageIn: 0, out: 0, total: 0 };
+
+/**
+ * Serialized write queue: Chrome storage get/set is not atomic, so concurrent
+ * callers can clobber each other's increments. Chain all writes through one
+ * promise so increments are applied one at a time within this context.
+ */
+let usageWriteQueue = Promise.resolve();
+function updateTokenUsage(usageMetadata) {
+  const delta = deltaFromUsageMetadata(usageMetadata);
+  if (!delta || delta.total <= 0) return usageWriteQueue;
+  usageWriteQueue = usageWriteQueue.then(() => new Promise((resolve) => {
+    chrome.storage.local.get(['tokenUsage'], (result) => {
+      const raw = result.tokenUsage;
+      const cur = (typeof raw === 'object' && raw !== null)
+        ? { ...EMPTY_USAGE, ...raw }
+        // Migrate legacy scalar: assume all prior tokens were text input.
+        : { ...EMPTY_USAGE, textIn: Number(raw) || 0, total: Number(raw) || 0 };
+      const next = {
+        textIn:  cur.textIn  + delta.textIn,
+        audioIn: cur.audioIn + delta.audioIn,
+        imageIn: cur.imageIn + delta.imageIn,
+        out:     cur.out     + delta.out,
+        total:   cur.total   + delta.total,
+      };
+      chrome.storage.local.set({ tokenUsage: next }, () => {
+        debugLog('API', `Token usage +${delta.total} (text:${delta.textIn} audio:${delta.audioIn} img:${delta.imageIn} out:${delta.out}) → total ${next.total}`);
+        resolve();
+      });
+    });
+  }));
+  return usageWriteQueue;
 }
 
 /**
@@ -214,7 +264,7 @@ Text: ${text}`;
   // Track token usage
   const usageMetadata = data.usageMetadata;
   if (usageMetadata?.totalTokenCount) {
-    updateTokenUsage(usageMetadata.totalTokenCount);
+    updateTokenUsage(usageMetadata);
   }
 
   debugLog('API-BREAKDOWN', 'finishReason:', finishReason);
@@ -364,7 +414,7 @@ Important:
   // Track token usage
   const usageMetadata = data.usageMetadata;
   if (usageMetadata?.totalTokenCount) {
-    updateTokenUsage(usageMetadata.totalTokenCount);
+    updateTokenUsage(usageMetadata);
   }
 
   debugLog('API-AUDIO', 'Response length:', responseText?.length || 0);
@@ -443,7 +493,7 @@ export async function transcribeAudioWithGemini(base64Audio, mimeType) {
 
   const usageMetadata = data.usageMetadata;
   if (usageMetadata?.totalTokenCount) {
-    updateTokenUsage(usageMetadata.totalTokenCount);
+    updateTokenUsage(usageMetadata);
   }
 
   if (text === undefined || text === null) {
@@ -516,7 +566,7 @@ export async function translateWithGemini(text, options = {}) {
   // Track token usage
   const usageMetadata = data.usageMetadata;
   if (usageMetadata?.totalTokenCount) {
-    updateTokenUsage(usageMetadata.totalTokenCount);
+    updateTokenUsage(usageMetadata);
   }
 
   if (!translatedText) {
@@ -577,7 +627,7 @@ export async function translateToJapaneseWithGemini(text) {
   // Track token usage
   const usageMetadata = data.usageMetadata;
   if (usageMetadata?.totalTokenCount) {
-    updateTokenUsage(usageMetadata.totalTokenCount);
+    updateTokenUsage(usageMetadata);
   }
 
   if (!translatedText) {

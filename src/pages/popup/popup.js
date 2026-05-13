@@ -32,12 +32,20 @@ const stabilityBufferValueEl = document.getElementById('stabilityBufferValue');
 const apiKeyHelpLink = document.getElementById('apiKeyHelp');
 const apiKeyTutorialEl = document.getElementById('apiKeyTutorial');
 
+// USD per 1M tokens, split by modality. Output prices include thinking
+// tokens, which Google bills as output on the 2.5 family. Update from
+// https://ai.google.dev/gemini-api/docs/pricing when rates change.
 const GEMINI_MODELS = {
-  'gemini-2.5-flash':      { label: 'Gemini 2.5 Flash',      costPer1M: 0.15 },
-  'gemini-2.5-flash-lite': { label: 'Gemini 2.5 Flash Lite', costPer1M: 0.075 },
-  'gemini-2.5-pro':        { label: 'Gemini 2.5 Pro',        costPer1M: 1.25 },
-  'gemini-2.0-flash':      { label: 'Gemini 2.0 Flash',      costPer1M: 0.10 },
-  'gemini-2.0-flash-lite': { label: 'Gemini 2.0 Flash Lite', costPer1M: 0.075 },
+  'gemini-2.5-flash':      { label: 'Gemini 2.5 Flash',
+    price: { textIn: 0.30, audioIn: 1.00, imageIn: 0.30, out: 2.50 } },
+  'gemini-2.5-flash-lite': { label: 'Gemini 2.5 Flash Lite',
+    price: { textIn: 0.10, audioIn: 0.30, imageIn: 0.10, out: 0.40 } },
+  'gemini-2.5-pro':        { label: 'Gemini 2.5 Pro',
+    price: { textIn: 1.25, audioIn: 1.25, imageIn: 1.25, out: 10.00 } },
+  'gemini-2.0-flash':      { label: 'Gemini 2.0 Flash',
+    price: { textIn: 0.10, audioIn: 0.70, imageIn: 0.10, out: 0.40 } },
+  'gemini-2.0-flash-lite': { label: 'Gemini 2.0 Flash Lite',
+    price: { textIn: 0.075, audioIn: 0.075, imageIn: 0.075, out: 0.30 } },
 };
 
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
@@ -466,31 +474,74 @@ function formatTokenCount(tokens) {
   return tokens.toLocaleString();
 }
 
-/**
- * Format cost based on token count and selected model
- * @param {number} tokens
- * @returns {string}
- */
-function formatCost(tokens) {
-  const costPer1M = GEMINI_MODELS[currentModelId]?.costPer1M || 0.15;
-  const cost = (tokens / 1000000) * costPer1M;
-  if (cost < 0.01) {
-    return '~$' + cost.toFixed(4);
+// Pre-migration `tokenUsage` was a single number. Normalize to the new
+// per-modality shape so downstream code only handles one form.
+function normalizeUsage(raw) {
+  if (raw && typeof raw === 'object') {
+    return {
+      textIn:  Number(raw.textIn)  || 0,
+      audioIn: Number(raw.audioIn) || 0,
+      imageIn: Number(raw.imageIn) || 0,
+      out:     Number(raw.out)     || 0,
+      total:   Number(raw.total)
+            || ((Number(raw.textIn) || 0) + (Number(raw.audioIn) || 0)
+              + (Number(raw.imageIn) || 0) + (Number(raw.out) || 0)),
+      legacy: false,
+    };
   }
+  const n = Number(raw) || 0;
+  return { textIn: n, audioIn: 0, imageIn: 0, out: 0, total: n, legacy: n > 0 };
+}
+
+/**
+ * Compute USD cost from a per-modality usage object using the current model's
+ * price table. Legacy scalar usage is priced at the textIn rate (a lower bound
+ * — the real cost was likely higher because we couldn't distinguish modalities).
+ */
+function computeCost(usage) {
+  const model = GEMINI_MODELS[currentModelId];
+  if (!model) return 0;
+  const p = model.price;
+  if (usage.legacy) {
+    return (usage.total / 1_000_000) * p.textIn;
+  }
+  return (
+    usage.textIn  * p.textIn  +
+    usage.audioIn * p.audioIn +
+    usage.imageIn * p.imageIn +
+    usage.out     * p.out
+  ) / 1_000_000;
+}
+
+function formatCostValue(cost) {
+  if (cost < 0.01) return '~$' + cost.toFixed(4);
   return '~$' + cost.toFixed(2);
+}
+
+function formatBreakdown(usage) {
+  if (usage.legacy || usage.total === 0) return '';
+  const parts = [];
+  if (usage.audioIn) parts.push(`${formatTokenCount(usage.audioIn)} audio in`);
+  if (usage.out)     parts.push(`${formatTokenCount(usage.out)} out`);
+  if (usage.textIn)  parts.push(`${formatTokenCount(usage.textIn)} text in`);
+  if (usage.imageIn) parts.push(`${formatTokenCount(usage.imageIn)} image in`);
+  return parts.length ? `(${parts.join(' · ')})` : '';
 }
 
 /**
  * Update the usage display with optional animation
- * @param {number} tokens
+ * @param {object|number} raw - usage object (new shape) or legacy scalar
  * @param {boolean} animate
  */
-function updateUsageDisplay(tokens, animate = false) {
-  tokenCountEl.textContent = formatTokenCount(tokens);
-  tokenCostEl.textContent = formatCost(tokens);
+function updateUsageDisplay(raw, animate = false) {
+  const usage = normalizeUsage(raw);
+  const breakdown = formatBreakdown(usage);
+  tokenCountEl.textContent = formatTokenCount(usage.total)
+    + (breakdown ? '  ' + breakdown : '');
+  tokenCostEl.textContent = formatCostValue(computeCost(usage));
 
   // Disable reset button if zero tokens
-  resetUsageBtn.disabled = tokens === 0;
+  resetUsageBtn.disabled = usage.total === 0;
 
   if (animate) {
     tokenCountEl.classList.add('updating');
@@ -517,8 +568,7 @@ function formatSinceDate(timestamp) {
  */
 function loadUsage() {
   chrome.storage.local.get(['tokenUsage', 'tokenUsageSince'], (result) => {
-    const tokens = result.tokenUsage || 0;
-    updateUsageDisplay(tokens);
+    updateUsageDisplay(result.tokenUsage);
 
     if (result.tokenUsageSince) {
       usageSinceEl.textContent = formatSinceDate(result.tokenUsageSince);
@@ -539,8 +589,9 @@ function resetUsage() {
   }
 
   const now = Date.now();
-  chrome.storage.local.set({ tokenUsage: 0, tokenUsageSince: now }, () => {
-    updateUsageDisplay(0, true);
+  const zero = { textIn: 0, audioIn: 0, imageIn: 0, out: 0, total: 0 };
+  chrome.storage.local.set({ tokenUsage: zero, tokenUsageSince: now }, () => {
+    updateUsageDisplay(zero, true);
     usageSinceEl.textContent = formatSinceDate(now);
     showStatus('Token usage reset', true);
   });
@@ -552,9 +603,10 @@ function resetUsage() {
  */
 function updateCostHint(modelId) {
   const model = GEMINI_MODELS[modelId];
-  if (model) {
-    modelCostHintEl.textContent = `Uses ${model.label} (~$${model.costPer1M}/1M tokens)`;
-  }
+  if (!model) return;
+  const p = model.price;
+  modelCostHintEl.textContent =
+    `Uses ${model.label} ($${p.textIn} text / $${p.audioIn} audio in · $${p.out} out per 1M tokens)`;
 }
 
 /**
@@ -581,7 +633,7 @@ modelSelectEl.addEventListener('change', () => {
 // Listen for storage changes to update in real-time
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes.tokenUsage) {
-    updateUsageDisplay(changes.tokenUsage.newValue || 0, true);
+    updateUsageDisplay(changes.tokenUsage.newValue, true);
   }
   if (areaName === 'sync' && changes.geminiModel) {
     currentModelId = changes.geminiModel.newValue || DEFAULT_MODEL;
