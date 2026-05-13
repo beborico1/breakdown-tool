@@ -24,7 +24,8 @@ const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
 async function isOfflineNlpEnabled() {
   return new Promise((resolve) => {
     try {
-      chrome.storage.sync.get(['useOfflineNlp'], (r) => resolve(Boolean(r?.useOfflineNlp)));
+      // Default to ON: only false when user has explicitly toggled it off.
+      chrome.storage.sync.get(['useOfflineNlp'], (r) => resolve(r?.useOfflineNlp !== false));
     } catch { resolve(false); }
   });
 }

@@ -164,7 +164,7 @@ async function analyzeJapaneseChunked(text) {
 async function analyzeJapaneseWithGemini(text, options = {}) {
   // Offline NLP beta: route through service worker -> offscreen pipeline.
   const offlineEnabled = await new Promise((r) => {
-    try { chrome.storage.sync.get(['useOfflineNlp'], (s) => r(Boolean(s?.useOfflineNlp))); } catch { r(false); }
+    try { chrome.storage.sync.get(['useOfflineNlp'], (s) => r(s?.useOfflineNlp !== false)); } catch { r(true); }
   });
   if (offlineEnabled) {
     const response = await new Promise((resolve, reject) => {
