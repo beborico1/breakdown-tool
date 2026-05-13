@@ -13,13 +13,28 @@ function escapeHtml(str) {
  * Japanese form in the original text. Words that don't match (rare, e.g.
  * Gemini returned a normalized form) are skipped.
  */
+const ASCII_ONLY_RE = /^[\x20-\x7e]+$/;
+
+function findSurfaceIdx(text, needle, from) {
+  let idx = text.indexOf(needle, from);
+  if (idx !== -1) return idx;
+  // ASCII tokens may come back from kuromoji with different casing than the
+  // source (e.g. "URL" vs "url"). Retry case-insensitively in that case only.
+  if (ASCII_ONLY_RE.test(needle)) {
+    const hay = text.slice(from).toLowerCase();
+    const off = hay.indexOf(needle.toLowerCase());
+    if (off !== -1) return from + off;
+  }
+  return -1;
+}
+
 export function buildWordBoundaries(text, words) {
   const boundaries = [];
   let searchStart = 0;
 
   for (const word of words) {
     if (!word?.japanese) continue;
-    const idx = text.indexOf(word.japanese, searchStart);
+    const idx = findSurfaceIdx(text, word.japanese, searchStart);
     if (idx !== -1) {
       boundaries.push({
         startIdx: idx,
@@ -27,6 +42,8 @@ export function buildWordBoundaries(text, words) {
         word,
       });
       searchStart = idx + word.japanese.length;
+    } else if (typeof console !== 'undefined') {
+      console.debug?.('[word-render] dropped unmatched word:', word.japanese);
     }
   }
 

@@ -27,45 +27,86 @@ function hasKanji(s) {
   return /[一-龯㐀-䶿]/.test(s);
 }
 
+function enrichToken(t) {
+  const surface = t.surface_form;
+  if (!surface) return null;
+  if (isPunctOnly(surface)) return null;
+  try {
+    const { type, label } = mapPOS(t);
+    const readingKata = t.reading && t.reading !== '*' ? t.reading : '';
+    const reading = hasKanji(surface) ? kataToHira(readingKata) : '';
+    const romajiSource = readingKata || surface;
+    let romaji = '';
+    try {
+      romaji = toRomaji(romajiSource).toLowerCase();
+    } catch {
+      romaji = String(romajiSource).toLowerCase();
+    }
+    return { type, label, reading, romaji, surface, basic: t.basic_form && t.basic_form !== '*' ? t.basic_form : null, readingKata };
+  } catch (e) {
+    console.warn('[offscreen] token enrich failed', t, e?.message || e);
+    return null;
+  }
+}
+
 async function analyze(text) {
   if (!text || !text.trim()) {
     return { original: text || '', translation: '', words: [] };
   }
   console.log('[offscreen] analyze:', text.slice(0, 40));
-  const tokenizer = await ensureTokenizer();
-  const tokens = tokenizer.tokenize(text);
-  console.log('[offscreen] tokenized:', tokens.length, 'tokens');
 
-  // Kick off sentence translation in parallel with per-word enrichment.
-  // Cap at 8s so a missing Translator model never blocks the breakdown.
+  // Kick off sentence translation in parallel. Cap at 5s so a missing
+  // Translator model never blocks the breakdown.
   const translationPromise = Promise.race([
     translateJaEn(text),
-    new Promise((_, rej) => setTimeout(() => rej(new Error('translator timeout')), 8000)),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('translator timeout')), 5000)),
   ]).catch((e) => {
     console.warn('[offscreen] translate failed:', e?.message || e);
     return '';
   });
 
+  const tokenizer = await ensureTokenizer();
+  let tokens;
+  try {
+    tokens = tokenizer.tokenize(text);
+  } catch (e) {
+    console.warn('[offscreen] tokenize threw, falling back:', e?.message || e);
+    tokens = [];
+  }
+  console.log('[offscreen] tokenized:', tokens.length, 'tokens');
+
   const words = [];
   for (const t of tokens) {
-    const surface = t.surface_form;
-    if (!surface || isPunctOnly(surface)) continue;
-    const { type, label } = mapPOS(t);
-    const readingKata = t.reading && t.reading !== '*' ? t.reading : '';
-    const reading = hasKanji(surface) ? kataToHira(readingKata) : '';
-    const romajiSource = readingKata || surface;
-    const romaji = toRomaji(romajiSource).toLowerCase();
-    let english = label;
+    const enriched = enrichToken(t);
+    if (!enriched) continue;
+    let english = enriched.label;
     if (!english) {
-      const basic = t.basic_form && t.basic_form !== '*' ? t.basic_form : null;
-      english = await jmdictLookup(basic, surface, kataToHira(readingKata), readingKata);
+      try {
+        english = await jmdictLookup(enriched.basic, enriched.surface, kataToHira(enriched.readingKata), enriched.readingKata);
+      } catch (e) {
+        console.warn('[offscreen] jmdict lookup failed', enriched.surface, e?.message || e);
+        english = '';
+      }
     }
     words.push({
-      japanese: surface,
-      reading,
-      romaji,
+      japanese: enriched.surface,
+      reading: enriched.reading,
+      romaji: enriched.romaji,
       english: english || '',
-      type,
+      type: enriched.type,
+    });
+  }
+
+  // If kuromoji emitted nothing usable, return a single synthetic word so
+  // downstream rendering still paints the line (gray "expression" span) rather
+  // than failing back to plain text.
+  if (words.length === 0 && text.trim()) {
+    words.push({
+      japanese: text,
+      reading: '',
+      romaji: '',
+      english: '',
+      type: 'expression',
     });
   }
 
