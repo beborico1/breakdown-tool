@@ -1,0 +1,16 @@
+[project]
+name = "kaigi-local-server"
+version = "0.1.0"
+description = "Local Gemini-compatible shim for the Kaigi Meeting Chrome extension"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "mlx-lm>=0.20",
+    "mlx-whisper>=0.4",
+    "numpy>=1.26",
+    "soundfile>=0.12",
+]
+
+[tool.uv]
+package = false
