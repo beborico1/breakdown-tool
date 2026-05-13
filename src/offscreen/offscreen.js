@@ -1,7 +1,7 @@
 import { toRomaji } from 'wanakana';
 import { ensureTokenizer } from './kuromoji-loader.js';
 import { lookup as jmdictLookup } from './jmdict.js';
-import { translateJaEn } from './translator.js';
+import { translateJaEn, ensureJaEnTranslator, getTranslatorState } from './translator.js';
 import { mapPOS } from './pos-map.js';
 
 const KATAKANA_TO_HIRAGANA_OFFSET = 0x3041 - 0x30a1;
@@ -95,7 +95,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: true, text });
       } else if (msg.op === 'warmup') {
         await ensureTokenizer();
+        // Fire-and-forget so the model download starts now without blocking.
+        ensureJaEnTranslator().catch(() => {});
         sendResponse({ ok: true });
+      } else if (msg.op === 'translator-state') {
+        sendResponse({ ok: true, state: getTranslatorState() });
       } else {
         sendResponse({ ok: false, error: `unknown op: ${msg.op}` });
       }

@@ -60,6 +60,7 @@
       <div class="setting-info">
         <span class="setting-title">Offline NLP (beta)</span>
         <span class="setting-hint">Use local kuromoji + Chrome Translator instead of Gemini. Free &amp; offline after first use.</span>
+        <span class="setting-hint" id="translatorStatus" style="display:none"></span>
       </div>
       <label class="toggle-switch">
         <input type="checkbox" id="offlineNlpToggle">
@@ -122,6 +123,7 @@
       </div>
       <input type="range" id="chunkSizeSlider" class="font-size-slider" min="1" max="20" step="1" value="2">
     </div>
+    -->
 
     <hr class="divider">
 
@@ -136,6 +138,7 @@
       <input type="range" id="stabilityBufferSlider" class="font-size-slider" min="0" max="10" step="1" value="3">
     </div>
 
+    <!--
     <hr class="divider">
 
     <div class="mode-toggle">

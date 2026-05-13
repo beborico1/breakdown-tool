@@ -32,19 +32,71 @@ const stabilityBufferValueEl = document.getElementById('stabilityBufferValue');
 const apiKeyHelpLink = document.getElementById('apiKeyHelp');
 const apiKeyTutorialEl = document.getElementById('apiKeyTutorial');
 const offlineNlpToggle = document.getElementById('offlineNlpToggle');
+const translatorStatusEl = document.getElementById('translatorStatus');
+
+function renderTranslatorStatus(state) {
+  if (!translatorStatusEl) return;
+  if (!offlineNlpToggle?.checked) {
+    translatorStatusEl.style.display = 'none';
+    return;
+  }
+  let text = '';
+  if (!state || state.availability === 'unknown') {
+    text = 'Translator model: checking…';
+  } else if (state.availability === 'unavailable') {
+    text = 'Translator model: unavailable (sentence hover will be empty)';
+  } else if (state.availability === 'available' && state.ready) {
+    text = 'Translator model: ready';
+  } else if (state.availability === 'downloading') {
+    text = `Translator model: downloading… ${state.downloadPct || 0}%`;
+  } else if (state.availability === 'downloadable') {
+    text = 'Translator model: starting download…';
+  } else if (state.availability === 'available') {
+    text = 'Translator model: warming up…';
+  }
+  translatorStatusEl.textContent = text;
+  translatorStatusEl.style.display = text ? '' : 'none';
+}
+
+function requestTranslatorState() {
+  try {
+    chrome.runtime.sendMessage(
+      { type: 'kaigi-nlp-proxy', op: 'translator-state', text: '' },
+      (resp) => {
+        if (chrome.runtime.lastError) return;
+        if (resp?.ok) renderTranslatorStatus(resp.state);
+      }
+    );
+  } catch {}
+}
 
 if (offlineNlpToggle) {
   chrome.storage.sync.get(['useOfflineNlp'], (r) => {
-    offlineNlpToggle.checked = Boolean(r?.useOfflineNlp);
+    // Default to ON. Only off when user has explicitly disabled it.
+    offlineNlpToggle.checked = r?.useOfflineNlp !== false;
+    if (offlineNlpToggle.checked) {
+      requestTranslatorState();
+      // Kick warmup so popup re-open reflects fresh state even if user never re-toggled.
+      try { chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'warmup', text: '' }); } catch {}
+    }
   });
   offlineNlpToggle.addEventListener('change', () => {
     const enabled = offlineNlpToggle.checked;
     chrome.storage.sync.set({ useOfflineNlp: enabled });
     if (enabled) {
-      // Warm up the offscreen pipeline so the first real request is fast.
       try {
         chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'warmup', text: '' });
       } catch {}
+      requestTranslatorState();
+    } else {
+      renderTranslatorStatus(null);
+    }
+  });
+
+  // Live updates from the offscreen translator monitor.
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'kaigi-translator-progress') {
+      renderTranslatorStatus(msg.state);
     }
   });
 }
