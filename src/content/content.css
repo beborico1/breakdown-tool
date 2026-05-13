@@ -209,7 +209,7 @@
 .type-expression { color: #F472B6; }
 .type-auxiliary { color: #F87171; }
 .type-copula { color: #2DD4BF; }
-.type-other { color: #9CA3AF; }
+.type-other { color: #FB923C; }
 
 /* Word type tooltip - shown on block hover */
 .word-block {
@@ -363,7 +363,7 @@
 .mm-word.mm-type-expression { color: #F472B6 !important; }
 .mm-word.mm-type-auxiliary  { color: #F87171 !important; }
 .mm-word.mm-type-copula     { color: #2DD4BF !important; }
-.mm-word.mm-type-other      { color: inherit; }
+.mm-word.mm-type-other      { color: #FB923C !important; }
 
 /* Alternate tones for consecutive same-type words (set by render loop) */
 .mm-word.mm-type-noun.mm-tone-alt       { color: #1A5EC4 !important; }
@@ -375,6 +375,7 @@
 .mm-word.mm-type-expression.mm-tone-alt { color: #C24D8C !important; }
 .mm-word.mm-type-auxiliary.mm-tone-alt  { color: #C84F4F !important; }
 .mm-word.mm-type-copula.mm-tone-alt     { color: #1E9E8E !important; }
+.mm-word.mm-type-other.mm-tone-alt      { color: #C2410C !important; }
 
 /* Kept: sentence-processor's processing-indicator uses this animation name. */
 @keyframes mm-pulse {
@@ -674,7 +675,7 @@
 .gcwb-type-expression { color: #F472B6; }
 .gcwb-type-auxiliary { color: #F87171; }
 .gcwb-type-copula { color: #2DD4BF; }
-.gcwb-type-other { color: #9CA3AF; }
+.gcwb-type-other { color: #FB923C; }
 
 /* Alternate tones for consecutive same-type words (set by render loop) */
 .gcwb-type-noun.gcwb-tone-alt       { color: #1A5EC4; }
@@ -933,7 +934,7 @@
 .gcwb-popover-reading.gcwb-type-expression { color: #F472B6; }
 .gcwb-popover-reading.gcwb-type-auxiliary { color: #F87171; }
 .gcwb-popover-reading.gcwb-type-copula { color: #2DD4BF; }
-.gcwb-popover-reading.gcwb-type-other { color: #9CA3AF; }
+.gcwb-popover-reading.gcwb-type-other { color: #FB923C; }
 
 .gcwb-popover-romaji {
   font-size: 12px;

@@ -744,7 +744,7 @@ body {
 .type-expression { color: #F472B6; }
 .type-auxiliary { color: #F87171; }
 .type-copula { color: #2DD4BF; }
-.type-other { color: #9CA3AF; }
+.type-other { color: #FB923C; }
 
 /* Word type tooltip */
 .word-block .word-japanese::after {
