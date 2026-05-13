@@ -15,6 +15,68 @@ export async function getApiKey() {
 }
 
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+const LOCAL_API_BASE = 'http://127.0.0.1:8787';
+const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
+
+/**
+ * Resolve the current API base URL from storage (cloud by default).
+ * @returns {Promise<string>}
+ */
+async function getApiBase() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['apiSource'], (result) => {
+      resolve(result.apiSource === 'local' ? LOCAL_API_BASE : CLOUD_API_BASE);
+    });
+  });
+}
+
+/**
+ * Resolve apiBase + apiKey together. In local mode the key is optional
+ * (the local server ignores it); in cloud mode it's required.
+ * @returns {Promise<{apiBase: string, apiKey: string}>}
+ */
+async function resolveAuth() {
+  const apiBase = await getApiBase();
+  const isLocal = apiBase === LOCAL_API_BASE;
+  const apiKey = (await getApiKey()) || (isLocal ? 'local' : null);
+  if (!apiKey) {
+    throw new Error('No API key. Set it in the extension popup.');
+  }
+  return { apiBase, apiKey };
+}
+
+/**
+ * Fetch proxy via the service worker. Content scripts on Google Chat / Meet
+ * are blocked from reaching http://127.0.0.1 by the page CSP. The service
+ * worker runs from extension origin with host_permissions and bypasses CSP,
+ * mixed-content, PNA, and CORS in one shot. Returns a Response-like object
+ * compatible with the existing call sites (.ok, .status, .json(), .text()).
+ */
+async function kaigiFetch(url, init) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type: 'kaigi-fetch', url, init }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (!response) {
+        reject(new Error('no response from background fetch proxy'));
+        return;
+      }
+      if (response.error) {
+        reject(new Error(response.error));
+        return;
+      }
+      const text = response.text || '';
+      resolve({
+        ok: response.ok,
+        status: response.status,
+        async json() { return JSON.parse(text); },
+        async text() { return text; },
+      });
+    });
+  });
+}
 
 /**
  * Get the selected Gemini model from storage
@@ -103,11 +165,7 @@ async function analyzeJapaneseChunked(text, apiKey) {
  * @returns {Promise<{original: string, translation: string, words: Array<{japanese: string, reading: string, romaji: string, english: string, type: string}>, truncated?: boolean}>}
  */
 export async function analyzeJapaneseWithGemini(text, options = {}) {
-  const apiKey = await getApiKey();
-
-  if (!apiKey) {
-    throw new Error('No API key. Set it in the extension popup.');
-  }
+  const { apiBase, apiKey } = await resolveAuth();
 
   const model = await getModel();
   const callNum = incrementApiCallCount();
@@ -139,8 +197,8 @@ Text: ${text}`;
   debugLog('API-BREAKDOWN', `Call #${callNum}`);
   debugLog('API-BREAKDOWN', `INPUT (${text.length} chars):`, text);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+  const response = await kaigiFetch(
+    `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -252,11 +310,7 @@ function parseBreakdownResponse(responseText) {
  * @returns {Promise<{original: string, translation: string, words: Array}>}
  */
 export async function analyzeAudioWithGemini(base64Audio, mimeType) {
-  const apiKey = await getApiKey();
-
-  if (!apiKey) {
-    throw new Error('No API key. Set it in the extension popup.');
-  }
+  const { apiBase, apiKey } = await resolveAuth();
 
   const model = await getModel();
   const callNum = incrementApiCallCount();
@@ -286,8 +340,8 @@ Important:
 
   debugLog('API-AUDIO', `Call #${callNum}`);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+  const response = await kaigiFetch(
+    `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -358,11 +412,7 @@ Important:
  * @returns {Promise<string>} - Raw Japanese transcription text
  */
 export async function transcribeAudioWithGemini(base64Audio, mimeType) {
-  const apiKey = await getApiKey();
-
-  if (!apiKey) {
-    throw new Error('No API key. Set it in the extension popup.');
-  }
+  const { apiBase, apiKey } = await resolveAuth();
 
   const model = await getModel();
   const callNum = incrementApiCallCount();
@@ -371,8 +421,8 @@ export async function transcribeAudioWithGemini(base64Audio, mimeType) {
 
   debugLog('API-TRANSCRIBE', `Call #${callNum}`);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+  const response = await kaigiFetch(
+    `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -433,11 +483,7 @@ export async function transcribeAudioWithGemini(base64Audio, mimeType) {
  * @returns {Promise<string>} - Translated text
  */
 export async function translateWithGemini(text, options = {}) {
-  const apiKey = await getApiKey();
-
-  if (!apiKey) {
-    throw new Error('No API key. Set it in the extension popup.');
-  }
+  const { apiBase, apiKey } = await resolveAuth();
 
   const model = await getModel();
   const callNum = incrementApiCallCount();
@@ -455,8 +501,8 @@ export async function translateWithGemini(text, options = {}) {
   debugLog('API', `INPUT (${text.length} chars):`, text);
   debugLog('API', `FULL PROMPT:`, prompt);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+  const response = await kaigiFetch(
+    `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {
@@ -506,11 +552,7 @@ export async function translateWithGemini(text, options = {}) {
  * @returns {Promise<string>} - Japanese translation
  */
 export async function translateToJapaneseWithGemini(text) {
-  const apiKey = await getApiKey();
-
-  if (!apiKey) {
-    throw new Error('No API key. Set it in the extension popup.');
-  }
+  const { apiBase, apiKey } = await resolveAuth();
 
   const model = await getModel();
   const callNum = incrementApiCallCount();
@@ -520,8 +562,8 @@ export async function translateToJapaneseWithGemini(text) {
   debugLog('API', `Call #${callNum} (TO-JAPANESE)`);
   debugLog('API', `INPUT (${text.length} chars):`, text);
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+  const response = await kaigiFetch(
+    `${apiBase}/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: {

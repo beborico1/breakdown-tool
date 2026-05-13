@@ -1,3 +1,22 @@
+// Fetch proxy: content scripts in MV3 cannot reliably reach a local server from
+// strict-CSP pages (chat.google.com, meet.google.com). The service worker has
+// extension-origin privileges + host_permissions, so it can fetch any allowed URL.
+// Content scripts send {type:'kaigi-fetch', url, init} and get back a serialised
+// response with {ok, status, text}.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'kaigi-fetch') return false;
+  (async () => {
+    try {
+      const r = await fetch(msg.url, msg.init || {});
+      const text = await r.text();
+      sendResponse({ ok: r.ok, status: r.status, text });
+    } catch (err) {
+      sendResponse({ ok: false, status: 0, text: '', error: String(err) });
+    }
+  })();
+  return true; // keep the message channel open for the async sendResponse
+});
+
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== 'translate-to-japanese' && command !== 'translate-to-japanese-replace') return;
 
