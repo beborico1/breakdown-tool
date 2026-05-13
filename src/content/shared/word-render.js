@@ -39,6 +39,23 @@ export function buildWordBoundaries(text, words) {
  */
 const BOUNDARY_MARKS = /[。！？.!?]/;
 
+const METADATA_BRACKET_RE = /\[[^\]]*\]/;
+const DEGENERATE_TRANSLATION_WORDS = new Set([
+  'period', 'full stop', 'comma', 'question mark', 'exclamation mark',
+  'exclamation point', 'dot', 'ellipsis', 'punctuation',
+]);
+
+function isDegenerateTranslation(t) {
+  if (!t) return true;
+  const trimmed = String(t).trim();
+  if (!trimmed) return true;
+  if (METADATA_BRACKET_RE.test(trimmed)) return true;
+  const stripped = trimmed.replace(/[\s\p{P}\p{S}]/gu, '');
+  if (!stripped) return true;
+  if (DEGENERATE_TRANSLATION_WORDS.has(trimmed.toLowerCase().replace(/[.!?]+$/, ''))) return true;
+  return false;
+}
+
 export function paintWordColoring(messageEl, text, words, sentences) {
   if (!messageEl || !text) return;
   const boundaries = buildWordBoundaries(text, words || []);
@@ -57,7 +74,13 @@ export function paintWordColoring(messageEl, text, words, sentences) {
     const s = sents[sIdx];
     if (!s) return null;
     if (idx >= s.startIndex && idx < s.endIndex) {
-      return s.breakdownData?.translation || null;
+      const own = s.breakdownData?.translation || null;
+      if (own && !isDegenerateTranslation(own)) return own;
+      for (let j = sIdx - 1; j >= 0; j--) {
+        const prev = sents[j]?.breakdownData?.translation;
+        if (prev && !isDegenerateTranslation(prev)) return prev;
+      }
+      return own;
     }
     return null;
   };
