@@ -42,6 +42,26 @@ if (settingsBtn && silenceControls) {
   });
 }
 
+// --- API base ---
+const LOCAL_API_BASE = 'http://127.0.0.1:8787';
+const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
+
+async function getApiBase() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['apiSource'], (result) => {
+      resolve(result.apiSource === 'local' ? LOCAL_API_BASE : CLOUD_API_BASE);
+    });
+  });
+}
+
+async function resolveAuth() {
+  const apiBase = await getApiBase();
+  const isLocal = apiBase === LOCAL_API_BASE;
+  const key = (await getApiKey()) || (isLocal ? 'local' : null);
+  if (!key) throw new Error('No API key. Set it in the extension popup.');
+  return { apiBase, apiKey: key };
+}
+
 // --- State ---
 let apiKey = null;
 let modelId = 'gemini-2.5-flash-lite';
@@ -153,7 +173,7 @@ async function analyzeJapaneseChunked(text) {
 }
 
 async function analyzeJapaneseWithGemini(text, options = {}) {
-  if (!apiKey) throw new Error('No API key. Set it in the extension popup.');
+  const { apiBase, apiKey: resolvedKey } = await resolveAuth();
 
   const prompt = `Analyze this Japanese text and return ONLY valid JSON (no markdown, no code blocks, no explanation):
 {
@@ -180,7 +200,7 @@ Important:
 Text: ${text}`;
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
+    `${apiBase}/v1beta/models/${modelId}:generateContent?key=${resolvedKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -271,12 +291,12 @@ function sanitizeTranscription(text) {
 }
 
 async function transcribeAudioOnly(base64Audio, mimeType) {
-  if (!apiKey) throw new Error('No API key. Set it in the extension popup.');
+  const { apiBase, apiKey: resolvedKey } = await resolveAuth();
 
   const prompt = `Transcribe this Japanese audio. Output ONLY the transcribed Japanese text, nothing else. No translation, no explanation, no quotes, no markdown. Do NOT include timestamps, timecodes, or time references (00:00, 00時00分). If no Japanese speech is detected, output an empty string.`;
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
+    `${apiBase}/v1beta/models/${modelId}:generateContent?key=${resolvedKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
