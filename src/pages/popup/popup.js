@@ -31,6 +31,23 @@ const stabilityBufferSlider = document.getElementById('stabilityBufferSlider');
 const stabilityBufferValueEl = document.getElementById('stabilityBufferValue');
 const apiKeyHelpLink = document.getElementById('apiKeyHelp');
 const apiKeyTutorialEl = document.getElementById('apiKeyTutorial');
+const offlineNlpToggle = document.getElementById('offlineNlpToggle');
+
+if (offlineNlpToggle) {
+  chrome.storage.sync.get(['useOfflineNlp'], (r) => {
+    offlineNlpToggle.checked = Boolean(r?.useOfflineNlp);
+  });
+  offlineNlpToggle.addEventListener('change', () => {
+    const enabled = offlineNlpToggle.checked;
+    chrome.storage.sync.set({ useOfflineNlp: enabled });
+    if (enabled) {
+      // Warm up the offscreen pipeline so the first real request is fast.
+      try {
+        chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'warmup', text: '' });
+      } catch {}
+    }
+  });
+}
 
 // USD per 1M tokens, split by modality. Output prices include thinking
 // tokens, which Google bills as output on the 2.5 family. Update from
@@ -274,6 +291,19 @@ async function clearFrequencyData() {
 function openFrequencyPage() {
   chrome.tabs.create({ url: 'src/pages/frequency/frequency.html' });
 }
+
+// Reveal Translate-to-Japanese section only on Gmail / Google Chat tabs
+(async () => {
+  const wrap = document.getElementById('translateJpWrap');
+  if (!wrap) return;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const isChatOrGmail =
+      tab?.url?.includes('chat.google.com') ||
+      tab?.url?.includes('mail.google.com');
+    if (isChatOrGmail) wrap.hidden = false;
+  } catch {}
+})();
 
 // Translate to Japanese button
 translateToJapaneseBtn.addEventListener('click', async () => {
@@ -641,12 +671,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     updateCostHint(currentModelId);
     loadUsage();
   }
-  if (areaName === 'sync' && changes.sentenceChunkSize) {
+  if (areaName === 'sync' && changes.sentenceChunkSize && chunkSizeSlider) {
     const size = changes.sentenceChunkSize.newValue || 2;
     chunkSizeSlider.value = size;
     chunkSizeValueEl.textContent = size;
   }
-  if (areaName === 'sync' && changes.sentenceStabilityBuffer !== undefined) {
+  if (areaName === 'sync' && changes.sentenceStabilityBuffer !== undefined && stabilityBufferSlider) {
     const buffer = typeof changes.sentenceStabilityBuffer.newValue === 'number'
       ? changes.sentenceStabilityBuffer.newValue
       : 3;
@@ -665,6 +695,7 @@ resetUsageBtn.addEventListener('click', (e) => {
  * Load font size setting from storage
  */
 function loadFontSize() {
+  if (!fontSizeSlider) return;
   chrome.storage.sync.get(['wordBlockFontSize'], (result) => {
     const size = result.wordBlockFontSize || 15;
     fontSizeSlider.value = size;
@@ -673,16 +704,19 @@ function loadFontSize() {
 }
 
 // Font size slider handler
-fontSizeSlider.addEventListener('input', () => {
-  const size = parseInt(fontSizeSlider.value, 10);
-  fontSizeValueEl.textContent = `${size}px`;
-  chrome.storage.sync.set({ wordBlockFontSize: size });
-});
+if (fontSizeSlider) {
+  fontSizeSlider.addEventListener('input', () => {
+    const size = parseInt(fontSizeSlider.value, 10);
+    fontSizeValueEl.textContent = `${size}px`;
+    chrome.storage.sync.set({ wordBlockFontSize: size });
+  });
+}
 
 /**
  * Load sentence chunk size setting from storage
  */
 function loadChunkSize() {
+  if (!chunkSizeSlider) return;
   chrome.storage.sync.get(['sentenceChunkSize'], (result) => {
     const size = result.sentenceChunkSize || 2;
     chunkSizeSlider.value = size;
@@ -691,13 +725,16 @@ function loadChunkSize() {
 }
 
 // Chunk size slider handler
-chunkSizeSlider.addEventListener('input', () => {
-  const size = parseInt(chunkSizeSlider.value, 10);
-  chunkSizeValueEl.textContent = size;
-  chrome.storage.sync.set({ sentenceChunkSize: size });
-});
+if (chunkSizeSlider) {
+  chunkSizeSlider.addEventListener('input', () => {
+    const size = parseInt(chunkSizeSlider.value, 10);
+    chunkSizeValueEl.textContent = size;
+    chrome.storage.sync.set({ sentenceChunkSize: size });
+  });
+}
 
 function loadStabilityBuffer() {
+  if (!stabilityBufferSlider) return;
   chrome.storage.sync.get(['sentenceStabilityBuffer'], (result) => {
     const buffer = typeof result.sentenceStabilityBuffer === 'number'
       ? result.sentenceStabilityBuffer
@@ -707,11 +744,13 @@ function loadStabilityBuffer() {
   });
 }
 
-stabilityBufferSlider.addEventListener('input', () => {
-  const buffer = parseInt(stabilityBufferSlider.value, 10);
-  stabilityBufferValueEl.textContent = buffer;
-  chrome.storage.sync.set({ sentenceStabilityBuffer: buffer });
-});
+if (stabilityBufferSlider) {
+  stabilityBufferSlider.addEventListener('input', () => {
+    const buffer = parseInt(stabilityBufferSlider.value, 10);
+    stabilityBufferValueEl.textContent = buffer;
+    chrome.storage.sync.set({ sentenceStabilityBuffer: buffer });
+  });
+}
 
 // Collapsible section toggle
 document.querySelectorAll('.collapsible-header').forEach(header => {

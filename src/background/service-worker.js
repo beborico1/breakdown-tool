@@ -17,6 +17,46 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true; // keep the message channel open for the async sendResponse
 });
 
+// Offscreen document management for offline NLP (kuromoji + JMdict + Translator API).
+// Only one offscreen doc may exist per extension. Created lazily on first NLP request.
+const OFFSCREEN_PATH = 'src/offscreen/offscreen.html';
+let offscreenReady = null;
+
+async function ensureOffscreen() {
+  if (offscreenReady) return offscreenReady;
+  offscreenReady = (async () => {
+    if (chrome.offscreen.hasDocument && await chrome.offscreen.hasDocument()) return;
+    try {
+      await chrome.offscreen.createDocument({
+        url: OFFSCREEN_PATH,
+        reasons: ['DOM_PARSER'],
+        justification: 'Run kuromoji tokenizer and Chrome Translator API for offline Japanese NLP.',
+      });
+    } catch (e) {
+      if (!String(e).includes('single offscreen')) throw e;
+    }
+  })();
+  return offscreenReady;
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'kaigi-nlp-proxy') return false;
+  (async () => {
+    try {
+      await ensureOffscreen();
+      const response = await chrome.runtime.sendMessage({
+        type: 'kaigi-nlp',
+        op: msg.op,
+        text: msg.text,
+      });
+      sendResponse(response);
+    } catch (e) {
+      sendResponse({ ok: false, error: String(e?.message || e) });
+    }
+  })();
+  return true;
+});
+
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== 'translate-to-japanese' && command !== 'translate-to-japanese-replace') return;
 

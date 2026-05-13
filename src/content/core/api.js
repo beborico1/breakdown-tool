@@ -18,6 +18,42 @@ const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
 
 /**
+ * Whether the user has opted into the offline NLP beta pipeline
+ * (kuromoji + JMdict + Chrome Translator API). Returns false on any error.
+ */
+async function isOfflineNlpEnabled() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.sync.get(['useOfflineNlp'], (r) => resolve(Boolean(r?.useOfflineNlp)));
+    } catch { resolve(false); }
+  });
+}
+
+/**
+ * Round-trip a request to the offscreen NLP pipeline via the service worker.
+ * Returns the offscreen handler's response object: { ok, result?, text?, error? }.
+ */
+function nlpRequest(op, text) {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op, text }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response) {
+          reject(new Error('no response from NLP proxy'));
+          return;
+        }
+        resolve(response);
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+/**
  * Resolve apiBase + apiKey together.
  * @returns {Promise<{apiBase: string, apiKey: string}>}
  */
@@ -197,6 +233,13 @@ async function analyzeJapaneseChunked(text, apiKey) {
  * @returns {Promise<{original: string, translation: string, words: Array<{japanese: string, reading: string, romaji: string, english: string, type: string}>, truncated?: boolean}>}
  */
 export async function analyzeJapaneseWithGemini(text, options = {}) {
+  if (await isOfflineNlpEnabled()) {
+    debugLog('API-BREAKDOWN', 'Using offline NLP pipeline');
+    const response = await nlpRequest('analyze', text);
+    if (!response.ok) throw new Error(response.error || 'offline NLP failed');
+    return response.result;
+  }
+
   const { apiBase, apiKey } = await resolveAuth();
 
   const model = await getModel();
@@ -515,6 +558,13 @@ export async function transcribeAudioWithGemini(base64Audio, mimeType) {
  * @returns {Promise<string>} - Translated text
  */
 export async function translateWithGemini(text, options = {}) {
+  if (await isOfflineNlpEnabled()) {
+    debugLog('API', 'Using offline NLP translation');
+    const response = await nlpRequest('translate', text);
+    if (!response.ok) throw new Error(response.error || 'offline translate failed');
+    return response.text || '';
+  }
+
   const { apiBase, apiKey } = await resolveAuth();
 
   const model = await getModel();

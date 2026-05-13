@@ -20,5 +20,15 @@ export default [
       sourcemap: false
     },
     plugins: [resolve()]
+  },
+  {
+    input: 'src/offscreen/offscreen.js',
+    output: {
+      file: 'dist/offscreen.js',
+      format: 'iife',
+      name: 'KaigiOffscreen',
+      sourcemap: false
+    },
+    plugins: [resolve({ browser: true })]
   }
 ];

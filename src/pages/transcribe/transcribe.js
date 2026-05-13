@@ -162,6 +162,21 @@ async function analyzeJapaneseChunked(text) {
 }
 
 async function analyzeJapaneseWithGemini(text, options = {}) {
+  // Offline NLP beta: route through service worker -> offscreen pipeline.
+  const offlineEnabled = await new Promise((r) => {
+    try { chrome.storage.sync.get(['useOfflineNlp'], (s) => r(Boolean(s?.useOfflineNlp))); } catch { r(false); }
+  });
+  if (offlineEnabled) {
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'analyze', text }, (resp) => {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        resolve(resp || { ok: false, error: 'no response' });
+      });
+    });
+    if (!response.ok) throw new Error(response.error || 'offline NLP failed');
+    return response.result;
+  }
+
   const { apiBase, apiKey: resolvedKey } = await resolveAuth();
 
   const prompt = `Analyze this Japanese text and return ONLY valid JSON (no markdown, no code blocks, no explanation):

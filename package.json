@@ -5,11 +5,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rollup -c",
-    "watch": "rollup -c -w"
+    "build": "node scripts/build-assets.mjs && rollup -c",
+    "build:code": "rollup -c",
+    "watch": "rollup -c -w",
+    "test:nlp": "node tests/nlp.node.test.mjs",
+    "test:e2e": "node tests/e2e.playwright.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
-    "rollup": "^4.9.6"
+    "playwright": "^1.60.0",
+    "rollup": "^4.9.6",
+    "tar": "^7.5.15"
+  },
+  "dependencies": {
+    "@patdx/kuromoji": "^1.0.4",
+    "wanakana": "^5.3.1"
   }
 }

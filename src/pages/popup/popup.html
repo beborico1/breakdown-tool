@@ -56,6 +56,19 @@
 
     <hr class="divider">
 
+    <div class="mode-toggle">
+      <div class="setting-info">
+        <span class="setting-title">Offline NLP (beta)</span>
+        <span class="setting-hint">Use local kuromoji + Chrome Translator instead of Gemini. Free &amp; offline after first use.</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="offlineNlpToggle">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <hr class="divider">
+
     <div class="collapsible usage-section">
       <div class="collapsible-header">
         <span class="setting-title">Token Usage</span>
@@ -84,6 +97,7 @@
       </div>
     </div>
 
+    <!--
     <hr class="divider">
 
     <div class="font-size-section">
@@ -188,17 +202,20 @@
         </div>
       </div>
     </div>
+    -->
 
-    <hr class="divider">
+    <div id="translateJpWrap" hidden>
+      <hr class="divider">
 
-    <div class="translate-jp-section">
-      <div class="setting-info">
-        <span class="setting-title">Translate to Japanese</span>
-        <span class="setting-hint">Select text in Google Chat, then click below (or Alt+J)</span>
+      <div class="translate-jp-section">
+        <div class="setting-info">
+          <span class="setting-title">Translate to Japanese</span>
+          <span class="setting-hint">Select text in Google Chat, then click below (or Alt+J)</span>
+        </div>
+        <button id="translateToJapanese" class="btn btn-primary" style="width: 100%; margin-top: 6px;">
+          Translate Selection to Japanese
+        </button>
       </div>
-      <button id="translateToJapanese" class="btn btn-primary" style="width: 100%; margin-top: 6px;">
-        Translate Selection to Japanese
-      </button>
     </div>
 
     <hr class="divider">
