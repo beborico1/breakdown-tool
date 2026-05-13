@@ -10,8 +10,7 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/*",
-    "http://127.0.0.1:8787/*"
+    "https://generativelanguage.googleapis.com/*"
   ],
   "optional_host_permissions": [
     "http://localhost:8765/*",

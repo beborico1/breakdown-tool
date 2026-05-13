@@ -15,42 +15,24 @@ export async function getApiKey() {
 }
 
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
-const LOCAL_API_BASE = 'http://127.0.0.1:8787';
 const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
 
 /**
- * Resolve the current API base URL from storage (cloud by default).
- * @returns {Promise<string>}
- */
-async function getApiBase() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['apiSource'], (result) => {
-      resolve(result.apiSource === 'local' ? LOCAL_API_BASE : CLOUD_API_BASE);
-    });
-  });
-}
-
-/**
- * Resolve apiBase + apiKey together. In local mode the key is optional
- * (the local server ignores it); in cloud mode it's required.
+ * Resolve apiBase + apiKey together.
  * @returns {Promise<{apiBase: string, apiKey: string}>}
  */
 async function resolveAuth() {
-  const apiBase = await getApiBase();
-  const isLocal = apiBase === LOCAL_API_BASE;
-  const apiKey = (await getApiKey()) || (isLocal ? 'local' : null);
+  const apiKey = await getApiKey();
   if (!apiKey) {
     throw new Error('No API key. Set it in the extension popup.');
   }
-  return { apiBase, apiKey };
+  return { apiBase: CLOUD_API_BASE, apiKey };
 }
 
 /**
- * Fetch proxy via the service worker. Content scripts on Google Chat / Meet
- * are blocked from reaching http://127.0.0.1 by the page CSP. The service
- * worker runs from extension origin with host_permissions and bypasses CSP,
- * mixed-content, PNA, and CORS in one shot. Returns a Response-like object
- * compatible with the existing call sites (.ok, .status, .json(), .text()).
+ * Fetch proxy via the service worker. Runs from extension origin with
+ * host_permissions so it bypasses page CSP and CORS. Returns a Response-like
+ * object compatible with the call sites (.ok, .status, .json(), .text()).
  */
 async function kaigiFetch(url, init) {
   return new Promise((resolve, reject) => {

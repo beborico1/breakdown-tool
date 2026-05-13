@@ -43,23 +43,12 @@ if (settingsBtn && silenceControls) {
 }
 
 // --- API base ---
-const LOCAL_API_BASE = 'http://127.0.0.1:8787';
 const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
 
-async function getApiBase() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['apiSource'], (result) => {
-      resolve(result.apiSource === 'local' ? LOCAL_API_BASE : CLOUD_API_BASE);
-    });
-  });
-}
-
 async function resolveAuth() {
-  const apiBase = await getApiBase();
-  const isLocal = apiBase === LOCAL_API_BASE;
-  const key = (await getApiKey()) || (isLocal ? 'local' : null);
+  const key = await getApiKey();
   if (!key) throw new Error('No API key. Set it in the extension popup.');
-  return { apiBase, apiKey: key };
+  return { apiBase: CLOUD_API_BASE, apiKey: key };
 }
 
 // --- State ---
