@@ -113,5 +113,25 @@ console.log('\nTest 4: empty input');
   assertEq('empty input returns empty array', w.length, 0);
 }
 
+console.log('\nTest 5: mixed Latin + Japanese (に右手のurlを出してください)');
+{
+  // Should not throw, must include the surrounding Japanese tokens.
+  let w;
+  try {
+    w = analyze('に右手のurlを出してください。');
+    ok('analyze did not throw');
+  } catch (e) {
+    bad('analyze did not throw', e.message);
+    w = [];
+  }
+  const map = Object.fromEntries(w.map(x => [x.japanese, x]));
+  assertEq('に is particle', map['に']?.type, 'particle');
+  assertEq('右手 is noun', map['右手']?.type, 'noun');
+  assertEq('の is particle', map['の']?.type, 'particle');
+  assertEq('を is particle', map['を']?.type, 'particle');
+  const hasVerb = w.some(x => x.type === 'verb');
+  assertEq('has at least one verb', hasVerb, true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);

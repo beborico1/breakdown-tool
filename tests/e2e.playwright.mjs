@@ -130,6 +130,22 @@ try {
     assertIncludes('verb gloss includes eat', verb?.english, 'eat');
   }
 
+  // ---- Test: mixed Latin + Japanese ----
+  console.log('\nTest: analyze に右手のurlを出してください。');
+  const r3 = await page.evaluate(() => new Promise((r) => {
+    const timer = setTimeout(() => r({ ok: false, error: 'timeout 20s' }), 20000);
+    chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'analyze', text: 'に右手のurlを出してください。' }, (resp) => { clearTimeout(timer); r(resp); });
+  }));
+  if (!r3?.ok) { bad('mixed-latin response ok', r3?.error); }
+  else {
+    ok('mixed-latin response ok');
+    const w = r3.result.words;
+    assertGte('returned >=5 words', w.length, 5);
+    const map = Object.fromEntries(w.map(x => [x.japanese, x]));
+    assertEq('右手 type=noun', map['右手']?.type, 'noun');
+    assertEq('を type=particle', map['を']?.type, 'particle');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
 } finally {
   await context.close();
