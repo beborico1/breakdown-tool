@@ -3,6 +3,7 @@ import { forceHideTooltip } from './word-tooltip.js';
 import { KAIGI_MODEL_NAME } from './anki-model.js';
 import { enqueueAnkiAdd, flushAnkiQueue } from '../core/anki-queue.js';
 import { addOneCard, isRetriableAnkiError } from '../core/anki-card.js';
+import { loadAnkiAddedWords, markAnkiAdded } from '../core/anki-added.js';
 
 let popoverEl = null;
 let popoverWordEl = null;
@@ -264,12 +265,14 @@ export async function handleAddToAnki(wordSpan, wordData) {
   await animPromise;
   if (succeeded) {
     wordSpan?.classList.add('gcwb-anki-added');
+    markAnkiAdded(wordData.word);
     showToast({ variant: 'success', word: wordData.word, deck, model });
     // Opportunistically drain backlog after a successful add.
     flushPendingAdds().catch(() => {});
   } else if (retriable) {
     await enqueueAnkiAdd(wordData);
     wordSpan?.classList.add('gcwb-anki-added');
+    markAnkiAdded(wordData.word);
     showToast({ variant: 'queued', duration: 6500 });
   } else {
     showToast({ variant: 'error', errorMessage: errMsg });
@@ -310,6 +313,7 @@ export function attachAnkiContextMenu(target = window) {
 
 export function initAnkiQuickAdd() {
   debugLog('ANKI-QUICK', 'Anki quick-add ready (chat menu route)');
+  loadAnkiAddedWords().catch(() => {});
   flushPendingAdds().catch(() => {});
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {

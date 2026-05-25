@@ -2045,14 +2045,14 @@ html.kaigi-light .gcwb-anki-popover-action:hover { background: rgba(99, 40, 137,
   font-weight: 500;
   opacity: 0.85;
   line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
 }
 .gcwb-anki-toast.is-error .gcwb-anki-toast-sub {
   color: #f4a0a0;
   opacity: 0.8;
-  white-space: normal;
 }
 
 .gcwb-anki-toast-chip {

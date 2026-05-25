@@ -82,21 +82,11 @@ async function initializeObserver() {
   setInterval(() => {
     const nowInMeeting = MEETING_PATH_RE.test(location.pathname);
     if (lastWasInMeeting && !nowInMeeting) {
-      debugLog('MEETING-END', 'detected URL change out of meeting, auto-downloading transcript');
-      triggerTranscriptDownload({ reason: 'url-change' });
+      debugLog('MEETING-END', 'detected URL change out of meeting');
       resetSessionTranscript();
     }
     lastWasInMeeting = nowInMeeting;
   }, 2000);
-
-  // Best-effort fallback for tab close / full page navigation. Chrome may
-  // cancel the download if the document is tearing down too fast — the
-  // popup's manual button is the guaranteed path for that case.
-  window.addEventListener('beforeunload', () => {
-    if (MEETING_PATH_RE.test(location.pathname) && sessionTranscript.length > 0) {
-      triggerTranscriptDownload({ reason: 'beforeunload' });
-    }
-  });
 
   debugLog('SETUP', 'Observer initialized');
 }

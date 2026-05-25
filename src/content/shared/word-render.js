@@ -1,4 +1,5 @@
 import { getWordTypeClass } from '../utils/text.js';
+import { isAnkiAdded } from '../core/anki-added.js';
 
 function escapeHtml(str) {
   return String(str)
@@ -110,8 +111,9 @@ export function paintWordColoring(messageEl, text, words, sentences) {
       const segment = text.slice(boundary.startIdx, boundary.endIdx);
       tone = (word.type && word.type === prevType) ? 1 - tone : 0;
       const toneClass = tone === 1 ? ' mm-tone-alt' : '';
+      const addedClass = isAnkiAdded(word.japanese) ? ' gcwb-anki-added' : '';
       prevType = word.type;
-      html += `<span class="mm-word mm-type-${typeClass}${toneClass}" data-word="${escapeHtml(word.japanese)}" data-reading="${escapeHtml(word.reading || '')}" data-romaji="${escapeHtml(word.romaji || '')}" data-english="${escapeHtml(word.english || '')}" data-type="${escapeHtml(typeClass)}">${escapeHtml(segment)}</span>`;
+      html += `<span class="mm-word mm-type-${typeClass}${toneClass}${addedClass}" data-word="${escapeHtml(word.japanese)}" data-reading="${escapeHtml(word.reading || '')}" data-romaji="${escapeHtml(word.romaji || '')}" data-english="${escapeHtml(word.english || '')}" data-type="${escapeHtml(typeClass)}">${escapeHtml(segment)}</span>`;
       i = boundary.endIdx;
       bIdx++;
     } else {
