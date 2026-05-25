@@ -1,6 +1,27 @@
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+import { flushAnkiQueue } from '../../content/core/anki-queue.js';
+import { addOneCard, isRetriableAnkiError } from '../../content/core/anki-card.js';
 
 initDisplayPreferences();
+
+async function flushPendingFromFrequency() {
+  try {
+    const { flushed } = await flushAnkiQueue(async (card) => {
+      try {
+        await addOneCard(card);
+        return { ok: true, retriable: false };
+      } catch (err) {
+        const msg = err?.message || String(err);
+        return { ok: false, retriable: isRetriableAnkiError(msg) };
+      }
+    });
+    if (flushed > 0) {
+      console.log('[Anki] Flushed', flushed, 'queued card(s) from Frequency page');
+    }
+  } catch (err) {
+    console.warn('[Anki] Flush from Frequency failed:', err);
+  }
+}
 
 // DOM Elements
 const totalWordsEl = document.getElementById('totalWordsValue');
@@ -13,6 +34,8 @@ const emptyStateEl = document.getElementById('emptyState');
 const loadingStateEl = document.getElementById('loadingState');
 const searchInput = document.getElementById('searchInput');
 const sortBySelect = document.getElementById('sortBy');
+const pageSizeSelect = document.getElementById('pageSize');
+const paginationEl = document.getElementById('pagination');
 const exportJsonBtn = document.getElementById('exportJson');
 const exportCsvBtn = document.getElementById('exportCsv');
 
@@ -83,9 +106,34 @@ const ankiGuideTestResult = document.getElementById('ankiGuideTestResult');
 // State
 let allWords = [];
 let filteredWords = [];
+let pendingAnkiKeys = new Set();
+let pendingAnkiQueue = [];
+
+function buildPendingKeys(queue) {
+  const set = new Set();
+  for (const item of queue || []) {
+    if (!item?.word) continue;
+    set.add(`${item.word}|${normalizeType(item.pos)}`);
+  }
+  return set;
+}
+
+async function loadPendingAnkiKeys() {
+  try {
+    const { ankiPendingQueue } = await chrome.storage.local.get('ankiPendingQueue');
+    pendingAnkiQueue = Array.isArray(ankiPendingQueue) ? ankiPendingQueue : [];
+    pendingAnkiKeys = buildPendingKeys(pendingAnkiQueue);
+    console.log('[Anki] Pending queue loaded:', pendingAnkiKeys.size, 'keys:', [...pendingAnkiKeys]);
+  } catch {
+    pendingAnkiQueue = [];
+    pendingAnkiKeys = new Set();
+  }
+}
 let currentFilter = 'all';
 let currentSort = 'frequency';
 let searchQuery = '';
+let currentPage = 1;
+let pageSize = 50;
 
 // Anki State
 let ankiSelectedWords = new Set();
@@ -94,14 +142,26 @@ let ankiConnected = false;
 // Ignored words state (keys hidden from the word grid)
 let ignoredWords = new Set();
 
+// Cache of Japanese surface forms currently in the configured Anki deck.
+// Drives the "In Anki Deck" filter toggle. Refreshed on demand (and opportunistically after sync).
+let ankiDeckWords = new Set();
+let ankiDeckCards = [];
+let ankiDeckCacheAt = 0;
+let inAnkiDeckFilter = false;
+
+// New DOM elements for the deck-filter row
+const filterInAnkiDeckBtn = document.getElementById('filterInAnkiDeck');
+const refreshAnkiDeckCacheBtn = document.getElementById('refreshAnkiDeckCache');
+const ankiDeckCacheMetaEl = document.getElementById('ankiDeckCacheMeta');
+
 const DEFAULT_ANKI_SETTINGS = {
-  deckName: 'Kaigi Meeting',
+  deckName: 'kaigi',
   includeFurigana: true,
   includePartOfSpeech: true,
   includeRomaji: true,
   includeCount: false,
   furiganaFormat: 'parentheses',
-  modelName: 'Basic',
+  modelName: 'Kaigi',
   frontFieldName: 'Front',
   backFieldName: 'Back',
   customTags: 'kaigi-meeting',
@@ -284,12 +344,152 @@ function saveIgnoredWords() {
 }
 
 /**
+ * Load the cached Anki deck word set from chrome.storage.local.
+ */
+async function loadAnkiDeckWords() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(['ankiDeckCards', 'ankiDeckCacheAt'], (result) => {
+      if (Array.isArray(result.ankiDeckCards)) {
+        ankiDeckCards = result.ankiDeckCards;
+        ankiDeckWords = new Set(ankiDeckCards.map(c => c.japanese).filter(Boolean));
+      }
+      if (typeof result.ankiDeckCacheAt === 'number') {
+        ankiDeckCacheAt = result.ankiDeckCacheAt;
+      }
+      resolve();
+    });
+  });
+}
+
+/**
+ * Persist the Anki deck card cache.
+ */
+function saveAnkiDeckWords() {
+  chrome.storage.local.set({
+    ankiDeckCards,
+    ankiDeckCacheAt
+  });
+}
+
+function extractReadingFromFront(value) {
+  if (!value) return '';
+  const text = String(value).replace(/<[^>]+>/g, '');
+  const paren = text.match(/[（(]([^）)]+)[）)]/);
+  if (paren) return paren[1].trim();
+  const ruby = text.match(/\[([^\]]+)\]/);
+  return ruby ? ruby[1].trim() : '';
+}
+
+function stripHtml(value) {
+  if (!value) return '';
+  return String(value).replace(/<[^>]+>/g, '').trim();
+}
+
+/**
+ * Extract the Japanese surface form from a card's front-field value.
+ * The front may be plain ("会議"), parentheses ("会議 (かいぎ)"), or Anki ruby ("会議[かいぎ]").
+ * All three start with the surface form, so we keep the leading run up to the first
+ * space, "(", or "[". HTML tags from rich fields are stripped first.
+ */
+function extractSurfaceFromFront(value) {
+  if (!value) return '';
+  const text = String(value).replace(/<[^>]+>/g, '').trim();
+  const m = text.match(/^[^\s(（\[［]+/);
+  return m ? m[0] : '';
+}
+
+/**
+ * Fetch the deck's note surface forms from AnkiConnect and update the cache.
+ * Throws on connection failure so the caller can surface an error UI.
+ */
+async function refreshAnkiDeckCache() {
+  const deckName = ankiSettings.deckName;
+  const frontField = (ankiSettings.frontFieldName || 'Front').trim() || 'Front';
+  const backField = (ankiSettings.backFieldName || 'Back').trim() || 'Back';
+  console.log('[Anki] Refreshing deck cache for:', deckName, '(front field:', frontField + ')');
+  const noteIds = await ankiConnect('findNotes', { query: `deck:"${deckName}"` });
+  if (!noteIds || noteIds.length === 0) {
+    ankiDeckCards = [];
+    ankiDeckWords = new Set();
+    ankiDeckCacheAt = Date.now();
+    saveAnkiDeckWords();
+    return;
+  }
+  const info = await ankiConnect('notesInfo', { notes: noteIds });
+  const cards = [];
+  const surfaces = new Set();
+  // Mirror of src/content/chat/anki-model.js — the right-click quick-add uses this model.
+  const KAIGI_MODEL_NAME = 'Kaigi';
+  let loggedFirst = false;
+  for (const note of info || []) {
+    if (!loggedFirst) {
+      console.log('[Anki] First note model:', note?.modelName, 'fields:', Object.keys(note?.fields || {}));
+      loggedFirst = true;
+    }
+    const fields = note?.fields || {};
+    let japanese = '';
+    let reading = '';
+    let english = '';
+    if (note?.modelName === KAIGI_MODEL_NAME) {
+      japanese = stripHtml(fields.Word?.value);
+      reading = stripHtml(fields.Reading?.value);
+      english = stripHtml(fields.Meaning?.value);
+    } else {
+      const frontVal = fields[frontField]?.value;
+      const backVal = fields[backField]?.value;
+      japanese = extractSurfaceFromFront(frontVal);
+      reading = extractReadingFromFront(frontVal);
+      english = stripHtml(backVal);
+    }
+    if (!japanese) {
+      // Defensive fallback: pick the first field with CJK characters.
+      for (const [, f] of Object.entries(fields)) {
+        const v = stripHtml(f?.value);
+        if (v && /[぀-ヿ㐀-鿿]/.test(v)) { japanese = v; break; }
+      }
+    }
+    if (!japanese) continue;
+    cards.push({ japanese, reading, english, noteId: note?.noteId ?? null });
+    surfaces.add(japanese);
+  }
+  ankiDeckCards = cards;
+  ankiDeckWords = surfaces;
+  ankiDeckCacheAt = Date.now();
+  saveAnkiDeckWords();
+}
+
+/**
+ * Render the meta hint: word count + relative timestamp, or an error state.
+ */
+function renderAnkiDeckCacheMeta(error) {
+  if (!ankiDeckCacheMetaEl) return;
+  if (error) {
+    ankiDeckCacheMetaEl.textContent = error;
+    ankiDeckCacheMetaEl.classList.add('error');
+    return;
+  }
+  ankiDeckCacheMetaEl.classList.remove('error');
+  if (!ankiDeckCacheAt) {
+    ankiDeckCacheMetaEl.textContent = 'Click Refresh to load deck';
+    return;
+  }
+  const ageMs = Date.now() - ankiDeckCacheAt;
+  const ageMin = Math.round(ageMs / 60000);
+  const ageStr = ageMin < 1 ? 'just now' : ageMin < 60 ? `${ageMin}m ago` : `${Math.round(ageMin / 60)}h ago`;
+  ankiDeckCacheMetaEl.textContent = `${ankiDeckWords.size.toLocaleString()} words · updated ${ageStr}`;
+}
+
+/**
  * Load Anki settings from chrome.storage.sync
  */
 async function loadAnkiSettings() {
   return new Promise(resolve => {
     chrome.storage.sync.get(['ankiSettings'], (result) => {
       ankiSettings = { ...DEFAULT_ANKI_SETTINGS, ...(result.ankiSettings || {}) };
+      if (ankiSettings.deckName === 'Kaigi Meeting') {
+        ankiSettings.deckName = 'kaigi';
+        saveAnkiSettings();
+      }
       resolve();
     });
   });
@@ -438,6 +638,7 @@ async function checkAnkiConnection() {
     ankiStatusEl.className = 'anki-status-dot connected';
     ankiStatusEl.title = 'AnkiConnect: connected';
     console.log('[Anki] Connected! Version:', result);
+    flushPendingFromFrequency();
   } catch (error) {
     ankiConnected = false;
     ankiStatusEl.className = 'anki-status-dot disconnected';
@@ -537,6 +738,12 @@ function renderWordGrid(words) {
   if (words.length === 0) {
     wordGridEl.style.display = 'none';
     emptyStateEl.style.display = 'block';
+    const hintEl = emptyStateEl.querySelector('.empty-hint');
+    if (hintEl) {
+      hintEl.textContent = inAnkiDeckFilter
+        ? "Your Anki deck cache is empty. Click Refresh, or check that your deck name matches in Sync to Anki."
+        : 'Translate some captions in Google Meet to start building your vocabulary';
+    }
     return;
   }
 
@@ -551,18 +758,30 @@ function renderWordGrid(words) {
     const wordKey = `${word.japanese}|${type}`;
     const isSelected = ankiSelectedWords.has(wordKey);
 
+    const reading = word.ankiOnly ? highlightSearch(escapeHtml(word.reading || '')) : romaji;
+    const countLabel = word.ankiOnly ? '—' : `${word.count}x`;
+    const ankiBadge = word.fromAnki ? '<span class="anki-badge" title="In your Anki deck">anki</span>' : '';
+    const queuedBadge = pendingAnkiKeys.has(wordKey)
+      ? '<span class="anki-badge queued" title="Waiting to sync to Anki">queued for anki</span>'
+      : '';
+    const cardClasses = ['word-card'];
+    if (isSelected) cardClasses.push('anki-selected');
+    if (word.ankiOnly) cardClasses.push('anki-only');
+
     return `
-      <div class="word-card${isSelected ? ' anki-selected' : ''}">
+      <div class="${cardClasses.join(' ')}">
         <div class="word-card-header">
           <span class="word-japanese ${type}">${japanese}</span>
           <div class="word-card-actions">
-            <span class="word-count">${word.count}x</span>
+            ${queuedBadge}
+            ${ankiBadge}
+            <span class="word-count">${countLabel}</span>
             <label class="anki-checkbox">
               <input type="checkbox" class="anki-check-input" data-word-key="${escapeHtml(wordKey)}" ${isSelected ? 'checked' : ''}>
             </label>
           </div>
         </div>
-        <div class="word-reading">${romaji}</div>
+        <div class="word-reading">${reading}</div>
         <span class="word-type-badge ${type}">${type}</span>
         <div class="word-english">${english}</div>
       </div>
@@ -644,12 +863,113 @@ function sortWords(words, sortBy) {
  * Apply all filters and render
  */
 function applyFiltersAndRender() {
-  let result = filterWords(allWords, currentFilter);
-  result = result.filter(w => !ignoredWords.has(`${w.japanese}|${normalizeType(w.type)}`));
+  let result;
+  if (inAnkiDeckFilter) {
+    const trackedByKey = new Map(allWords.map(w => [w.japanese, w]));
+    result = ankiDeckCards.map(card => {
+      const tracked = trackedByKey.get(card.japanese);
+      if (tracked) return { ...tracked, fromAnki: true };
+      return {
+        japanese: card.japanese,
+        reading: card.reading || '',
+        romaji: '',
+        english: card.english || '',
+        type: 'other',
+        count: 0,
+        firstSeen: null,
+        lastSeen: null,
+        fromAnki: true,
+        ankiOnly: true,
+      };
+    });
+    result = result.filter(w => !ignoredWords.has(`${w.japanese}|${normalizeType(w.type)}`));
+  } else {
+    result = filterWords(allWords, currentFilter);
+    result = result.filter(w => !ignoredWords.has(`${w.japanese}|${normalizeType(w.type)}`));
+  }
+
+  if (inAnkiDeckFilter && pendingAnkiQueue.length) {
+    const presentKeys = new Set(result.map(w => `${w.japanese}|${normalizeType(w.type)}`));
+    for (const q of pendingAnkiQueue) {
+      if (!q?.word) continue;
+      const key = `${q.word}|${normalizeType(q.pos)}`;
+      if (presentKeys.has(key)) continue;
+      if (ignoredWords.has(key)) continue;
+      result.push({
+        japanese: q.word,
+        reading: q.reading || '',
+        romaji: '',
+        english: q.english || '',
+        type: normalizeType(q.pos),
+        count: 0,
+        firstSeen: null,
+        lastSeen: null,
+        fromAnki: false,
+        ankiOnly: true,
+      });
+      presentKeys.add(key);
+    }
+  }
+
   result = searchWords(result, searchQuery);
   result = sortWords(result, currentSort);
   filteredWords = result;
-  renderWordGrid(result);
+
+  const total = result.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+  const start = (currentPage - 1) * pageSize;
+  const slice = result.slice(start, start + pageSize);
+
+  renderWordGrid(slice);
+  renderPagination(total, currentPage, pageSize);
+}
+
+/**
+ * Build the pagination control bar.
+ */
+function renderPagination(total, page, size) {
+  if (!paginationEl) return;
+  const totalPages = Math.ceil(total / size);
+  if (totalPages <= 1) {
+    paginationEl.innerHTML = '';
+    paginationEl.style.display = 'none';
+    return;
+  }
+  paginationEl.style.display = 'flex';
+
+  const pages = [];
+  const window = 2;
+  const add = (p) => pages.push(p);
+  add(1);
+  const from = Math.max(2, page - window);
+  const to = Math.min(totalPages - 1, page + window);
+  if (from > 2) add('…');
+  for (let p = from; p <= to; p++) add(p);
+  if (to < totalPages - 1) add('…');
+  if (totalPages > 1) add(totalPages);
+
+  const btn = (label, target, opts = {}) => {
+    const disabled = opts.disabled ? ' disabled' : '';
+    const active = opts.active ? ' active' : '';
+    const data = target == null ? '' : ` data-page="${target}"`;
+    return `<button class="page-btn${active}"${data}${disabled}>${label}</button>`;
+  };
+
+  let html = '';
+  html += btn('« Prev', page - 1, { disabled: page <= 1 });
+  for (const p of pages) {
+    if (p === '…') html += '<span class="page-ellipsis">…</span>';
+    else html += btn(String(p), p, { active: p === page });
+  }
+  html += btn('Next »', page + 1, { disabled: page >= totalPages });
+
+  const start = (page - 1) * size + 1;
+  const end = Math.min(total, page * size);
+  html += `<span class="page-info">${start}–${end} of ${total}</span>`;
+
+  paginationEl.innerHTML = html;
 }
 
 /**
@@ -726,14 +1046,44 @@ async function init() {
     loadData(),
     loadAnkiSelections(),
     loadIgnoredWords(),
-    loadAnkiSettings()
+    loadAnkiSettings(),
+    loadAnkiDeckWords()
   ]);
+  renderAnkiDeckCacheMeta();
 
   console.log('[Anki] Loaded selections:', ankiSelectedWords.size, 'words');
   console.log('[Anki] Loaded settings, deck:', ankiSettings.deckName);
 
   // Check Anki connection (fire-and-forget)
   checkAnkiConnection();
+
+  // Load pending Anki queue so word cards can show a "queued for anki" chip.
+  loadPendingAnkiKeys().then(() => applyFiltersAndRender()).catch(() => {});
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes.ankiPendingQueue) return;
+      const q = Array.isArray(changes.ankiPendingQueue.newValue)
+        ? changes.ankiPendingQueue.newValue
+        : [];
+      pendingAnkiQueue = q;
+      pendingAnkiKeys = buildPendingKeys(q);
+      applyFiltersAndRender();
+    });
+  } catch {}
+
+  // Auto-refresh deck cache if permission is already granted (fire-and-forget).
+  hasAnkiPermission().then(granted => {
+    if (!granted) return;
+    refreshAnkiDeckCache()
+      .then(() => {
+        renderAnkiDeckCacheMeta();
+        applyFiltersAndRender();
+      })
+      .catch(err => {
+        console.warn('[Anki] Auto-refresh failed:', err);
+        renderAnkiDeckCacheMeta(err?.message ? 'Anki: ' + err.message : 'Anki not reachable');
+      });
+  });
 
   loadingStateEl.style.display = 'none';
 
@@ -768,25 +1118,86 @@ async function init() {
 }
 
 // Event Listeners
-document.querySelectorAll('.chip').forEach(chip => {
+document.querySelectorAll('.type-chips .chip').forEach(chip => {
   chip.addEventListener('click', () => {
-    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.type-chips .chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
     currentFilter = chip.dataset.type;
+    currentPage = 1;
     applyFiltersAndRender();
   });
 });
 
+// "In Anki Deck" filter toggle — composes with the type chips (independent boolean).
+if (filterInAnkiDeckBtn) {
+  filterInAnkiDeckBtn.addEventListener('click', () => {
+    inAnkiDeckFilter = !inAnkiDeckFilter;
+    filterInAnkiDeckBtn.setAttribute('aria-pressed', String(inAnkiDeckFilter));
+    currentPage = 1;
+    applyFiltersAndRender();
+  });
+}
+
+// Refresh deck cache from AnkiConnect.
+if (refreshAnkiDeckCacheBtn) {
+  refreshAnkiDeckCacheBtn.addEventListener('click', async () => {
+    const granted = await requestAnkiPermission();
+    if (!granted) {
+      renderAnkiDeckCacheMeta('Permission denied for AnkiConnect');
+      return;
+    }
+    refreshAnkiDeckCacheBtn.disabled = true;
+    const originalLabel = refreshAnkiDeckCacheBtn.textContent;
+    refreshAnkiDeckCacheBtn.textContent = 'Refreshing…';
+    try {
+      await refreshAnkiDeckCache();
+      renderAnkiDeckCacheMeta();
+      applyFiltersAndRender();
+    } catch (err) {
+      console.warn('[Anki] Deck cache refresh failed:', err);
+      renderAnkiDeckCacheMeta(err?.message ? 'Anki: ' + err.message : 'Anki not reachable');
+    } finally {
+      refreshAnkiDeckCacheBtn.disabled = false;
+      refreshAnkiDeckCacheBtn.textContent = originalLabel;
+    }
+  });
+}
+
 sortBySelect.addEventListener('change', () => {
   currentSort = sortBySelect.value;
+  currentPage = 1;
   applyFiltersAndRender();
 });
+
+if (pageSizeSelect) {
+  pageSizeSelect.addEventListener('change', () => {
+    const next = parseInt(pageSizeSelect.value, 10);
+    if (Number.isFinite(next) && next > 0) {
+      pageSize = next;
+      currentPage = 1;
+      applyFiltersAndRender();
+    }
+  });
+}
+
+if (paginationEl) {
+  paginationEl.addEventListener('click', (e) => {
+    const target = e.target.closest('button[data-page]');
+    if (!target || target.disabled) return;
+    const next = parseInt(target.dataset.page, 10);
+    if (!Number.isFinite(next)) return;
+    currentPage = next;
+    applyFiltersAndRender();
+    wordGridEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
 
 let searchTimeout;
 searchInput.addEventListener('input', () => {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     searchQuery = searchInput.value.trim();
+    currentPage = 1;
     applyFiltersAndRender();
   }, 200);
 });
@@ -1243,6 +1654,7 @@ ankiTestConnectionBtn.addEventListener('click', async () => {
     ankiConnected = true;
     ankiStatusEl.className = 'anki-status-dot connected';
     ankiStatusEl.title = 'AnkiConnect: connected';
+    flushPendingFromFrequency();
   } catch (err) {
     ankiTestResult.textContent = 'Could not connect. Make sure Anki is running with AnkiConnect installed.';
     ankiTestResult.className = 'anki-modal-test-result error';
@@ -1284,6 +1696,18 @@ ankiGuideToggle.addEventListener('click', () => {
   ankiGuideChevron.classList.toggle('open');
 });
 
+// Stats / Filters collapsible cards
+for (const id of ['stats', 'filters']) {
+  const header = document.getElementById(`${id}Toggle`);
+  const body = document.getElementById(`${id}Body`);
+  const chevron = document.getElementById(`${id}Chevron`);
+  if (!header || !body || !chevron) continue;
+  header.addEventListener('click', () => {
+    body.classList.toggle('open');
+    chevron.classList.toggle('open');
+  });
+}
+
 // Copy AnkiConnect addon code
 copyAnkiCodeBtn.addEventListener('click', async (e) => {
   e.stopPropagation();
@@ -1320,6 +1744,7 @@ ankiGuideTestBtn.addEventListener('click', async () => {
     ankiConnected = true;
     ankiStatusEl.className = 'anki-status-dot connected';
     ankiStatusEl.title = 'AnkiConnect: connected';
+    flushPendingFromFrequency();
   } catch {
     ankiGuideTestResult.textContent = 'Could not connect. Make sure Anki is running with AnkiConnect installed.';
     ankiGuideTestResult.className = 'anki-guide-test-result error';
@@ -1388,12 +1813,14 @@ ankiSyncNowBtn.addEventListener('click', async () => {
           console.log('[Anki] Duplicate found, skipping:', japanese);
           skipped++;
           syncedKeys.push(key);
+          ankiDeckWords.add(word.japanese);
         } else {
           const note = buildAnkiNote(word, ankiSettings);
           await ankiConnect('addNote', { note });
           console.log('[Anki] Added note:', japanese);
           added++;
           syncedKeys.push(key);
+          ankiDeckWords.add(word.japanese);
         }
       } catch (error) {
         console.error('[Anki] Failed to sync word:', japanese, error);
@@ -1409,6 +1836,11 @@ ankiSyncNowBtn.addEventListener('click', async () => {
       ankiSelectedWords.delete(key);
     }
     saveAnkiSelections();
+    if (added > 0 || skipped > 0) {
+      ankiDeckCacheAt = Date.now();
+      saveAnkiDeckWords();
+      renderAnkiDeckCacheMeta();
+    }
     applyFiltersAndRender();
 
     console.log('[Anki] Sync complete. Added:', added, 'Skipped:', skipped, 'Failed:', failed);

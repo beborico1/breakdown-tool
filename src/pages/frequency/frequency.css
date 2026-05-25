@@ -168,6 +168,51 @@ body {
 .chip[data-type="adjective"].active { background: #FBBC04; color: #1F1F1F; }
 .chip[data-type="adverb"].active { background: #A78BFA; }
 
+/* Anki deck filter toggle */
+.anki-deck-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.deck-toggle {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #4D4D4D;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #2A2A2A;
+  color: #9CA3AF;
+}
+
+.deck-toggle:hover {
+  background: #3D3D3D;
+  color: #E5E7EB;
+}
+
+.deck-toggle[aria-pressed="true"] {
+  background: #34A853;
+  border-color: #34A853;
+  color: #fff;
+}
+
+.deck-refresh {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.anki-deck-cache-meta {
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.anki-deck-cache-meta.error {
+  color: #F87171;
+}
+
 /* Sort & Search */
 .sort-controls {
   display: flex;
@@ -295,6 +340,54 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 20px 0 8px;
+}
+
+.pagination .page-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #3D3D3D;
+  color: #E5E7EB;
+  transition: background 0.2s;
+}
+
+.pagination .page-btn:hover:not(:disabled):not(.active) {
+  background: #4D4D4D;
+}
+
+.pagination .page-btn.active {
+  background: #632889;
+  color: #fff;
+  cursor: default;
+}
+
+.pagination .page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination .page-ellipsis {
+  color: #9CA3AF;
+  padding: 0 4px;
+}
+
+.pagination .page-info {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #9CA3AF;
 }
 
 .word-card {
@@ -474,6 +567,32 @@ body {
 .word-card.anki-selected {
   outline: 2px solid rgba(167, 139, 250, 0.5);
   outline-offset: -2px;
+}
+
+.anki-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(167, 139, 250, 0.18);
+  color: #a78bfa;
+}
+
+.anki-badge.queued {
+  background: rgba(250, 204, 21, 0.18);
+  color: #facc15;
+}
+
+body.kaigi-light .anki-badge.queued,
+html.kaigi-light .anki-badge.queued {
+  background: rgba(202, 138, 4, 0.18);
+  color: #b45309;
+}
+
+.word-card.anki-only .word-count {
+  color: #6B7280;
 }
 
 /* Word card actions (count + checkbox) */
@@ -1048,6 +1167,65 @@ body {
 .ignored-chip-remove:hover {
   background: #4D4D4D;
   color: #E8EAED;
+}
+
+/* Generic collapsible card (Stats, Filters) */
+.collapsible-card {
+  background: #2D2D2D;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.collapsible-header:hover {
+  background: #353535;
+}
+
+.collapsible-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.collapsible-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #E8EAED;
+}
+
+.collapsible-subtitle {
+  font-size: 12px;
+  color: #9CA3AF;
+}
+
+.collapsible-chevron {
+  width: 20px;
+  height: 20px;
+  color: #9CA3AF;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.collapsible-chevron.open {
+  transform: rotate(180deg);
+}
+
+.collapsible-body {
+  display: none;
+  padding: 0 20px 20px;
+}
+
+.collapsible-body.open {
+  display: block;
 }
 
 /* AnkiConnect Setup Guide */

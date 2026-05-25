@@ -13,7 +13,7 @@
       <div class="header-actions">
         <div class="anki-sync-wrapper">
           <span id="ankiStatus" class="anki-status-dot disconnected" title="AnkiConnect status"></span>
-          <button id="syncToAnki" class="btn btn-primary" disabled>Sync to Anki</button>
+          <button id="syncToAnki" class="btn btn-primary" disabled>Add to Anki</button>
         </div>
         <button id="exportJson" class="btn btn-secondary">Export JSON</button>
         <button id="exportCsv" class="btn btn-secondary">Export CSV</button>
@@ -102,25 +102,56 @@
       </div>
     </div>
 
-    <div class="summary-cards">
-      <div class="summary-card">
-        <span class="summary-value" id="totalWordsValue">0</span>
-        <span class="summary-label">Total Words</span>
+    <div class="collapsible-card">
+      <div class="collapsible-header" id="statsToggle">
+        <div class="collapsible-title-area">
+          <span class="collapsible-title">Stats</span>
+          <span class="collapsible-subtitle">Totals and type distribution</span>
+        </div>
+        <svg class="collapsible-chevron" id="statsChevron" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
       </div>
-      <div class="summary-card">
-        <span class="summary-value" id="uniqueWordsValue">0</span>
-        <span class="summary-label">Unique Words</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-value" id="daysTrackingValue">0</span>
-        <span class="summary-label">Days Tracking</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-value" id="ankiSelectedValue">0</span>
-        <span class="summary-label">Selected for Anki</span>
+      <div class="collapsible-body" id="statsBody">
+        <div class="summary-cards">
+          <div class="summary-card">
+            <span class="summary-value" id="totalWordsValue">0</span>
+            <span class="summary-label">Total Words</span>
+          </div>
+          <div class="summary-card">
+            <span class="summary-value" id="uniqueWordsValue">0</span>
+            <span class="summary-label">Unique Words</span>
+          </div>
+          <div class="summary-card">
+            <span class="summary-value" id="daysTrackingValue">0</span>
+            <span class="summary-label">Days Tracking</span>
+          </div>
+          <div class="summary-card">
+            <span class="summary-value" id="ankiSelectedValue">0</span>
+            <span class="summary-label">Selected for Anki</span>
+          </div>
+        </div>
+
+        <div class="type-distribution">
+          <h3>Type Distribution</h3>
+          <div class="chart" id="typeChart"></div>
+        </div>
       </div>
     </div>
 
+    <div class="collapsible-card">
+      <div class="collapsible-header" id="filtersToggle">
+        <div class="collapsible-title-area">
+          <span class="collapsible-title">Filters</span>
+          <span class="collapsible-subtitle">Type, sort, search, ignored words</span>
+        </div>
+        <svg class="collapsible-chevron" id="filtersChevron" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </div>
+      <div class="collapsible-body" id="filtersBody">
     <div class="filters">
       <div class="filter-row">
         <div class="type-chips">
@@ -131,6 +162,11 @@
           <button class="chip" data-type="adjective">Adjective</button>
           <button class="chip" data-type="adverb">Adverb</button>
           <button class="chip" data-type="other">Other</button>
+        </div>
+        <div class="anki-deck-filter">
+          <button id="filterInAnkiDeck" class="deck-toggle" type="button" aria-pressed="false" title="Show only words already in your Anki deck">In Anki Deck</button>
+          <button id="refreshAnkiDeckCache" class="btn btn-secondary deck-refresh" type="button" title="Refetch deck from Anki">&#x21bb; Refresh</button>
+          <span id="ankiDeckCacheMeta" class="anki-deck-cache-meta"></span>
         </div>
       </div>
       <div class="filter-row">
@@ -147,6 +183,15 @@
             <option value="recent">Recent</option>
           </select>
         </div>
+        <div class="sort-controls">
+          <label>Per page:</label>
+          <select id="pageSize">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+        </div>
         <div class="search-box">
           <input type="text" id="searchInput" placeholder="Search words...">
         </div>
@@ -160,10 +205,7 @@
       </div>
       <div id="ignoredChips" class="ignored-chips"></div>
     </div>
-
-    <div class="type-distribution">
-      <h3>Type Distribution</h3>
-      <div class="chart" id="typeChart"></div>
+      </div>
     </div>
 
     <div id="emptyState" class="empty-state" style="display: none;">
@@ -172,6 +214,8 @@
     </div>
 
     <div id="wordGrid" class="word-grid"></div>
+
+    <div id="pagination" class="pagination"></div>
 
     <div id="loadingState" class="loading-state">
       <div class="loading-skeleton"></div>
