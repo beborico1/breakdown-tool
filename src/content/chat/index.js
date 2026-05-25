@@ -5,6 +5,8 @@ import { initWordCache } from '../core/word-cache.js';
 import { highlightKnownWords, highlightAllMessages, clearHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from './word-tooltip.js';
 import { translateToJapaneseWithGemini } from '../core/api.js';
+import { maybeAutoAnalyzeChat, watchOfflineToggle } from '../core/auto-analyze.js';
+import { initAnkiQuickAdd } from './anki-quick-add.js';
 
 /**
  * Handle right-click on Google Chat messages
@@ -46,6 +48,8 @@ function handleChatContextMenu(event) {
 function setupAutoHighlighting() {
   // Highlight all existing messages
   highlightAllMessages();
+  maybeAutoAnalyzeChat();
+  watchOfflineToggle(() => maybeAutoAnalyzeChat());
 
   // Watch for new messages
   const observer = new MutationObserver((mutations) => {
@@ -69,6 +73,7 @@ function setupAutoHighlighting() {
       // Small delay to let DOM settle
       setTimeout(() => {
         highlightAllMessages();
+        maybeAutoAnalyzeChat();
       }, 50);
     }
   });
@@ -248,6 +253,7 @@ export async function initializeGoogleChat() {
     setupChatContextMenu();
     setupAutoHighlighting();
     setupWordTooltip();
+    initAnkiQuickAdd();
 
     // Cache selection text on selection change (popup steals focus)
     document.addEventListener('selectionchange', () => {

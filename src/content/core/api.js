@@ -21,7 +21,7 @@ const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
  * Whether the user has opted into the offline NLP beta pipeline
  * (kuromoji + JMdict + Chrome Translator API). Returns false on any error.
  */
-async function isOfflineNlpEnabled() {
+export async function isOfflineNlpEnabled() {
   return new Promise((resolve) => {
     try {
       // Default to ON: only false when user has explicitly toggled it off.

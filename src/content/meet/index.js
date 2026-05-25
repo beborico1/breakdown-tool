@@ -21,6 +21,7 @@ import { setupCaptionClickHandlers, handleMutations, setObserver } from './dom-f
 import { extractCaptions, formatCaptions } from './caption-extractor.js';
 import { applyWordBlockFontSize } from './panel-mode.js';
 import { triggerTranscriptDownload } from './transcript-download.js';
+import { initAnkiQuickAdd, attachAnkiContextMenu } from '../chat/anki-quick-add.js';
 
 // Google Meet room URLs look like /xxx-yyyy-zzz. When we transition out
 // of one, the user has left the meeting — that's our auto-download signal.
@@ -104,6 +105,11 @@ async function initializeObserver() {
  * Initialize Google Meet features
  */
 export function initializeGoogleMeet() {
+  if (location.hostname === 'meet.google.com') {
+    initAnkiQuickAdd();
+    attachAnkiContextMenu();
+  }
+
   // Initialize when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeObserver);

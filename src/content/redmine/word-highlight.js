@@ -30,6 +30,12 @@ export function highlightRedmineBlock(blockEl) {
     return;
   }
 
+  // Skip if the auto lite view has taken over this block.
+  if (blockEl.dataset.gcwbAutoLite === '1' || blockEl.querySelector('.gcwb-auto-word')) {
+    debugLog('REDMINE-HIGHLIGHT', 'Skipping - auto lite view active');
+    return;
+  }
+
   // Save original HTML before any modifications
   const originalHTML = blockEl.innerHTML;
 

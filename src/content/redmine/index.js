@@ -4,6 +4,35 @@ import { isRedmine, findRedmineTextElement, extractRedmineText } from './message
 import { showCustomContextMenu } from '../chat/context-menu.js';
 import { highlightRedmineBlock, highlightAllRedmineBlocks, clearRedmineHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
+import { maybeAutoAnalyzeRedmine, watchOfflineToggle } from '../core/auto-analyze.js';
+
+const REDMINE_TARGET_MATCH = '.subject h3, .description .wiki, .journal .wiki, .wiki-page .wiki, .news .wiki, #activity dd';
+
+function setupRedmineAutoObserver() {
+  let pending = false;
+  const observer = new MutationObserver((mutations) => {
+    if (pending) return;
+    let shouldRun = false;
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        if (node.matches?.(REDMINE_TARGET_MATCH) || node.querySelector?.(REDMINE_TARGET_MATCH)) {
+          shouldRun = true;
+          break;
+        }
+      }
+      if (shouldRun) break;
+    }
+    if (!shouldRun) return;
+    pending = true;
+    setTimeout(() => {
+      pending = false;
+      highlightAllRedmineBlocks();
+      maybeAutoAnalyzeRedmine();
+    }, 50);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
 
 
 /**
@@ -66,6 +95,9 @@ export async function initializeRedmine() {
     setupRedmineContextMenu();
     highlightAllRedmineBlocks();
     setupWordTooltip();
+    maybeAutoAnalyzeRedmine();
+    setupRedmineAutoObserver();
+    watchOfflineToggle(() => maybeAutoAnalyzeRedmine());
 
     // Listen for content-restored events to re-highlight after breakdown dismiss
     document.addEventListener('gcwb-content-restored', (event) => {

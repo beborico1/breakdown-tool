@@ -127,7 +127,7 @@ function escapeHtml(text) {
  */
 function handleMouseOver(event) {
   const target = event.target;
-  if (target.classList?.contains('gcwb-cached-word')) {
+  if ((target.classList?.contains('gcwb-cached-word') || target.classList?.contains('gcwb-auto-word'))) {
     showTooltip(target);
   }
 }
@@ -138,7 +138,7 @@ function handleMouseOver(event) {
  */
 function handleMouseOut(event) {
   const target = event.target;
-  if (target.classList?.contains('gcwb-cached-word')) {
+  if ((target.classList?.contains('gcwb-cached-word') || target.classList?.contains('gcwb-auto-word'))) {
     // Check if moving to the tooltip itself
     const relatedTarget = event.relatedTarget;
     if (relatedTarget && activeTooltip?.contains(relatedTarget)) {

@@ -6,8 +6,11 @@
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
 import { paintWordColoring } from '../../content/shared/word-render.js';
 import { attachHoverListeners } from '../../content/meet/hover-card.js';
+import { initAnkiQuickAdd, attachAnkiContextMenu } from '../../content/chat/anki-quick-add.js';
 
 initDisplayPreferences();
+initAnkiQuickAdd();
+attachAnkiContextMenu();
 
 // --- DOM refs ---
 const micBtn = document.getElementById('micBtn');

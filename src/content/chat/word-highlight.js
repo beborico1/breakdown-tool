@@ -33,6 +33,12 @@ export function highlightKnownWords(messageEl) {
     return;
   }
 
+  // Skip if the auto lite view has taken over this message.
+  if (messageEl.querySelector('.gcwb-auto-word')) {
+    debugLog('WORD-HIGHLIGHT', 'Skipping - auto lite view active');
+    return;
+  }
+
   // Save original HTML before any modifications
   const originalHTML = messageEl.innerHTML;
 

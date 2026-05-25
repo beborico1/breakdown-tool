@@ -4,6 +4,9 @@ import {
 } from '../core/state.js';
 import { showInlineBreakdown } from './inline-breakdown.js';
 import { isPageLightMode } from '../utils/dom.js';
+import { handleAddToAnki } from './anki-quick-add.js';
+
+const COLOURED_WORD_SELECTOR = '.gcwb-auto-word, .mm-word, .gcwb-cached-word';
 
 /**
  * Show custom context menu at cursor position
@@ -19,13 +22,25 @@ export function showCustomContextMenu(event, messageEl, text, options = {}) {
 
   if (!text) return;
 
+  // If the right-click landed on a coloured/analyzed word, swap the primary
+  // action to "Add to Anki" for that word (pokéball animation flow).
+  const wordSpan = event.target?.closest?.(COLOURED_WORD_SELECTOR);
+  const ankiWord = wordSpan && wordSpan.dataset?.word ? wordSpan : null;
+
   // Create context menu
   const menu = document.createElement('div');
   menu.className = 'gcwb-context-menu';
   if (isPageLightMode(messageEl)) menu.classList.add('gcwb-light');
 
   // Build menu items
-  let menuHTML = `
+  let menuHTML = ankiWord
+    ? `
+    <div class="gcwb-context-menu-item" data-action="add-anki">
+      <span class="gcwb-menu-icon">＋</span>
+      <span class="gcwb-menu-text">Add to Anki</span>
+    </div>
+  `
+    : `
     <div class="gcwb-context-menu-item" data-action="analyze">
       <span class="gcwb-menu-icon">📖</span>
       <span class="gcwb-menu-text">Analyze Japanese</span>
@@ -48,12 +63,24 @@ export function showCustomContextMenu(event, messageEl, text, options = {}) {
   menu.style.left = `${event.clientX}px`;
   menu.style.top = `${event.clientY}px`;
 
-  // Handle click on "Analyze Japanese"
-  menu.querySelector('[data-action="analyze"]').addEventListener('click', (e) => {
-    e.stopPropagation();
-    hideCustomContextMenu();
-    showInlineBreakdown(messageEl, text);
-  });
+  if (ankiWord) {
+    menu.querySelector('[data-action="add-anki"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideCustomContextMenu();
+      handleAddToAnki(ankiWord, {
+        word: ankiWord.dataset.word || '',
+        reading: ankiWord.dataset.reading || '',
+        english: ankiWord.dataset.english || '',
+        pos: ankiWord.dataset.type || '',
+      });
+    });
+  } else {
+    menu.querySelector('[data-action="analyze"]').addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideCustomContextMenu();
+      showInlineBreakdown(messageEl, text);
+    });
+  }
 
   // Handle click on "Analyze Thread" if present
   const threadItem = menu.querySelector('[data-action="analyze-thread"]');

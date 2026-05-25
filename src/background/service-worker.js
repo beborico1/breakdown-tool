@@ -17,6 +17,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true; // keep the message channel open for the async sendResponse
 });
 
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'kaigi-perm-contains') return false;
+  (async () => {
+    try {
+      const has = await chrome.permissions.contains({ origins: msg.origins || [] });
+      sendResponse({ ok: true, granted: !!has });
+    } catch (err) {
+      sendResponse({ ok: false, granted: false, error: String(err) });
+    }
+  })();
+  return true;
+});
+
 // Offscreen document management for offline NLP (kuromoji + JMdict + Translator API).
 // Only one offscreen doc may exist per extension. Created lazily on first NLP request.
 const OFFSCREEN_PATH = 'src/offscreen/offscreen.html';

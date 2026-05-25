@@ -27,6 +27,7 @@ import { updateBreakdownDelta } from './panel-mode.js';
 import { getWordTypeClass } from '../utils/text.js';
 import { updateVisualDelta } from './delta-translation.js';
 import { handleCaptionClick } from './caption-handler.js';
+import { handleAnkiContextMenu } from '../chat/anki-quick-add.js';
 import { autoProcessPreviousCard } from './auto-processor.js';
 import { initializeSentenceProcessing, handleSentenceTextUpdate } from './sentence-processor.js';
 
@@ -92,6 +93,7 @@ export function setupCaptionClickHandlers() {
   containers.forEach(container => {
     container.classList.add('caption-translatable');
     container.addEventListener('click', handleCaptionClick);
+    container.addEventListener('contextmenu', handleAnkiContextMenu, true);
 
     // Strip inline max-width that Google Meet may apply (780px cap)
     container.style.removeProperty('max-width');
@@ -320,6 +322,7 @@ export function handleMutations(mutations, observerConfig) {
             // Mark new container as translatable
             newContainer.classList.add('caption-translatable');
             newContainer.addEventListener('click', handleCaptionClick);
+            newContainer.addEventListener('contextmenu', handleAnkiContextMenu, true);
 
             // Reconnect observer
             observer.observe(document.body, observerConfig);

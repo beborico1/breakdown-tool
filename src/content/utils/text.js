@@ -1,3 +1,14 @@
+const JAPANESE_RE = /[぀-ゟ゠-ヿ一-龯]/;
+
+/**
+ * Check if text contains any hiragana, katakana, or CJK ideograph.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function hasJapanese(text) {
+  return !!text && JAPANESE_RE.test(text);
+}
+
 /**
  * Simple hash function for text content
  * @param {string} text
