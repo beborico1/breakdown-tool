@@ -731,7 +731,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'sync' && changes.sentenceStabilityBuffer !== undefined && stabilityBufferSlider) {
     const buffer = typeof changes.sentenceStabilityBuffer.newValue === 'number'
       ? changes.sentenceStabilityBuffer.newValue
-      : 3;
+      : 1;
     stabilityBufferSlider.value = buffer;
     stabilityBufferValueEl.textContent = buffer;
   }
@@ -790,7 +790,7 @@ function loadStabilityBuffer() {
   chrome.storage.sync.get(['sentenceStabilityBuffer'], (result) => {
     const buffer = typeof result.sentenceStabilityBuffer === 'number'
       ? result.sentenceStabilityBuffer
-      : 3;
+      : 1;
     stabilityBufferSlider.value = buffer;
     stabilityBufferValueEl.textContent = buffer;
   });

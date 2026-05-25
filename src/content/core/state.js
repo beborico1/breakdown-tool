@@ -99,7 +99,7 @@ export function setSentenceChunkSize(value) { sentenceChunkSize = value; }
 // How many most-recent sentences to leave unprocessed while the speech engine
 // may still rewrite them. Minimalistic-incremental only processes sentences
 // older than this buffer, so colors don't churn on live captions.
-export let sentenceStabilityBuffer = 3;
+export let sentenceStabilityBuffer = 1;
 export function setSentenceStabilityBuffer(value) { sentenceStabilityBuffer = value; }
 
 // Google Chat state
