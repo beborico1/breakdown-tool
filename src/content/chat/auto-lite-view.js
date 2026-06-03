@@ -38,8 +38,11 @@ function renderWordsHtml(words) {
     }
 
     const isJa = hasJapanese(surface);
+    if (html !== '') {
+      if (w.spaceBefore) html += ' '; // restore original whitespace (Latin runs etc.)
+      else if (isJa && prevWasJa) html += THIN_SPACE; // readability gap between JA tokens
+    }
     if (isJa) {
-      if (prevWasJa) html += THIN_SPACE;
       const typeClass = getWordTypeClass(w.type);
       tone = (w.type && w.type === prevType) ? 1 - tone : 0;
       const toneClass = tone === 1 ? ' gcwb-tone-alt' : '';

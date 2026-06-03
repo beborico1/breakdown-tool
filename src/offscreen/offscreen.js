@@ -79,6 +79,11 @@ async function analyze(text) {
   for (const t of tokens) {
     const enriched = enrichToken(t);
     if (!enriched) continue;
+    // kuromoji drops whitespace tokens, so detect whether the original text had
+    // whitespace immediately before this token to restore spacing downstream
+    // (Latin runs otherwise glue together).
+    const start = (t.word_position || 1) - 1;
+    const spaceBefore = start > 0 && /\s/.test(text[start - 1]);
     let english = enriched.label;
     if (!english) {
       try {
@@ -94,6 +99,7 @@ async function analyze(text) {
       romaji: enriched.romaji,
       english: english || '',
       type: enriched.type,
+      spaceBefore,
     });
   }
 

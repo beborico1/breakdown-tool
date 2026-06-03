@@ -83,15 +83,22 @@ export function renderRedmineAutoLite(blockEl, analyzerText, breakdownData) {
   if (offsetSafe) {
     // Bucket Japanese tokens by the text node that contains them.
     const buckets = new Map(); // node -> tokens[]
-    let cursor = 0;
+    let searchPos = 0; // chars of `assembled` already consumed, in order
     let rangeIdx = 0;
 
     for (const w of breakdownData.words) {
       const surface = w.japanese ?? '';
       if (!surface) continue;
-      const start = cursor;
-      const end = cursor + surface.length;
-      cursor = end;
+
+      // Analyzer output is lossy (kuromoji drops whitespace; punctuation tokens
+      // are filtered), so offsets can't be rebuilt by summing surface lengths —
+      // that drifts backward and splices kanji into earlier runs. Search forward
+      // from searchPos to re-sync over any dropped characters and recover the
+      // true offset into the assembled text.
+      const start = assembled.indexOf(surface, searchPos);
+      if (start < 0) continue; // unlocatable; skip rather than corrupt
+      const end = start + surface.length;
+      searchPos = end; // monotonic, so repeated surfaces resolve in order
 
       if (!hasJapanese(surface)) continue;
 
