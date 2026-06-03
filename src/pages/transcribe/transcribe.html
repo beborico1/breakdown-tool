@@ -28,7 +28,6 @@
         <h1>Live Japanese Transcription</h1>
         <p class="subtitle">Speak Japanese to get word-by-word breakdowns</p>
         <div class="status-row" id="statusRow">
-          <span class="segment-timer" id="segmentTimer"></span>
           <span class="status-dot ready" id="statusDot"></span>
           <div class="audio-level-track">
             <div class="audio-level-bar" id="audioLevelBar"></div>
@@ -39,7 +38,8 @@
     </header>
 
     <div id="warningNoKey" class="warning" style="display: none;">
-      No Gemini API key set. Open the extension popup to configure it.
+      No Gemini API key set. Live transcription still works, but the word-by-word
+      breakdown needs a key (or offline NLP enabled in the popup).
     </div>
     <div id="warningNoMic" class="warning" style="display: none;">
       Microphone access is required. Please allow mic access and reload.
@@ -47,33 +47,32 @@
 
     <div class="silence-controls collapsed" id="silenceControls">
       <div class="silence-controls-inner">
-        <div class="setting-row">
-          <div class="setting-header">
-            <label for="silenceSlider">Silence threshold</label>
-            <span class="setting-value" id="silenceValue">3s</span>
-          </div>
-          <input type="range" id="silenceSlider" class="silence-slider" min="1" max="6" step="0.5" value="3">
+        <div class="mode-toggle" id="modeToggle" role="radiogroup" aria-label="Transcription mode">
+          <button type="button" class="mode-option active" data-mode="dictation" role="radio" aria-checked="true">
+            <span class="mode-label">Dictation</span>
+            <span class="mode-desc">Instant &middot; close mic &middot; free</span>
+          </button>
+          <button type="button" class="mode-option" data-mode="meeting" role="radio" aria-checked="false">
+            <span class="mode-label">Meeting</span>
+            <span class="mode-desc">High recall &middot; far mic &middot; uses API</span>
+          </button>
+          <button type="button" class="mode-option" data-mode="hybrid" role="radio" aria-checked="false">
+            <span class="mode-label">Hybrid</span>
+            <span class="mode-desc">Instant preview + accurate</span>
+          </button>
         </div>
-        <div class="setting-row">
+        <p class="settings-note" id="modeNote">
+          Dictation streams in real time via Chrome's speech engine (free), best for a
+          single close microphone. Use "Analyze Now" to re-run the word breakdown on
+          everything captured so far.
+        </p>
+        <div class="setting-row" id="liveModelRow">
           <div class="setting-header">
-            <label for="maxDurationSlider">Max segment duration</label>
-            <span class="setting-value" id="maxDurationValue">15s</span>
+            <label for="liveModelInput">Gemini Live model (Meeting mode)</label>
           </div>
-          <input type="range" id="maxDurationSlider" class="silence-slider" min="5" max="30" step="1" value="15">
-        </div>
-        <div class="setting-row">
-          <div class="setting-header">
-            <label for="sensitivitySlider">Mic sensitivity (RMS)</label>
-            <span class="setting-value" id="sensitivityValue">15</span>
-          </div>
-          <input type="range" id="sensitivitySlider" class="silence-slider" min="5" max="40" step="1" value="15">
-        </div>
-        <div class="setting-row">
-          <div class="setting-header">
-            <label for="minDurationSlider">Min segment duration</label>
-            <span class="setting-value" id="minDurationValue">500ms</span>
-          </div>
-          <input type="range" id="minDurationSlider" class="silence-slider" min="200" max="2000" step="100" value="500">
+          <input type="text" id="liveModelInput" class="text-input" list="liveModelOptions"
+                 placeholder="gemini-2.0-flash-live-001" spellcheck="false" autocomplete="off">
+          <datalist id="liveModelOptions"></datalist>
         </div>
         <button id="analyzeNow" class="btn btn-accent" disabled>Analyze Now</button>
       </div>

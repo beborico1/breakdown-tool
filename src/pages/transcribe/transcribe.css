@@ -568,6 +568,97 @@ body {
   border-radius: 4px;
 }
 
+/* Live interim caption — pinned at top, updates as you speak */
+.live-caption {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #9CA3AF;
+  font-style: italic;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(99, 40, 137, 0.10);
+  border: 1px dashed rgba(154, 110, 196, 0.5);
+  border-radius: 8px;
+}
+
+.live-caption:empty {
+  display: none;
+}
+
+/* Mode toggle (Dictation vs Meeting) */
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: #222;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.mode-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #aaa;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.mode-option:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mode-option.active {
+  background: rgba(99, 40, 137, 0.25);
+  border-color: rgba(154, 110, 196, 0.6);
+  color: #fff;
+}
+
+.mode-option .mode-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mode-option .mode-desc {
+  font-size: 10px;
+  color: #888;
+}
+
+.mode-option.active .mode-desc {
+  color: #c9b3e0;
+}
+
+/* Settings panel note (replaces the old chunking sliders) */
+.settings-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #888;
+  margin: 0 0 10px;
+}
+
+.text-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: #eee;
+  background: #222;
+  border: 1px solid #3a3a3a;
+  border-radius: 7px;
+  outline: none;
+}
+
+.text-input:focus {
+  border-color: rgba(154, 110, 196, 0.7);
+}
+
 /* Pending card */
 .segment-card.pending {
   background: #2D2D2D;

@@ -19,17 +19,8 @@ const statusText = document.getElementById('statusText');
 const statusRow = document.getElementById('statusRow');
 const warningNoKey = document.getElementById('warningNoKey');
 const warningNoMic = document.getElementById('warningNoMic');
-const silenceSlider = document.getElementById('silenceSlider');
-const silenceValue = document.getElementById('silenceValue');
-const maxDurationSlider = document.getElementById('maxDurationSlider');
-const maxDurationValue = document.getElementById('maxDurationValue');
-const sensitivitySlider = document.getElementById('sensitivitySlider');
-const sensitivityValue = document.getElementById('sensitivityValue');
-const minDurationSlider = document.getElementById('minDurationSlider');
-const minDurationValue = document.getElementById('minDurationValue');
 const analyzeNowBtn = document.getElementById('analyzeNow');
 const audioLevelBar = document.getElementById('audioLevelBar');
-const segmentTimerEl = document.getElementById('segmentTimer');
 const segmentsProcessedEl = document.getElementById('segmentsProcessed');
 const wordsAnalyzedEl = document.getElementById('wordsAnalyzed');
 const historyContainer = document.getElementById('historyContainer');
@@ -37,6 +28,9 @@ const historyEmpty = document.getElementById('historyEmpty');
 const historyActions = document.getElementById('historyActions');
 const settingsBtn = document.getElementById('settingsBtn');
 const silenceControls = document.getElementById('silenceControls');
+const modeToggle = document.getElementById('modeToggle');
+const modeNote = document.getElementById('modeNote');
+const liveModelInput = document.getElementById('liveModelInput');
 if (settingsBtn && silenceControls) {
   settingsBtn.addEventListener('click', () => {
     const collapsed = silenceControls.classList.toggle('collapsed');
@@ -58,28 +52,47 @@ async function resolveAuth() {
 let apiKey = null;
 let modelId = 'gemini-2.5-flash-lite';
 let isListening = false;
-let silenceThreshold = 3000; // ms
 let segmentCount = 0;
 let wordCount = 0;
 let accumulatedTranscript = ''; // transcribed text for "Analyze Now" re-analysis
 
-// --- Audio capture state ---
+// --- Transcription mode ---
+// 'dictation' = Web Speech API (instant, free, close mic).
+// 'meeting'   = Gemini Live API (high recall, far-field, streams audio).
+let transcribeMode = 'dictation';
+let liveModelId = 'gemini-2.0-flash-live-001';
+let liveModelUserSet = false; // true once the user manually edits the model field
+
+// --- Speech recognition state ---
+// We stream live captions via the Web Speech API (the same engine Chrome/Meet
+// use). It emits interim results as you speak and a final result once the
+// engine settles, so there's no record-then-batch latency.
+let recognition = null;
+const RECOGNITION_LANG = 'ja-JP';
+let shouldRestart = false; // drives onend auto-restart while listening
+let liveCaptionEl = null;  // pinned interim caption line at top of history
+
+// --- Breakdown queue (order-preserving, concurrency-capped) ---
+const MAX_CONCURRENT_BREAKDOWNS = 3;
+let activeBreakdowns = 0;
+const breakdownQueue = [];
+
+// --- Audio meter state (mic VU bar only; recognizer manages its own audio) ---
 let mediaStream = null;
 let audioContext = null;
 let analyser = null;
-let mediaRecorder = null;
-let recordedChunks = [];
-let silenceStart = null;
-let segmentStart = null;
-let silenceCheckInterval = null;
+let meterInterval = null;
 let currentRMS = 0;
-let speechSamples = 0;
-let totalSamples = 0;
 
-let SILENCE_RMS_THRESHOLD = 15;   // 0-255 scale
-let MIN_SEGMENT_DURATION = 500;   // ms
-let MAX_SEGMENT_DURATION = 15000; // ms
-const MIN_SPEECH_RATIO = 0.10;    // Skip transcription if < 10% of samples had speech
+// --- Meeting mode (Gemini Live) state ---
+const LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+let liveSocket = null;       // active WebSocket
+let liveWorkletNode = null;  // AudioWorkletNode producing PCM
+let liveSetupDone = false;   // server acknowledged setup for the current socket
+let liveHadSession = false;  // setup succeeded at least once this listening session
+let liveBuffer = '';         // accumulated input-transcription for the current turn
+let liveReconnecting = false;
+let liveResponseModality = 'TEXT'; // 'TEXT' for half-cascade models; falls back to 'AUDIO' for native-audio
 
 // ============================================
 // Duplicated utilities (from api.js, text.js, frequency-tracker.js)
@@ -89,14 +102,6 @@ async function getApiKey() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(['geminiApiKey'], (result) => {
       resolve(result.geminiApiKey || null);
-    });
-  });
-}
-
-async function getModel() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['geminiModel'], (result) => {
-      resolve(result.geminiModel || 'gemini-2.5-flash-lite');
     });
   });
 }
@@ -263,86 +268,6 @@ Text: ${text}`;
   }
 }
 
-// ============================================
-// Gemini Audio Analysis (duplicated from api.js)
-// ============================================
-
-function sanitizeTranscription(text) {
-  if (!text) return text;
-
-  // Fix hex-encoded UTF-8 bytes: <0xE3><0x81><0xAA> → な
-  text = text.replace(/(?:<0x([0-9A-Fa-f]{2})>)+/g, (match) => {
-    const bytes = [];
-    match.replace(/<0x([0-9A-Fa-f]{2})>/g, (_, hex) => {
-      bytes.push(parseInt(hex, 16));
-    });
-    try {
-      return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
-    } catch { return match; }
-  });
-
-  // Strip hallucinated timestamps: 00時00分00秒, 00:00:00, etc.
-  text = text.replace(/\d{1,2}時\d{1,2}分\d{1,2}秒/g, '');
-  text = text.replace(/\d{1,2}:\d{2}(:\d{2})?/g, '');
-
-  // Clean up dangling particles left after removed timestamps
-  text = text.replace(/^\s*(?:から|まで|にかけて)\s*/g, '');
-  text = text.replace(/\s*(?:から|まで|にかけて)\s*(?=(?:から|まで|にかけて|、|。|$))/g, '');
-
-  // Collapse leftover punctuation and whitespace
-  text = text.replace(/[、。]\s*[、。]/g, '、');
-  text = text.replace(/^\s*[、。]\s*/, '');
-  text = text.replace(/\s+/g, ' ');
-
-  return text.trim();
-}
-
-async function transcribeAudioOnly(base64Audio, mimeType) {
-  const { apiBase, apiKey: resolvedKey } = await resolveAuth();
-
-  const prompt = `Transcribe this Japanese audio. Output ONLY the transcribed Japanese text, nothing else. No translation, no explanation, no quotes, no markdown. Do NOT include timestamps, timecodes, or time references (00:00, 00時00分). If no Japanese speech is detected, output an empty string.`;
-
-  const response = await fetch(
-    `${apiBase}/v1beta/models/${modelId}:generateContent?key=${resolvedKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inlineData: { mimeType, data: base64Audio } },
-            { text: prompt }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 2048,
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Transcription failed');
-  }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  const usageMetadata = data.usageMetadata;
-  if (usageMetadata?.totalTokenCount) {
-    updateTokenUsage(usageMetadata.totalTokenCount);
-  }
-
-  if (text === undefined || text === null) {
-    const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
-    throw new Error(blockReason ? `Audio blocked: ${blockReason}` : 'No transcription returned');
-  }
-
-  return sanitizeTranscription(text.trim().replace(/^["「『]|["」』]$/g, '').trim());
-}
-
 function recordWordFrequencies(words) {
   const now = Date.now();
   chrome.storage.local.get(['wordFrequencyData'], (result) => {
@@ -390,17 +315,10 @@ function setStatus(state, text) {
 function updateAudioLevel() {
   if (!isListening) {
     audioLevelBar.style.width = '0%';
-    if (segmentTimerEl) segmentTimerEl.textContent = '';
     return;
   }
-
   const pct = Math.min(100, (currentRMS / 80) * 100);
   audioLevelBar.style.width = pct + '%';
-
-  if (segmentTimerEl && segmentStart) {
-    const elapsed = ((Date.now() - segmentStart) / 1000).toFixed(1);
-    segmentTimerEl.textContent = elapsed + 's';
-  }
 }
 
 // ============================================
@@ -656,58 +574,64 @@ function createErrorCard(label, error, retryFn) {
 }
 
 // ============================================
-// Audio analysis pipeline
+// Live caption + finalized-segment pipeline
 // ============================================
 
-async function processAudioSegment(blob) {
-  const durationLabel = ((Date.now() - (segmentStart || Date.now())) / 1000).toFixed(1) + 's audio';
+// Show/replace the interim (not-yet-final) transcript line, pinned at the very
+// top of the history so it reads top-down: [live][newest card][older cards].
+function updateLiveCaption(text) {
+  if (!liveCaptionEl) {
+    liveCaptionEl = document.createElement('div');
+    liveCaptionEl.className = 'live-caption';
+  }
+  // Keep it pinned to the top (insertBefore moves an already-attached node).
+  if (historyContainer.firstChild !== liveCaptionEl) {
+    historyContainer.insertBefore(liveCaptionEl, historyContainer.firstChild);
+  }
+  liveCaptionEl.textContent = text;
+  if (text) historyEmpty.style.display = 'none';
+}
 
+// A final transcript arrived: drop it from the live line, create its gray card
+// in chronological order, and queue the word breakdown.
+function finalizeUtterance(text) {
   historyEmpty.style.display = 'none';
-  const spinnerCard = createPendingCard(durationLabel);
-  historyContainer.insertBefore(spinnerCard, historyContainer.firstChild);
+  // In hybrid, Web Speech keeps driving the live line, so don't wipe it.
+  if (transcribeMode !== 'hybrid' && liveCaptionEl) liveCaptionEl.textContent = '';
 
-  let arrayBuffer;
-  let base64;
-  try {
-    arrayBuffer = await blob.arrayBuffer();
-    base64 = btoa(
-      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-    );
-  } catch (error) {
-    spinnerCard.remove();
-    const errorCard = createErrorCard(durationLabel, error.message, () => processAudioSegment(blob));
-    historyContainer.insertBefore(errorCard, historyContainer.firstChild);
-    return;
+  const grayCard = createGrayTranscriptCard(text);
+  // Insert just below the (pinned) live line so newest cards stay on top.
+  if (liveCaptionEl && liveCaptionEl.parentNode === historyContainer) {
+    historyContainer.insertBefore(grayCard, liveCaptionEl.nextSibling);
+  } else {
+    historyContainer.insertBefore(grayCard, historyContainer.firstChild);
   }
 
-  // Stage 1 — fast transcribe-only call. Shows gray text ASAP.
-  let rawText;
-  try {
-    rawText = await transcribeAudioOnly(base64, 'audio/webm;codecs=opus');
-  } catch (error) {
-    spinnerCard.remove();
-    const errorCard = createErrorCard(durationLabel, error.message, () => processAudioSegment(blob));
-    historyContainer.insertBefore(errorCard, historyContainer.firstChild);
-    return;
+  accumulatedTranscript += text + ' ';
+  if (analyzeNowBtn) analyzeNowBtn.disabled = false;
+
+  enqueueBreakdown(grayCard, text);
+}
+
+// Order-preserving, concurrency-capped breakdown queue. Cards are created at
+// finalize time (correct order) and upgraded in place, so breakdowns can run
+// concurrently without blocking or reordering one another.
+function enqueueBreakdown(card, text) {
+  breakdownQueue.push({ card, text });
+  pumpBreakdownQueue();
+}
+
+function pumpBreakdownQueue() {
+  while (activeBreakdowns < MAX_CONCURRENT_BREAKDOWNS && breakdownQueue.length > 0) {
+    const { card, text } = breakdownQueue.shift();
+    activeBreakdowns++;
+    // runBreakdownForCard handles its own errors (retry affordance), so this
+    // promise never rejects.
+    runBreakdownForCard(card, text).finally(() => {
+      activeBreakdowns--;
+      pumpBreakdownQueue();
+    });
   }
-
-  spinnerCard.remove();
-
-  // Empty response means no speech detected — discard silently
-  if (!rawText || rawText.trim() === '') {
-    return;
-  }
-
-  const grayCard = createGrayTranscriptCard(rawText);
-  historyContainer.insertBefore(grayCard, historyContainer.firstChild);
-
-  accumulatedTranscript += rawText + ' ';
-  if (isListening) {
-    analyzeNowBtn.disabled = false;
-  }
-
-  // Stage 2 — full breakdown analysis. Upgrades the gray card in place.
-  await runBreakdownForCard(grayCard, rawText);
 }
 
 async function runBreakdownForCard(card, text) {
@@ -770,161 +694,405 @@ async function sendForAnalysis(text) {
 }
 
 // ============================================
-// Audio capture (mirrors offscreen.js pattern)
+// Mic capture / audio graph (per mode)
 // ============================================
 
-async function initAudioCapture() {
+function buildAnalyser(source) {
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.3;
+  source.connect(analyser);
+}
+
+// Dictation mode: the recognizer captures its own audio; this stream drives
+// only the VU meter ("I can hear you" feedback). Failure here is non-fatal.
+async function startDictationMeter() {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     });
-
     audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(mediaStream);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.3;
-    source.connect(analyser);
-
-    // Suspend until user click (Chrome autoplay policy)
-    audioContext.suspend();
-  } catch (err) {
-    if (err.name === 'NotAllowedError') {
-      warningNoMic.textContent = 'Microphone access denied. Please allow mic access and reload.';
-    } else {
-      warningNoMic.textContent = 'Failed to access microphone: ' + err.message;
-    }
-    warningNoMic.style.display = 'block';
-    micBtn.disabled = true;
+    buildAnalyser(audioContext.createMediaStreamSource(mediaStream));
+    startMeter();
+  } catch {
+    /* meter is optional; Web Speech still works without our stream */
   }
 }
 
-function startNewRecording() {
-  recordedChunks = [];
-  speechSamples = 0;
-  totalSamples = 0;
-  segmentStart = Date.now();
-
-  mediaRecorder = new MediaRecorder(mediaStream, {
-    mimeType: 'audio/webm;codecs=opus'
+// Meeting mode: WE own the audio. Far-field tuning (EC/NS off so distant speech
+// isn't stripped, AGC on to lift it), mono, 16kHz so the worklet emits exactly
+// the PCM the Live API wants. Throws on permission failure (caller handles).
+async function startMeetingAudio() {
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true, channelCount: 1 }
   });
+  audioContext = new AudioContext({ sampleRate: 16000 });
+  const source = audioContext.createMediaStreamSource(mediaStream);
+  buildAnalyser(source);
 
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data.size > 0) {
-      recordedChunks.push(event.data);
-    }
-  };
+  await audioContext.audioWorklet.addModule(
+    chrome.runtime.getURL('src/pages/transcribe/pcm-worklet.js')
+  );
+  liveWorkletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
+  source.connect(liveWorkletNode);
+  // Route through a muted gain to keep the worklet processing without audible
+  // playback (which would feed back into the mic).
+  const mute = audioContext.createGain();
+  mute.gain.value = 0;
+  liveWorkletNode.connect(mute).connect(audioContext.destination);
+  liveWorkletNode.port.onmessage = (e) => sendAudioChunk(e.data);
 
-  mediaRecorder.onstop = () => {
-    if (recordedChunks.length > 0) {
-      const speechRatio = totalSamples > 0 ? speechSamples / totalSamples : 0;
-      if (speechRatio >= MIN_SPEECH_RATIO) {
-        const blob = new Blob(recordedChunks, { type: 'audio/webm;codecs=opus' });
-        processAudioSegment(blob);
-      }
-    }
-  };
-
-  mediaRecorder.start(100);
-  silenceStart = null;
+  startMeter();
 }
 
-function checkSilence() {
-  if (!analyser || !isListening) return;
+// Tear down whatever audio graph is active (used by both modes on stop).
+function teardownAudio() {
+  stopMeter();
+  if (liveWorkletNode) {
+    try { liveWorkletNode.port.onmessage = null; liveWorkletNode.disconnect(); } catch { /* already gone */ }
+    liveWorkletNode = null;
+  }
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
+  }
+  if (audioContext) {
+    try { audioContext.close(); } catch { /* already closed */ }
+    audioContext = null;
+    analyser = null;
+  }
+}
 
+// ============================================
+// Mic VU meter (visual "I can hear you" feedback only)
+// ============================================
+
+function sampleMeter() {
+  if (!analyser) return;
   const dataArray = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteTimeDomainData(dataArray);
-
-  // Calculate RMS volume
   let sum = 0;
   for (let i = 0; i < dataArray.length; i++) {
     const val = (dataArray[i] - 128) / 128;
     sum += val * val;
   }
   currentRMS = Math.sqrt(sum / dataArray.length) * 255;
-
-  totalSamples++;
-  if (currentRMS >= SILENCE_RMS_THRESHOLD) {
-    speechSamples++;
-  }
-
   updateAudioLevel();
+}
 
-  if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+function startMeter() {
+  if (meterInterval || !analyser) return;
+  meterInterval = setInterval(sampleMeter, 100);
+}
 
-  const now = Date.now();
-  const segmentDuration = now - segmentStart;
+function stopMeter() {
+  if (meterInterval) {
+    clearInterval(meterInterval);
+    meterInterval = null;
+  }
+}
 
-  // Force segment boundary at max duration
-  if (segmentDuration >= MAX_SEGMENT_DURATION) {
-    finalizeSegment();
+// ============================================
+// Speech recognition (Web Speech API streaming)
+// ============================================
+
+function initSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    warningNoMic.textContent = 'Speech recognition is not available in this browser. Please use Chrome.';
+    warningNoMic.style.display = 'block';
+    micBtn.disabled = true;
+    return false;
+  }
+  recognition = new SR();
+  recognition.lang = RECOGNITION_LANG;
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.onresult = handleSpeechResult;
+  recognition.onend = handleSpeechEnd;
+  recognition.onerror = handleSpeechError;
+  return true;
+}
+
+function handleSpeechResult(event) {
+  let interim = '';
+  for (let i = event.resultIndex; i < event.results.length; i++) {
+    const result = event.results[i];
+    const transcript = result[0].transcript;
+    if (result.isFinal) {
+      const text = transcript.trim();
+      if (!text) continue;
+      // Hybrid: Web Speech is a preview only — Gemini owns the cards. Keep the
+      // final text in the live line (it'll be replaced by the next utterance).
+      if (transcribeMode === 'hybrid') interim += transcript;
+      else finalizeUtterance(text);
+    } else {
+      interim += transcript;
+    }
+  }
+  updateLiveCaption(interim);
+}
+
+// The engine self-terminates after pauses (and ~60s of audio). Restart it so
+// transcription continues seamlessly for as long as the user is listening.
+function handleSpeechEnd() {
+  if (!shouldRestart || !isListening) {
+    setStatus('ready', 'Ready');
+    return;
+  }
+  restartRecognition();
+}
+
+function restartRecognition() {
+  try {
+    recognition.start();
+    setStatus('listening', 'Listening...');
+  } catch {
+    // Engine not fully released yet; retry shortly.
+    setTimeout(() => {
+      if (shouldRestart && isListening) restartRecognition();
+    }, 200);
+  }
+}
+
+function handleSpeechError(event) {
+  const err = event.error;
+  if (err === 'no-speech' || err === 'aborted') {
+    return; // benign; onend handles any restart
+  }
+  if (err === 'not-allowed' || err === 'service-not-allowed') {
+    shouldRestart = false;
+    isListening = false;
+    stopMeter();
+    warningNoMic.textContent = 'Microphone access denied. Please allow mic access and reload.';
+    warningNoMic.style.display = 'block';
+    micBtn.classList.remove('listening');
+    setStatus('ready', 'Ready');
+    return;
+  }
+  if (err === 'network') {
+    setStatus('processing', 'Reconnecting...');
+    return; // onend will restart
+  }
+  console.warn('SpeechRecognition error:', err);
+}
+
+// ============================================
+// Meeting mode (Gemini Live API streaming)
+// ============================================
+
+function openLiveSocket(key) {
+  liveSetupDone = false;
+  liveSocket = new WebSocket(`${LIVE_WS_URL}?key=${encodeURIComponent(key)}`);
+  liveSocket.binaryType = 'arraybuffer';
+
+  liveSocket.onopen = () => {
+    // Half-cascade models accept TEXT (cheaper, no audio generated); native-audio
+    // models only accept AUDIO. We try TEXT first and fall back to AUDIO on a
+    // modality-mismatch error (see onclose). Either way we read only the input
+    // transcription and ignore the model's reply.
+    liveSocket.send(JSON.stringify({
+      setup: {
+        model: `models/${liveModelId}`,
+        generationConfig: { responseModalities: [liveResponseModality] },
+        // The Live API auto-detects the spoken language from the audio; it has no
+        // setup field to pin a language, so we bias toward Japanese via the system
+        // instruction below instead.
+        inputAudioTranscription: {},
+        systemInstruction: { parts: [{ text: 'You are a silent transcription engine for Japanese speech. Do not reply.' }] },
+      }
+    }));
+  };
+
+  liveSocket.onmessage = (ev) => { handleLiveMessage(ev.data); };
+
+  liveSocket.onclose = (ev) => {
+    // Ignore the close we triggered ourselves (liveSocket nulled in stop).
+    if (!liveSocket || !isListening || (transcribeMode !== 'meeting' && transcribeMode !== 'hybrid')) return;
+    flushLiveBuffer();
+    if (!liveHadSession) {
+      const reason = (ev && ev.reason) || '';
+      // Native-audio models reject TEXT — retry once with AUDIO modality.
+      if (liveResponseModality === 'TEXT' && /modalit/i.test(reason)) {
+        liveResponseModality = 'AUDIO';
+        reconnectLiveSocket();
+        return;
+      }
+      // Otherwise closed before setup completed → fatal (bad key, model, quota).
+      meetingFatal(reason);
+      return;
+    }
+    reconnectLiveSocket();
+  };
+
+  liveSocket.onerror = () => { /* onclose follows and handles recovery */ };
+}
+
+function meetingFatal(reason) {
+  warningNoMic.textContent =
+    'Meeting mode could not connect' + (reason ? ` (${reason})` : '') +
+    '. Check your API key and the Live model name.';
+  warningNoMic.style.display = 'block';
+  stopListening();
+}
+
+// Audio-only Live sessions cap at ~15 min; reconnect to keep going.
+function reconnectLiveSocket() {
+  if (liveReconnecting) return;
+  liveReconnecting = true;
+  setStatus('processing', 'Reconnecting...');
+  setTimeout(async () => {
+    liveReconnecting = false;
+    if (!isListening || (transcribeMode !== 'meeting' && transcribeMode !== 'hybrid')) return;
+    const key = await getApiKey();
+    if (key) openLiveSocket(key);
+  }, 600);
+}
+
+async function handleLiveMessage(data) {
+  let text;
+  if (typeof data === 'string') text = data;
+  else if (data instanceof ArrayBuffer) text = new TextDecoder().decode(data);
+  else if (data && typeof data.text === 'function') text = await data.text(); // Blob
+  else return;
+
+  let msg;
+  try { msg = JSON.parse(text); } catch { return; }
+
+  if (msg.setupComplete) {
+    liveSetupDone = true;
+    liveHadSession = true;
+    setStatus('listening', 'Listening...');
     return;
   }
 
-  if (currentRMS < SILENCE_RMS_THRESHOLD) {
-    if (!silenceStart) {
-      silenceStart = now;
-    } else if (now - silenceStart >= silenceThreshold && segmentDuration >= MIN_SEGMENT_DURATION) {
-      finalizeSegment();
-    }
-  } else {
-    silenceStart = null;
+  const sc = msg.serverContent;
+  if (!sc) return;
+
+  // We only want the ASR of the room audio — ignore any model reply (modelTurn).
+  const itext = sc.inputTranscription?.text;
+  if (itext) {
+    liveBuffer += itext;
+    // In hybrid, Web Speech drives the live line; don't fight it. Gemini still
+    // finalizes the accurate card on turnComplete.
+    if (transcribeMode !== 'hybrid') updateLiveCaption(liveBuffer);
   }
+
+  if (sc.turnComplete) flushLiveBuffer();
 }
 
-function finalizeSegment() {
-  if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+// Turn finished (or session ending): cut the buffered text into a card.
+function flushLiveBuffer() {
+  const text = liveBuffer.trim();
+  liveBuffer = '';
+  if (text) finalizeUtterance(text);
+  else if (transcribeMode !== 'hybrid' && liveCaptionEl) liveCaptionEl.textContent = '';
+}
 
-  mediaRecorder.stop();
-
-  // Start new recording after brief delay
-  setTimeout(() => {
-    if (mediaStream && mediaStream.active && isListening) {
-      startNewRecording();
-    }
-  }, 50);
+function sendAudioChunk(int16) {
+  if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN || !liveSetupDone) return;
+  const bytes = new Uint8Array(int16.buffer);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  const b64 = btoa(bin);
+  liveSocket.send(JSON.stringify({
+    realtimeInput: { audio: { data: b64, mimeType: 'audio/pcm;rate=16000' } }
+  }));
 }
 
 // ============================================
-// Start / Stop
+// Start / Stop (dispatch on mode)
 // ============================================
+
+async function startDictationMode() {
+  if (!recognition && !initSpeechRecognition()) return false;
+  shouldRestart = true;
+  await startDictationMeter();
+  try { recognition.start(); } catch { /* already started */ }
+  setStatus('listening', 'Listening...');
+  return true;
+}
+
+async function startMeetingMode() {
+  const key = await getApiKey();
+  if (!key) {
+    warningNoKey.style.display = 'block';
+    return false;
+  }
+  setStatus('processing', 'Connecting...');
+  liveHadSession = false;
+  liveBuffer = '';
+  liveResponseModality = 'TEXT'; // start cheap; onclose falls back to AUDIO if rejected
+  try {
+    await startMeetingAudio();
+  } catch (err) {
+    teardownAudio();
+    warningNoMic.textContent = err && err.name === 'NotAllowedError'
+      ? 'Microphone access denied. Please allow mic access and reload.'
+      : 'Failed to start meeting capture: ' + (err?.message || err);
+    warningNoMic.style.display = 'block';
+    return false;
+  }
+  openLiveSocket(key);
+  return true;
+}
+
+// Hybrid = Gemini (accurate cards) + Web Speech (instant ja-JP preview line).
+async function startHybridMode() {
+  const ok = await startMeetingMode();
+  if (!ok) return false;
+  if (recognition || initSpeechRecognition()) {
+    shouldRestart = true;
+    try { recognition.start(); } catch { /* already started */ }
+  }
+  return true;
+}
 
 async function startListening() {
-  if (!audioContext || !mediaStream) return;
-
+  if (isListening) return;
+  warningNoMic.style.display = 'none';
   isListening = true;
   accumulatedTranscript = '';
-
-  await audioContext.resume();
-  startNewRecording();
-  silenceCheckInterval = setInterval(checkSilence, 100);
-
   micBtn.classList.add('listening');
-  setStatus('listening', 'Listening...');
+
+  const ok = transcribeMode === 'meeting'
+    ? await startMeetingMode()
+    : transcribeMode === 'hybrid'
+    ? await startHybridMode()
+    : await startDictationMode();
+
+  if (!ok) {
+    isListening = false;
+    micBtn.classList.remove('listening');
+    setStatus('ready', 'Ready');
+  }
 }
 
 function stopListening() {
   isListening = false;
+  shouldRestart = false; // stop Web Speech auto-restart
 
-  if (silenceCheckInterval) {
-    clearInterval(silenceCheckInterval);
-    silenceCheckInterval = null;
+  if (recognition) {
+    try { recognition.stop(); } catch { /* not started */ }
   }
 
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop(); // triggers final segment processing
+  if (liveSocket) {
+    const sock = liveSocket;
+    liveSocket = null; // signals onclose not to reconnect
+    try { sock.close(); } catch { /* already closing */ }
   }
+  liveSetupDone = false;
+  flushLiveBuffer();
 
+  teardownAudio();
+
+  if (liveCaptionEl) liveCaptionEl.textContent = '';
   micBtn.classList.remove('listening');
   currentRMS = 0;
   updateAudioLevel();
 
-  if (accumulatedTranscript.trim()) {
-    analyzeNowBtn.disabled = false;
-  } else {
-    analyzeNowBtn.disabled = true;
-  }
-
+  analyzeNowBtn.disabled = !accumulatedTranscript.trim();
   setStatus('ready', 'Ready');
 }
 
@@ -1005,60 +1173,56 @@ analyzeNowBtn.addEventListener('click', () => {
   }
 });
 
-const SETTINGS_KEYS = ['silenceThreshold', 'maxSegmentDuration', 'silenceRmsThreshold', 'minSegmentDuration'];
+// ============================================
+// Mode toggle (Dictation / Meeting)
+// ============================================
 
-function applySilence(seconds) {
-  silenceThreshold = seconds * 1000;
-  silenceSlider.value = seconds;
-  silenceValue.textContent = seconds + 's';
-}
-function applyMaxDuration(seconds) {
-  MAX_SEGMENT_DURATION = seconds * 1000;
-  maxDurationSlider.value = seconds;
-  maxDurationValue.textContent = seconds + 's';
-}
-function applySensitivity(val) {
-  SILENCE_RMS_THRESHOLD = val;
-  sensitivitySlider.value = val;
-  sensitivityValue.textContent = val;
-}
-function applyMinDuration(ms) {
-  MIN_SEGMENT_DURATION = ms;
-  minDurationSlider.value = ms;
-  minDurationValue.textContent = ms + 'ms';
-}
+const MODE_NOTES = {
+  dictation: 'Dictation streams in real time via Chrome\'s speech engine (free), best for a single close microphone. Use "Analyze Now" to re-run the word breakdown on everything captured so far.',
+  meeting: 'Meeting mode streams mic audio to Gemini for high-recall transcription of far-field, multi-speaker conversations. Uses your API key — audio is billed while listening.',
+  hybrid: 'Hybrid shows an instant live preview (Chrome speech engine) while accurate Gemini cards finalize a beat behind. Best of both — far-field accuracy with real-time feedback. Uses your API key.',
+};
 
-function saveSetting(key, value) {
-  chrome.storage.sync.set({ [key]: value });
+const VALID_MODES = ['dictation', 'meeting', 'hybrid'];
+
+function applyMode(mode, persist) {
+  transcribeMode = VALID_MODES.includes(mode) ? mode : 'dictation';
+  if (modeToggle) {
+    modeToggle.querySelectorAll('.mode-option').forEach((btn) => {
+      const active = btn.dataset.mode === transcribeMode;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+  }
+  if (modeNote) modeNote.textContent = MODE_NOTES[transcribeMode];
+  if (persist) chrome.storage.sync.set({ transcribeMode });
 }
 
-chrome.storage.sync.get(SETTINGS_KEYS, (stored) => {
-  if (typeof stored.silenceThreshold === 'number') applySilence(stored.silenceThreshold / 1000);
-  if (typeof stored.maxSegmentDuration === 'number') applyMaxDuration(stored.maxSegmentDuration / 1000);
-  if (typeof stored.silenceRmsThreshold === 'number') applySensitivity(stored.silenceRmsThreshold);
-  if (typeof stored.minSegmentDuration === 'number') applyMinDuration(stored.minSegmentDuration);
-});
+if (modeToggle) {
+  modeToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.mode-option');
+    if (!btn) return;
+    const target = VALID_MODES.includes(btn.dataset.mode) ? btn.dataset.mode : 'dictation';
+    if (target === transcribeMode) return;
+    // Switch instantly: tear down the current session and restart in the new
+    // mode (a switch is always between different modes, so we never stop/start
+    // the same Web Speech recognizer).
+    const wasListening = isListening;
+    if (wasListening) stopListening();
+    applyMode(target, true);
+    if (wasListening) startListening();
+  });
+}
 
-silenceSlider.addEventListener('input', () => {
-  const val = parseFloat(silenceSlider.value);
-  applySilence(val);
-  saveSetting('silenceThreshold', silenceThreshold);
-});
-maxDurationSlider.addEventListener('input', () => {
-  const val = parseInt(maxDurationSlider.value, 10);
-  applyMaxDuration(val);
-  saveSetting('maxSegmentDuration', MAX_SEGMENT_DURATION);
-});
-sensitivitySlider.addEventListener('input', () => {
-  const val = parseInt(sensitivitySlider.value, 10);
-  applySensitivity(val);
-  saveSetting('silenceRmsThreshold', val);
-});
-minDurationSlider.addEventListener('input', () => {
-  const val = parseInt(minDurationSlider.value, 10);
-  applyMinDuration(val);
-  saveSetting('minSegmentDuration', val);
-});
+if (liveModelInput) {
+  liveModelInput.addEventListener('change', () => {
+    const val = liveModelInput.value.trim();
+    liveModelId = val || liveModelId;
+    liveModelInput.value = liveModelId;
+    liveModelUserSet = true; // a manual choice — discovery must not override it
+    chrome.storage.sync.set({ geminiLiveModel: liveModelId, geminiLiveModelUserSet: true });
+  });
+}
 
 // Listen for storage changes (user sets API key while page is open)
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -1070,22 +1234,97 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (changes.geminiModel) {
       modelId = changes.geminiModel.newValue || 'gemini-2.5-flash-lite';
     }
+    if (changes.geminiLiveModel) {
+      liveModelId = changes.geminiLiveModel.newValue || liveModelId;
+    }
   }
 });
+
+// ============================================
+// Live model discovery
+// ============================================
+
+// Prefer a half-cascade flash-live model: it honors the Japanese language lock
+// and supports cheap TEXT output. Native-audio models (e.g. 3.x flash-live,
+// *native-audio*) auto-detect language and ignore the lock, so they're last.
+function pickPreferredLiveModel(models) {
+  const halfCascade = (m) => !m.includes('native-audio') && !/gemini-3\./.test(m);
+  return (
+    models.find((m) => m === 'gemini-2.0-flash-live-001') ||
+    models.find((m) => /^gemini-2\.0-flash-live/.test(m)) ||
+    models.find((m) => m.includes('flash') && m.includes('live') && halfCascade(m)) ||
+    models.find((m) => halfCascade(m)) ||
+    models[0]
+  );
+}
+
+// Ask the user's own key which models support bidiGenerateContent (Live API),
+// so the field offers valid options instead of a guessed name that may 404.
+// Populates the datalist and steers toward the Japanese-honoring default.
+async function discoverLiveModels(key) {
+  if (!key) return;
+  let models;
+  try {
+    const res = await fetch(`${CLOUD_API_BASE}/v1beta/models?key=${key}&pageSize=1000`);
+    if (!res.ok) return;
+    const data = await res.json();
+    models = (data.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('bidiGenerateContent'))
+      .map((m) => (m.name || '').replace(/^models\//, ''))
+      .filter(Boolean);
+  } catch {
+    return; // keep the editable field + default
+  }
+  if (!models || models.length === 0) return;
+
+  // Populate the datalist suggestions.
+  const list = document.getElementById('liveModelOptions');
+  if (list) {
+    list.innerHTML = '';
+    models.forEach((id) => {
+      const opt = document.createElement('option');
+      opt.value = id;
+      list.appendChild(opt);
+    });
+  }
+
+  // Switch to the preferred model when the current one is invalid, or when the
+  // user hasn't manually chosen and a better (Japanese-honoring) one exists.
+  const preferred = pickPreferredLiveModel(models);
+  const invalid = !models.includes(liveModelId);
+  if (preferred && (invalid || (!liveModelUserSet && preferred !== liveModelId))) {
+    liveModelId = preferred;
+    if (liveModelInput) liveModelInput.value = liveModelId;
+    chrome.storage.sync.set({ geminiLiveModel: liveModelId });
+  }
+}
 
 // ============================================
 // Initialization
 // ============================================
 
 async function init() {
-  apiKey = await getApiKey();
-  modelId = await getModel();
+  const stored = await new Promise((resolve) => {
+    chrome.storage.sync.get(
+      ['geminiApiKey', 'geminiModel', 'geminiLiveModel', 'geminiLiveModelUserSet', 'transcribeMode'],
+      (s) => resolve(s || {})
+    );
+  });
+  apiKey = stored.geminiApiKey || null;
+  modelId = stored.geminiModel || 'gemini-2.5-flash-lite';
+  if (stored.geminiLiveModel) liveModelId = stored.geminiLiveModel;
+  liveModelUserSet = stored.geminiLiveModelUserSet === true;
+  if (liveModelInput) liveModelInput.value = liveModelId;
 
+  // Live transcription needs no key in Dictation mode; only the breakdown (and
+  // Meeting mode) do. So this banner is informational and never blocks Dictation.
   if (!apiKey) {
     warningNoKey.style.display = 'block';
   }
 
-  await initAudioCapture();
+  applyMode(stored.transcribeMode || 'dictation', false);
+  initSpeechRecognition();
+  discoverLiveModels(apiKey); // async; populates datalist + heals stale model
 }
 
 init();
