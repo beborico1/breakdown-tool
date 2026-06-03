@@ -64,7 +64,8 @@
       "matches": [
         "https://meet.google.com/*",
         "https://chat.google.com/*",
-        "https://mail.google.com/*"
+        "https://mail.google.com/*",
+        "https://redmine.irvine.jp/*"
       ],
       "js": ["dist/content.js"],
       "css": ["src/content/content.css"],
