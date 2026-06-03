@@ -111,6 +111,40 @@ export async function addOneCard({ word, reading, english, pos }) {
   return { result: addNoteResult, deck: settings.deckName, model: settings.modelName };
 }
 
+export async function deleteOneCard({ word }) {
+  if (!word) return { deleted: 0 };
+  if (!(await checkPermission())) {
+    throw new Error('Anki permission not granted. Open the extension popup → AnkiConnect Setup to grant access to localhost:8765.');
+  }
+
+  const settings = await getAnkiSettings();
+  const frontField = settings.modelName === KAIGI_MODEL_NAME ? KAIGI_FIELDS[0] : settings.frontField;
+  // Trailing `*` covers the custom-model `単語（よみ）` front format as well as
+  // the Kaigi model's exact-word front.
+  const query = `deck:"${settings.deckName}" "${frontField}:${word}*"`;
+
+  const findBody = { action: 'findNotes', version: 6, params: { query } };
+  const findResp = await ankiFetch(findBody);
+  if (!findResp?.ok) {
+    throw new Error(findResp?.error || `AnkiConnect unreachable (status ${findResp?.status || 0}). Is Anki running?`);
+  }
+  let findData;
+  try { findData = JSON.parse(findResp.text); } catch { throw new Error('Invalid response from AnkiConnect'); }
+  if (findData.error) throw new Error(findData.error);
+  const noteIds = Array.isArray(findData.result) ? findData.result : [];
+  if (noteIds.length === 0) return { deleted: 0 };
+
+  const delBody = { action: 'deleteNotes', version: 6, params: { notes: noteIds } };
+  const delResp = await ankiFetch(delBody);
+  if (!delResp?.ok) {
+    throw new Error(delResp?.error || `AnkiConnect unreachable (status ${delResp?.status || 0}). Is Anki running?`);
+  }
+  let delData;
+  try { delData = JSON.parse(delResp.text); } catch { throw new Error('Invalid response from AnkiConnect'); }
+  if (delData.error) throw new Error(delData.error);
+  return { deleted: noteIds.length };
+}
+
 export function isRetriableAnkiError(msg) {
   const s = String(msg || '').toLowerCase();
   if (s.includes('duplicate')) return false;

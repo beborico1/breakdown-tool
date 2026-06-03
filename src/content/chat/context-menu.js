@@ -4,7 +4,8 @@ import {
 } from '../core/state.js';
 import { showInlineBreakdown } from './inline-breakdown.js';
 import { isPageLightMode } from '../utils/dom.js';
-import { handleAddToAnki } from './anki-quick-add.js';
+import { handleAddToAnki, handleRemoveFromAnki } from './anki-quick-add.js';
+import { isAnkiAdded } from '../core/anki-added.js';
 
 const COLOURED_WORD_SELECTOR = '.gcwb-auto-word, .mm-word, .gcwb-cached-word';
 
@@ -26,6 +27,9 @@ export function showCustomContextMenu(event, messageEl, text, options = {}) {
   // action to "Add to Anki" for that word (pokéball animation flow).
   const wordSpan = event.target?.closest?.(COLOURED_WORD_SELECTOR);
   const ankiWord = wordSpan && wordSpan.dataset?.word ? wordSpan : null;
+  const ankiAdded = ankiWord
+    ? (ankiWord.classList.contains('gcwb-anki-added') || isAnkiAdded(ankiWord.dataset.word))
+    : false;
 
   // Create context menu
   const menu = document.createElement('div');
@@ -34,12 +38,19 @@ export function showCustomContextMenu(event, messageEl, text, options = {}) {
 
   // Build menu items
   let menuHTML = ankiWord
-    ? `
+    ? (ankiAdded
+      ? `
+    <div class="gcwb-context-menu-item" data-action="remove-anki">
+      <span class="gcwb-menu-icon">−</span>
+      <span class="gcwb-menu-text">Remove from Anki</span>
+    </div>
+  `
+      : `
     <div class="gcwb-context-menu-item" data-action="add-anki">
       <span class="gcwb-menu-icon">＋</span>
       <span class="gcwb-menu-text">Add to Anki</span>
     </div>
-  `
+  `)
     : `
     <div class="gcwb-context-menu-item" data-action="analyze">
       <span class="gcwb-menu-icon">📖</span>
@@ -64,15 +75,21 @@ export function showCustomContextMenu(event, messageEl, text, options = {}) {
   menu.style.top = `${event.clientY}px`;
 
   if (ankiWord) {
-    menu.querySelector('[data-action="add-anki"]').addEventListener('click', (e) => {
+    const wordData = {
+      word: ankiWord.dataset.word || '',
+      reading: ankiWord.dataset.reading || '',
+      english: ankiWord.dataset.english || '',
+      pos: ankiWord.dataset.type || '',
+    };
+    const actionNode = menu.querySelector('[data-action="remove-anki"], [data-action="add-anki"]');
+    actionNode.addEventListener('click', (e) => {
       e.stopPropagation();
       hideCustomContextMenu();
-      handleAddToAnki(ankiWord, {
-        word: ankiWord.dataset.word || '',
-        reading: ankiWord.dataset.reading || '',
-        english: ankiWord.dataset.english || '',
-        pos: ankiWord.dataset.type || '',
-      });
+      if (ankiAdded) {
+        handleRemoveFromAnki(ankiWord, wordData);
+      } else {
+        handleAddToAnki(ankiWord, wordData);
+      }
     });
   } else {
     menu.querySelector('[data-action="analyze"]').addEventListener('click', (e) => {

@@ -42,6 +42,13 @@ export function markAnkiAdded(word) {
   schedulePersist();
 }
 
+export function unmarkAnkiAdded(word) {
+  if (!word || typeof word !== 'string') return;
+  if (!added.has(word)) return;
+  added.delete(word);
+  schedulePersist();
+}
+
 export function isAnkiAdded(word) {
   return !!word && added.has(word);
 }

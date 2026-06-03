@@ -1,9 +1,9 @@
 import { debugLog } from '../core/debug.js';
 import { forceHideTooltip } from './word-tooltip.js';
 import { KAIGI_MODEL_NAME } from './anki-model.js';
-import { enqueueAnkiAdd, flushAnkiQueue } from '../core/anki-queue.js';
-import { addOneCard, isRetriableAnkiError } from '../core/anki-card.js';
-import { loadAnkiAddedWords, markAnkiAdded } from '../core/anki-added.js';
+import { enqueueAnkiAdd, flushAnkiQueue, dequeueAnkiAdd, enqueueAnkiRemove, flushAnkiRemoveQueue } from '../core/anki-queue.js';
+import { addOneCard, deleteOneCard, isRetriableAnkiError } from '../core/anki-card.js';
+import { loadAnkiAddedWords, markAnkiAdded, unmarkAnkiAdded, isAnkiAdded } from '../core/anki-added.js';
 
 let popoverEl = null;
 let popoverWordEl = null;
@@ -43,6 +43,8 @@ function openPopover(wordSpan) {
   const english = wordSpan.dataset.english || '';
   const pos = wordSpan.dataset.type || '';
 
+  const isAdded = wordSpan.classList.contains('gcwb-anki-added') || isAnkiAdded(word);
+
   const pop = document.createElement('div');
   pop.className = 'gcwb-anki-popover';
   pop.innerHTML = `
@@ -51,8 +53,8 @@ function openPopover(wordSpan) {
       ${reading && reading !== word ? `<span class="gcwb-anki-popover-reading">${escapeHtml(reading)}</span>` : ''}
     </div>
     <button class="gcwb-anki-popover-action" type="button">
-      <span class="gcwb-anki-popover-icon">＋</span>
-      <span>Add to Anki</span>
+      <span class="gcwb-anki-popover-icon">${isAdded ? '−' : '＋'}</span>
+      <span>${isAdded ? 'Remove from Anki' : 'Add to Anki'}</span>
     </button>
   `;
   document.body.appendChild(pop);
@@ -72,7 +74,11 @@ function openPopover(wordSpan) {
   pop.querySelector('.gcwb-anki-popover-action').addEventListener('click', () => {
     const targetSpan = wordSpan;
     closePopover();
-    handleAddToAnki(targetSpan, { word, reading, english, pos });
+    if (isAdded) {
+      handleRemoveFromAnki(targetSpan, { word, reading, english, pos });
+    } else {
+      handleAddToAnki(targetSpan, { word, reading, english, pos });
+    }
   });
 
   popoverEl = pop;
@@ -132,7 +138,7 @@ function showToast({ variant = 'success', word = '', deck = '', model = '', erro
   if (existing) existing.remove();
 
   const toast = document.createElement('div');
-  toast.className = `gcwb-anki-toast${variant === 'error' ? ' is-error' : ''}`;
+  toast.className = `gcwb-anki-toast${variant === 'error' || variant === 'remove-error' ? ' is-error' : ''}`;
 
   const accent = document.createElement('span');
   accent.className = 'gcwb-anki-toast-accent';
@@ -153,6 +159,15 @@ function showToast({ variant = 'success', word = '', deck = '', model = '', erro
   if (variant === 'queued') {
     title.textContent = 'Queued for Anki';
     sub.textContent = errorMessage || 'Open Anki and the card will be added automatically. See AnkiConnect Setup on the Word Frequency page.';
+  } else if (variant === 'removed') {
+    title.textContent = 'Removed from Anki';
+    sub.textContent = deck ? `${deck}` : 'Card deleted from your deck.';
+  } else if (variant === 'remove-queued') {
+    title.textContent = 'Queued for removal';
+    sub.textContent = errorMessage || 'Will be removed from Anki when it\'s reachable. See AnkiConnect Setup on the Word Frequency page.';
+  } else if (variant === 'remove-error') {
+    title.textContent = 'Could not remove from Anki';
+    sub.textContent = errorMessage || 'Anki not reachable — is Anki running?';
   } else if (variant === 'error') {
     title.textContent = 'Could not add to Anki';
     sub.textContent = errorMessage || 'Anki not reachable — is Anki running?';
@@ -167,7 +182,7 @@ function showToast({ variant = 'success', word = '', deck = '', model = '', erro
   toast.appendChild(iconWrap);
   toast.appendChild(body);
 
-  if (variant !== 'error' && variant !== 'queued' && word) {
+  if (variant !== 'error' && variant !== 'queued' && variant !== 'remove-error' && variant !== 'remove-queued' && word) {
     const chip = document.createElement('span');
     chip.className = 'gcwb-anki-toast-chip';
     chip.textContent = word;
@@ -279,6 +294,59 @@ export async function handleAddToAnki(wordSpan, wordData) {
   }
 }
 
+function flashWord(wordSpan) {
+  if (wordSpan?.isConnected && !prefersReducedMotion()) {
+    wordSpan.classList.add('gcwb-anki-flash');
+    setTimeout(() => wordSpan.classList.remove('gcwb-anki-flash'), 400);
+  }
+}
+
+function clearAddedMarker(wordSpan, word) {
+  wordSpan?.classList.remove('gcwb-anki-added');
+  unmarkAnkiAdded(word);
+}
+
+function restoreAddedMarker(wordSpan, word) {
+  wordSpan?.classList.add('gcwb-anki-added');
+  markAnkiAdded(word);
+}
+
+export async function handleRemoveFromAnki(wordSpan, wordData) {
+  flashWord(wordSpan);
+
+  // If the word was only queued (Anki offline, never written), there's nothing
+  // in Anki to delete — just cancel the pending add. Instant, no network call.
+  const cancelled = await dequeueAnkiAdd(wordData.word).catch(() => 0);
+  if (cancelled > 0) {
+    clearAddedMarker(wordSpan, wordData.word);
+    showToast({ variant: 'removed', word: wordData.word });
+    return;
+  }
+
+  // Otherwise treat it as present in Anki: clear the marker optimistically, then
+  // delete — queueing the deletion if Anki is currently unreachable.
+  clearAddedMarker(wordSpan, wordData.word);
+  try {
+    await deleteOneCard(wordData);
+    showToast({ variant: 'removed', word: wordData.word });
+    // Opportunistically drain backlogs after a successful op.
+    flushPendingAdds().catch(() => {});
+    flushPendingRemovals().catch(() => {});
+  } catch (err) {
+    const errMsg = err?.message || String(err);
+    const retriable = isRetriableAnkiError(errMsg);
+    debugLog('ANKI-QUICK', 'Remove failed:', errMsg, 'retriable:', retriable);
+    if (retriable) {
+      await enqueueAnkiRemove(wordData);
+      showToast({ variant: 'remove-queued', duration: 6500 });
+    } else {
+      // Hard failure — revert the optimistic marker so the UI reflects reality.
+      restoreAddedMarker(wordSpan, wordData.word);
+      showToast({ variant: 'remove-error', errorMessage: errMsg });
+    }
+  }
+}
+
 export async function flushPendingAdds() {
   const { flushed } = await flushAnkiQueue(async (card) => {
     try {
@@ -304,6 +372,25 @@ export async function flushPendingAdds() {
   }
 }
 
+export async function flushPendingRemovals() {
+  const { flushed } = await flushAnkiRemoveQueue(async (card) => {
+    try {
+      await deleteOneCard(card);
+      return { ok: true, retriable: false };
+    } catch (err) {
+      const msg = err?.message || String(err);
+      return { ok: false, retriable: isRetriableAnkiError(msg) };
+    }
+  });
+  if (flushed > 0) {
+    showToast({ variant: 'removed', word: '' });
+    const t = document.querySelector('.gcwb-anki-toast .gcwb-anki-toast-title');
+    const s = document.querySelector('.gcwb-anki-toast .gcwb-anki-toast-sub');
+    if (t) t.textContent = `Removed ${flushed} queued card${flushed === 1 ? '' : 's'} from Anki`;
+    if (s) s.textContent = 'Backlog flushed';
+  }
+}
+
 let contextMenuAttached = false;
 export function attachAnkiContextMenu(target = window) {
   if (contextMenuAttached) return;
@@ -315,9 +402,11 @@ export function initAnkiQuickAdd() {
   debugLog('ANKI-QUICK', 'Anki quick-add ready (chat menu route)');
   loadAnkiAddedWords().catch(() => {});
   flushPendingAdds().catch(() => {});
+  flushPendingRemovals().catch(() => {});
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       flushPendingAdds().catch(() => {});
+      flushPendingRemovals().catch(() => {});
     }
   });
 }
