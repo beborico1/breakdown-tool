@@ -52,6 +52,67 @@ export function buildWordBoundaries(text, words) {
 }
 
 /**
+ * Sentence-scoped boundary builder. Re-anchors each processed sentence's text
+ * inside the *current* `text`, then matches only that sentence's own words
+ * within that range. This contains the damage when Meet's speech engine revises
+ * already-processed text: a revised sentence simply fails to anchor and stays
+ * plain, instead of a common particle false-matching into a later sentence and
+ * cascading the whole caption to gray.
+ *
+ * Returns `{ boundaries, anchoredSentences }` where `anchoredSentences` carry
+ * fresh `startIndex`/`endIndex` (in current `text` coordinates) for boundary
+ * translation lookup.
+ */
+function buildScopedBoundaries(text, sentences) {
+  const boundaries = [];
+  const anchoredSentences = [];
+  let cursor = 0;
+
+  for (const sentence of sentences) {
+    const sentText = sentence?.text;
+    if (!sentText) continue;
+    const at = text.indexOf(sentText, cursor);
+    if (at === -1) {
+      // Sentence was revised out of the current text — skip it (stays plain),
+      // and do not advance the cursor past a false position.
+      if (typeof console !== 'undefined') {
+        console.debug?.('[word-render] dropped unanchored sentence:', sentText.slice(0, 40));
+      }
+      continue;
+    }
+
+    const end = at + sentText.length;
+    const scoped = text.slice(at, end);
+    const words = sentence.breakdownData?.words || [];
+    let searchStart = 0;
+
+    for (const word of words) {
+      if (!word?.japanese) continue;
+      const idx = findSurfaceIdx(scoped, word.japanese, searchStart);
+      if (idx !== -1) {
+        boundaries.push({
+          startIdx: at + idx,
+          endIdx: at + idx + word.japanese.length,
+          word,
+        });
+        searchStart = idx + word.japanese.length;
+      } else if (typeof console !== 'undefined') {
+        console.debug?.('[word-render] dropped unmatched word:', word.japanese);
+      }
+    }
+
+    anchoredSentences.push({
+      ...sentence,
+      startIndex: at,
+      endIndex: end,
+    });
+    cursor = end;
+  }
+
+  return { boundaries, anchoredSentences };
+}
+
+/**
  * Paint an element with colored, hoverable spans per word. Preserves the
  * visible text exactly; un-matched gaps stay as plain (gray) text.
  */
@@ -76,8 +137,16 @@ function isDegenerateTranslation(t) {
 
 export function paintWordColoring(messageEl, text, words, sentences) {
   if (!messageEl || !text) return;
-  const boundaries = buildWordBoundaries(text, words || []);
-  const sents = Array.isArray(sentences) && sentences.length > 0 ? sentences : null;
+  const hasSentences = Array.isArray(sentences) && sentences.length > 0;
+  // With sentence data we re-anchor per sentence (robust against Meet revising
+  // already-processed text). Without it (pre-cache / tail paint that passes only
+  // a flat word list) we fall back to the greedy whole-text scan.
+  const { boundaries, sents } = hasSentences
+    ? (() => {
+        const scoped = buildScopedBoundaries(text, sentences);
+        return { boundaries: scoped.boundaries, sents: scoped.anchoredSentences };
+      })()
+    : { boundaries: buildWordBoundaries(text, words || []), sents: null };
 
   let html = '';
   let i = 0;
