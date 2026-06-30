@@ -8,28 +8,28 @@ Always rebuild after any code change:
 npm run build
 ```
 
-## Pushing Changes
-
-This project lives inside a sparse checkout of the internship repo. To push changes:
+## Testing
 
 ```bash
-# 1. Sync files to the internship repo
-rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.DS_Store' \
-  /Users/luisrico/dev/google-meet-caption-copier/ \
-  /Users/luisrico/dev/internship_quest_submission/2024/Luis_Rico/Extra/google-meet-caption-analyzer/
-
-# 2. Commit and push from the internship repo
-cd /Users/luisrico/dev/internship_quest_submission
-git add 2024/Luis_Rico/Extra/google-meet-caption-analyzer/
-git commit -m "your commit message"
-git push origin main
+npm run test:nlp   # offline NLP pipeline (kuromoji + JMdict), runs in Node
+npm run test:e2e   # Playwright: loads the built extension in Chromium
 ```
 
-## Remote Repository
+## Git workflow
 
-- **Repo**: `git@gitlab03.irvine.jp:irvine/internship/internship_quest_submission.git`
-- **Path**: `2024/Luis_Rico/Extra/google-meet-caption-analyzer`
+Standard GitHub flow:
 
-Do NOT add a remote origin to this local repo - it syncs via rsync to the internship monorepo.
+```bash
+git checkout -b <short-feature-branch>   # branch off main
+# ...make changes...
+npm run build                            # always rebuild before committing
+git add -p
+git commit -m "type(scope): summary"     # e.g. fix(word-render): ...
+git push -u origin <short-feature-branch>
+# open a PR against main (or push straight to main for small solo changes)
+```
+
+`dist/` is a build artifact and is git-ignored; never commit it. The committed
+`package-lock.json` keeps installs reproducible (`npm ci`).
 
 NO COAUTHORING IN THE COMMIT MESSAGES.
