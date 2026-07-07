@@ -38,7 +38,9 @@ export async function autoProcessPreviousCard() {
     const state = translationState.get(previousContainer);
     if (state.minimalisticIncrementalState) {
       debugLog('AUTO-PROCESS', 'Finalizing minimalistic-incremental previous card');
-      finalizeMinimalisticIncremental(previousContainer);
+      // Await so the demoted card's tail is flushed before any later removal can
+      // drop its state mid-flight (which would leave the tail gray).
+      await finalizeMinimalisticIncremental(previousContainer);
       return;
     }
     if (state.sentenceState) {

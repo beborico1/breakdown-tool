@@ -6,6 +6,7 @@ import {
   translationCache,
   activeContentKeys,
   SENTENCE_DEBOUNCE_MS,
+  MM_SETTLE_MS,
   sentenceStabilityBuffer
 } from '../core/state.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
@@ -18,6 +19,10 @@ import { paintWordColoring, buildWordBoundaries } from '../shared/word-render.js
 export { paintWordColoring, buildWordBoundaries };
 
 const SENTENCE_ENDERS = /[。！？]/;
+
+// Bounded retries for a sentence whose analysis throws (offscreen doc reaped,
+// fetch timeout, transient NLP failure) so it isn't permanently skipped (gray).
+const MM_MAX_SENTENCE_ATTEMPTS = 3;
 
 /**
  * Load minimalistic mode setting from storage. Default is ON — users who
@@ -140,6 +145,11 @@ function applyBreakdown(container, messageEl, text, breakdownData, speaker) {
 export function removeMinimalisticOverlay(container) {
   const state = translationState.get(container);
 
+  // Cancel pending incremental timers so they don't fire against a torn-down container.
+  const ms = state?.minimalisticIncrementalState;
+  if (ms?.debounceTimer) clearTimeout(ms.debounceTimer);
+  if (ms?.settleTimer) clearTimeout(ms.settleTimer);
+
   container.removeAttribute('data-mm-active');
   detachHoverListeners(container);
 
@@ -201,6 +211,7 @@ export function initializeMinimalisticIncremental(container) {
     processingQueue: [],
     isProcessing: false,
     debounceTimer: null,
+    settleTimer: null,
   };
 
   const originalEl = messageEl.cloneNode(true);
@@ -247,10 +258,104 @@ export function handleMinimalisticIncrementalUpdate(container) {
   ms.fullText = newText;
   state.originalText = newText;
 
-  // Paint cached words in the live tail before Gemini catches up at the next sentence-ender.
-  repaintIncremental(container);
+  // If Meet's speech engine revised an already-processed sentence, drop it (and
+  // any later ones) and roll back so the corrected text gets re-analyzed instead
+  // of failing to re-anchor and staying gray forever.
+  reconcileProcessedSentences(ms);
+
+  // Repaint the processed prefix, coalesced to one paint per frame.
+  scheduleRepaintIncremental(container);
 
   scanIncrementalSentenceEnders(container);
+
+  // Mop up the buffered tail (the last `sentenceStabilityBuffer` sentences plus
+  // any un-terminated fragment) once the caption goes quiet — i.e. the speaker
+  // paused, so the engine has stopped revising — without waiting for a new
+  // sentence-ender or a speaker change.
+  if (ms.settleTimer) clearTimeout(ms.settleTimer);
+  ms.settleTimer = setTimeout(() => flushSettledTail(container), MM_SETTLE_MS);
+}
+
+/**
+ * Drop processed sentences whose stored text no longer appears in the current
+ * live text (Meet revised them) along with every later sentence, then roll
+ * `lastProcessedIndex` back to the end of the last still-valid sentence so the
+ * normal scan re-queues and re-analyzes the corrected region.
+ */
+function reconcileProcessedSentences(ms) {
+  if (ms.processedSentences.length === 0) return;
+
+  const text = ms.fullText;
+  let cursor = 0;
+  let kept = 0;
+  for (const sent of ms.processedSentences) {
+    const at = text.indexOf(sent.text, cursor);
+    if (at === -1) break;
+    cursor = at + sent.text.length;
+    kept++;
+  }
+
+  if (kept === ms.processedSentences.length) return; // everything still anchors
+
+  const dropped = ms.processedSentences.length - kept;
+  const survivors = ms.processedSentences.slice(0, kept);
+  ms.processedSentences = survivors;
+  ms.aggregateWords = survivors.flatMap(s => s.breakdownData?.words || []);
+  ms.aggregateTranslations = survivors.map(s => s.breakdownData?.translation).filter(Boolean);
+  ms.lastProcessedIndex = cursor;
+  debugLog('MM-INC-RECONCILE', `Dropped ${dropped} revised sentence(s); reprocessing from idx=${cursor}`);
+}
+
+// Coalesce per-keystroke repaints to one paint per animation frame.
+// repaintIncremental rebuilds the whole caption's innerHTML, and characterData
+// mutations can fire many times per second on a long turn — without coalescing,
+// the per-keystroke O(n) repaint compounds into a late-session freeze.
+const pendingRepaints = new Set();
+let repaintRaf = 0;
+
+function scheduleRepaintIncremental(container) {
+  if (typeof requestAnimationFrame !== 'function') {
+    repaintIncremental(container);
+    return;
+  }
+  pendingRepaints.add(container);
+  if (repaintRaf) return;
+  repaintRaf = requestAnimationFrame(() => {
+    repaintRaf = 0;
+    const containers = [...pendingRepaints];
+    pendingRepaints.clear();
+    for (const c of containers) {
+      if (translationState.has(c)) repaintIncremental(c);
+    }
+  });
+}
+
+/**
+ * Flush the unprocessed tail when the live caption has been quiet for MM_SETTLE_MS.
+ * Mirrors finalize but keeps the container live, so a paused (not yet finished)
+ * speaker's last sentence colors without waiting for a speaker change.
+ */
+function flushSettledTail(container) {
+  const state = translationState.get(container);
+  const ms = state?.minimalisticIncrementalState;
+  if (!ms || !state.shadowOriginalEl) return;
+  ms.settleTimer = null;
+
+  const currentText = state.shadowOriginalEl.textContent?.trim() || ms.fullText;
+  ms.fullText = currentText;
+  state.originalText = currentText;
+
+  const remaining = currentText.slice(ms.lastProcessedIndex).trim();
+  if (remaining.length === 0) return;
+
+  ms.processingQueue.push({
+    text: remaining,
+    startIndex: ms.lastProcessedIndex,
+    endIndex: currentText.length,
+  });
+  ms.lastProcessedIndex = currentText.length;
+  debugLog('MM-INC-SETTLE', `Flushing settled tail: "${remaining.slice(0, 60)}"`);
+  processIncrementalQueue(container);
 }
 
 function scanIncrementalSentenceEnders(container) {
@@ -360,8 +465,15 @@ async function processIncrementalQueue(container) {
       repaintIncremental(container);
     } catch (error) {
       debugLog('MM-INC-ERROR', `Error: ${error.message}`);
-      // Skip this sentence — tail stays plain, the next sentence still has a
-      // chance to process. No UI noise.
+      // Retry transient failures (offscreen doc reaped, fetch timeout) a bounded
+      // number of times so the sentence isn't permanently skipped (left gray).
+      const attempts = (sentence.attempts || 0) + 1;
+      if (attempts < MM_MAX_SENTENCE_ATTEMPTS) {
+        ms.processingQueue.push({ ...sentence, attempts });
+        debugLog('MM-INC-RETRY', `Re-queued (attempt ${attempts}): "${sentence.text.slice(0, 40)}"`);
+      } else {
+        debugLog('MM-INC-GIVEUP', `Giving up after ${attempts} attempts: "${sentence.text.slice(0, 40)}"`);
+      }
     }
   }
 
@@ -401,6 +513,10 @@ export async function finalizeMinimalisticIncremental(container) {
   if (ms.debounceTimer) {
     clearTimeout(ms.debounceTimer);
     ms.debounceTimer = null;
+  }
+  if (ms.settleTimer) {
+    clearTimeout(ms.settleTimer);
+    ms.settleTimer = null;
   }
 
   const finalText = state.shadowOriginalEl?.textContent?.trim() || ms.fullText;

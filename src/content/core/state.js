@@ -21,6 +21,12 @@ export const DELTA_DEBOUNCE_MS = 500;
 // Sentence-level processing debounce (wait for speech recognition to settle)
 export const SENTENCE_DEBOUNCE_MS = 800;
 
+// Minimalistic-incremental idle flush: when the live caption stops changing for
+// this long, the speech engine has stopped revising, so we process the buffered
+// tail (last `sentenceStabilityBuffer` sentences + any un-terminated fragment)
+// without waiting for a new sentence-ender or a speaker change.
+export const MM_SETTLE_MS = 2500;
+
 export const pendingDeltas = new Map();
 
 // Cache translations by content key (survives container replacement)
