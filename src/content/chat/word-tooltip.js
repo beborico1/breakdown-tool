@@ -4,13 +4,30 @@ import { isPageLightMode } from '../utils/dom.js';
 
 /**
  * Word Tooltip Module
- * Shows meaning on hover over cached/highlighted words
+ * Shows meaning on hover over cached/highlighted/auto words. Works on any site,
+ * so it builds DOM with createElement/textContent (no innerHTML) to stay safe
+ * under strict CSP / Trusted Types policies.
  */
 
 // Active tooltip element
 let activeTooltip = null;
 let hideTimeout = null;
+let listenersBound = false;
 const HIDE_DELAY_MS = 100;
+
+/**
+ * Small DOM builder: create an element with an optional class and text content.
+ * @param {string} tag
+ * @param {string} [className]
+ * @param {string} [text]
+ * @returns {HTMLElement}
+ */
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null && text !== '') node.textContent = text;
+  return node;
+}
 
 /**
  * Create and show tooltip for a word element
@@ -29,6 +46,24 @@ function showTooltip(wordEl) {
     activeTooltip = null;
   }
 
+  // Sentence-boundary dot: show the whole-message translation only (mirrors the
+  // Meet hover-dot popover). These spans carry data-english but no data-word.
+  if (wordEl.classList?.contains('gcwb-auto-boundary')) {
+    const english = wordEl.dataset.english;
+    if (!english) return;
+    const tooltip = el('div', 'gcwb-word-tooltip gcwb-boundary-tooltip');
+    if (isPageLightMode(wordEl)) tooltip.classList.add('gcwb-light');
+    const content = el('div', 'gcwb-tooltip-content');
+    content.appendChild(el('div', 'gcwb-tooltip-meaning gcwb-boundary-meaning', english));
+    tooltip.appendChild(content);
+    tooltip.appendChild(el('div', 'gcwb-tooltip-arrow'));
+    document.body.appendChild(tooltip);
+    activeTooltip = tooltip;
+    positionTooltip(tooltip, wordEl);
+    debugLog('WORD-TOOLTIP', 'Showing boundary translation tooltip');
+    return;
+  }
+
   // Get word data from element attributes
   const word = wordEl.dataset.word;
   const reading = wordEl.dataset.reading;
@@ -39,23 +74,20 @@ function showTooltip(wordEl) {
   if (!word) return;
 
   // Create tooltip element
-  const tooltip = document.createElement('div');
-  tooltip.className = 'gcwb-word-tooltip';
+  const tooltip = el('div', 'gcwb-word-tooltip');
   if (isPageLightMode(wordEl)) tooltip.classList.add('gcwb-light');
 
   const typeClass = getWordTypeClass(type);
   const readingDisplay = reading && reading !== word ? reading : '';
 
-  tooltip.innerHTML = `
-    <div class="gcwb-tooltip-content">
-      <div class="gcwb-tooltip-japanese gcwb-type-${typeClass}">${escapeHtml(word)}</div>
-      ${readingDisplay ? `<div class="gcwb-tooltip-reading">${escapeHtml(readingDisplay)}</div>` : ''}
-      ${romaji ? `<div class="gcwb-tooltip-romaji">${escapeHtml(romaji)}</div>` : ''}
-      ${english ? `<div class="gcwb-tooltip-meaning">${escapeHtml(english)}</div>` : ''}
-      ${type ? `<div class="gcwb-tooltip-type">${escapeHtml(type)}</div>` : ''}
-    </div>
-    <div class="gcwb-tooltip-arrow"></div>
-  `;
+  const content = el('div', 'gcwb-tooltip-content');
+  content.appendChild(el('div', `gcwb-tooltip-japanese gcwb-type-${typeClass}`, word));
+  if (readingDisplay) content.appendChild(el('div', 'gcwb-tooltip-reading', readingDisplay));
+  if (romaji) content.appendChild(el('div', 'gcwb-tooltip-romaji', romaji));
+  if (english) content.appendChild(el('div', 'gcwb-tooltip-meaning', english));
+  if (type) content.appendChild(el('div', 'gcwb-tooltip-type', type));
+  tooltip.appendChild(content);
+  tooltip.appendChild(el('div', 'gcwb-tooltip-arrow'));
 
   document.body.appendChild(tooltip);
   activeTooltip = tooltip;
@@ -110,15 +142,12 @@ function hideTooltip() {
   }, HIDE_DELAY_MS);
 }
 
-/**
- * Escape HTML to prevent XSS
- * @param {string} text
- * @returns {string}
- */
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+function isTooltipTarget(target) {
+  return !!target?.classList && (
+    target.classList.contains('gcwb-cached-word') ||
+    target.classList.contains('gcwb-auto-word') ||
+    target.classList.contains('gcwb-auto-boundary')
+  );
 }
 
 /**
@@ -126,9 +155,8 @@ function escapeHtml(text) {
  * @param {MouseEvent} event
  */
 function handleMouseOver(event) {
-  const target = event.target;
-  if ((target.classList?.contains('gcwb-cached-word') || target.classList?.contains('gcwb-auto-word'))) {
-    showTooltip(target);
+  if (isTooltipTarget(event.target)) {
+    showTooltip(event.target);
   }
 }
 
@@ -137,8 +165,7 @@ function handleMouseOver(event) {
  * @param {MouseEvent} event
  */
 function handleMouseOut(event) {
-  const target = event.target;
-  if ((target.classList?.contains('gcwb-cached-word') || target.classList?.contains('gcwb-auto-word'))) {
+  if (isTooltipTarget(event.target)) {
     // Check if moving to the tooltip itself
     const relatedTarget = event.relatedTarget;
     if (relatedTarget && activeTooltip?.contains(relatedTarget)) {
@@ -164,9 +191,14 @@ function handleTooltipHover(event) {
 }
 
 /**
- * Set up event delegation for word tooltips
+ * Set up event delegation for word tooltips. Idempotent: only the first call
+ * binds, so multiple surfaces (chat/gmail/redmine/universal) can call it without
+ * double-binding the document listeners (which would show duplicate tooltips).
  */
 export function setupWordTooltip() {
+  if (listenersBound) return;
+  listenersBound = true;
+
   // Use event delegation on document
   document.addEventListener('mouseover', handleMouseOver, true);
   document.addEventListener('mouseout', handleMouseOut, true);

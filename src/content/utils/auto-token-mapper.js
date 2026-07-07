@@ -1,4 +1,5 @@
 import { getWordTypeClass } from './text.js';
+import { createAutoBoundarySpan } from './highlight.js';
 
 const THIN_SPACE = ' ';
 
@@ -33,6 +34,18 @@ export function wrapJapaneseTokensInTextNode(textNode, tokens) {
     const wordLen = t.surface.length;
     const afterNode = currentNode.splitText(wordLen);
     consumed += wordLen;
+
+    if (t.isBoundary) {
+      const span = createAutoBoundarySpan(t.english);
+      span.appendChild(document.createTextNode(t.surface));
+      parent.replaceChild(span, currentNode);
+      currentNode = afterNode;
+      // Hard break: no thin space, restart the tone run for following words.
+      prevEnd = -1;
+      prevType = null;
+      tone = 0;
+      continue;
+    }
 
     const typeClass = getWordTypeClass(t.type);
     tone = (t.type && t.type === prevType) ? 1 - tone : 0;

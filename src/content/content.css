@@ -1123,6 +1123,17 @@
   max-width: 280px;
 }
 
+/* Boundary-dot tooltip: a full sentence translation, so allow a wider box. */
+.gcwb-word-tooltip.gcwb-boundary-tooltip {
+  max-width: 360px;
+}
+
+.gcwb-boundary-tooltip .gcwb-boundary-meaning {
+  font-style: italic;
+  color: #c9bce0;
+  margin-bottom: 0;
+}
+
 @keyframes gcwbTooltipEnter {
   from {
     opacity: 0;
@@ -1657,6 +1668,38 @@ html.kaigi-hide-translation .gcwb-inline-translation { display: none; }
   border-bottom-color: rgba(187, 134, 252, 0.55);
   background-color: rgba(187, 134, 252, 0.08);
   border-radius: 2px;
+}
+
+/* Sentence-ending dot: hover reveals the whole-message translation. */
+.gcwb-auto-boundary {
+  cursor: help;
+  border-bottom: 1px dotted rgba(187, 134, 252, 0.45);
+  transition: border-bottom-color 120ms ease, background-color 120ms ease;
+}
+
+.gcwb-auto-boundary:hover {
+  border-bottom-color: rgba(187, 134, 252, 0.9);
+  background-color: rgba(187, 134, 252, 0.1);
+  border-radius: 2px;
+}
+
+body.kaigi-light .gcwb-auto-boundary,
+html.kaigi-light .gcwb-auto-boundary {
+  border-bottom-color: rgba(99, 40, 137, 0.45);
+}
+
+body.kaigi-light .gcwb-auto-boundary:hover,
+html.kaigi-light .gcwb-auto-boundary:hover {
+  border-bottom-color: rgba(99, 40, 137, 0.9);
+  background-color: rgba(99, 40, 137, 0.1);
+}
+
+/* When the user hides translations, a boundary dot carries no information:
+   make it inert so its hover tooltip can't fire (mirrors hiding the panel). */
+html.kaigi-hide-translation .gcwb-auto-boundary {
+  border-bottom-color: transparent;
+  cursor: text;
+  pointer-events: none;
 }
 
 .nF6pT.gcwb-auto-bubble,

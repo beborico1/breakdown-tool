@@ -105,3 +105,84 @@ export function applyHighlightsToTextNode(textNode, matches) {
     prevMatch = match;
   }
 }
+
+/**
+ * Build a hoverable sentence-boundary span. Carries only the (whole-message)
+ * English translation in data-english; the shared word tooltip renders it on
+ * hover. Deliberately has no data-word, so the Anki / context-menu word
+ * selectors never treat a boundary dot as a word.
+ * @param {string} translation - English translation to reveal on hover
+ * @returns {HTMLSpanElement}
+ */
+export function createAutoBoundarySpan(translation) {
+  const span = document.createElement('span');
+  span.className = 'gcwb-auto-boundary';
+  span.dataset.english = translation || '';
+  return span;
+}
+
+/**
+ * Apply auto-analyze (lite view) word spans to a single text node, splitting it and
+ * wrapping matched portions in `gcwb-auto-word` spans. Uses the same DOM-preserving
+ * splitText technique as applyHighlightsToTextNode so sibling structure (mention
+ * chips, links, etc.) is never touched. A match with `kind: 'boundary'` is wrapped
+ * as a sentence-boundary dot instead (single punctuation char, translation only).
+ * @param {Text} textNode - Text node to process
+ * @param {Array<{kind?: string, word: string, start: number, end: number, data: Object}>} matches - Sorted, non-overlapping matches local to this node
+ */
+export function applyAutoWordsToTextNode(textNode, matches) {
+  if (matches.length === 0) return;
+
+  const parent = textNode.parentNode;
+  if (!parent) return;
+
+  let currentNode = textNode;
+  let consumedOffset = 0;
+  let prevMatch = null;
+  let tone = 0;
+
+  for (const match of matches) {
+    const relativeStart = match.start - consumedOffset;
+    const wordLength = match.word.length;
+
+    if (relativeStart > 0) {
+      currentNode = currentNode.splitText(relativeStart);
+      consumedOffset += relativeStart;
+    }
+
+    const afterNode = currentNode.splitText(wordLength);
+    consumedOffset += wordLength;
+
+    if (match.kind === 'boundary') {
+      const span = createAutoBoundarySpan(match.data.english);
+      parent.replaceChild(span, currentNode);
+      span.appendChild(document.createTextNode(match.word));
+      currentNode = afterNode;
+      // A boundary is a hard break: don't carry the tone run across it, so the
+      // next same-type word restarts its alternation (like plain punctuation).
+      prevMatch = null;
+      tone = 0;
+      continue;
+    }
+
+    const typeClass = getWordTypeClass(match.data.type);
+    const span = document.createElement('span');
+    const sameRun = prevMatch
+      && match.start === prevMatch.end
+      && match.data.type
+      && match.data.type === prevMatch.data.type;
+    tone = sameRun ? 1 - tone : 0;
+    span.className = `gcwb-auto-word gcwb-type-${typeClass}${tone === 1 ? ' gcwb-tone-alt' : ''}`;
+    span.dataset.word = match.word;
+    span.dataset.reading = (match.data.reading || '').trim() || match.word;
+    span.dataset.romaji = (match.data.romaji || '').trim() || '-';
+    span.dataset.english = (match.data.english || '').trim() || '-';
+    span.dataset.type = typeClass;
+
+    parent.replaceChild(span, currentNode);
+    span.appendChild(document.createTextNode(match.word));
+
+    currentNode = afterNode;
+    prevMatch = match;
+  }
+}

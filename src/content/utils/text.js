@@ -10,6 +10,31 @@ export function hasJapanese(text) {
 }
 
 /**
+ * Sentence-ending punctuation used to mark hoverable "boundary" dots in the
+ * auto lite views. Japanese-only on purpose: ASCII . ! ? are common inside
+ * URLs, decimals, and abbreviations in free-form chat/Redmine text and would
+ * produce false boundaries (Meet captions are cleaner STT output and use a
+ * wider set in word-render.js).
+ */
+export const SENTENCE_BOUNDARY_RE = /[。！？]/;
+
+/**
+ * Find every sentence-ending punctuation mark in `text`.
+ * @param {string} text
+ * @returns {Array<{start: number, end: number}>} one entry per mark, in order
+ */
+export function findSentenceBoundaries(text) {
+  const out = [];
+  if (!text) return out;
+  for (let i = 0; i < text.length; i++) {
+    if (SENTENCE_BOUNDARY_RE.test(text[i])) {
+      out.push({ start: i, end: i + 1 });
+    }
+  }
+  return out;
+}
+
+/**
  * Simple hash function for text content
  * @param {string} text
  * @returns {number}
