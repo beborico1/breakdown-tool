@@ -1,6 +1,7 @@
 import { debugLog } from '../core/debug.js';
 import { getCachedWords } from '../core/word-cache.js';
 import { inlineBreakdownState } from '../core/state.js';
+import { isOfflineNlpEnabledSync } from '../core/api.js';
 import { collectTextNodes, applyHighlightsToTextNode } from '../utils/highlight.js';
 import { findChatMessageElement, extractChatMessageText, findQuotedBlockContainer } from './message-finder.js';
 
@@ -20,6 +21,12 @@ const highlightedMessages = new WeakMap();
  * @param {HTMLElement} messageEl - Message element to process
  */
 export function highlightKnownWords(messageEl) {
+  // Skip when offline NLP / auto-lite is active: auto-analyze paints the full word
+  // list in place, so the cached-word highlighter is redundant — and worse, its
+  // partial spans fragment the text node and make auto-lite drop tokens that straddle
+  // the resulting boundary (leaving e.g. 思 black). Let auto-lite be the sole colorer.
+  if (isOfflineNlpEnabledSync()) return;
+
   // Skip if already showing full breakdown
   const state = inlineBreakdownState.get(messageEl);
   if (state?.isShowingBreakdown) {
@@ -88,6 +95,10 @@ export function highlightKnownWords(messageEl) {
  * Highlight all visible messages that contain Japanese text
  */
 export function highlightAllMessages() {
+  // Auto-lite owns coloring when offline NLP is on — skip the whole pass (see
+  // highlightKnownWords for why).
+  if (isOfflineNlpEnabledSync()) return;
+
   const messageTextElements = document.querySelectorAll('.Zc1Emd');
   let highlightedCount = 0;
 
