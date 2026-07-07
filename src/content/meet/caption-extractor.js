@@ -33,3 +33,14 @@ export function formatCaptions(captions) {
     .map(({ name, message }) => `${name}: ${message}`)
     .join('\n');
 }
+
+/**
+ * Format session-transcript entries as "Speaker: Text" lines.
+ * sessionTranscript uses {speaker, text}; adapt to formatCaptions' {name, message}
+ * so the on-clipboard format stays identical.
+ * @param {Array<{speaker: string, text: string}>} entries
+ * @returns {string}
+ */
+export function formatTranscriptEntries(entries) {
+  return formatCaptions(entries.map(({ speaker, text }) => ({ name: speaker, message: text })));
+}

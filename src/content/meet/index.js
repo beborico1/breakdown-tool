@@ -4,8 +4,6 @@ import {
   minimalisticModeEnabled,
   setMinimalisticModeEnabled,
   translationState,
-  setLastCopiedIndex,
-  lastCopiedIndex,
   setWordBlockFontSize,
   wordBlockFontSize,
   setSentenceChunkSize,
@@ -18,7 +16,7 @@ import { initWordCache } from '../core/word-cache.js';
 import { loadMinimalisticMode, removeMinimalisticOverlay } from './minimalistic-mode.js';
 import { removeOverlay } from './caption-handler.js';
 import { setupCaptionClickHandlers, handleMutations, setObserver } from './dom-fighter.js';
-import { extractCaptions, formatCaptions } from './caption-extractor.js';
+import { formatTranscriptEntries } from './caption-extractor.js';
 import { applyWordBlockFontSize } from './panel-mode.js';
 import { triggerTranscriptDownload } from './transcript-download.js';
 import { initAnkiQuickAdd, attachAnkiContextMenu } from '../chat/anki-quick-add.js';
@@ -29,7 +27,15 @@ const MEETING_PATH_RE = /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}\b/;
 
 // Create the MutationObserver
 const observer = new MutationObserver((mutations) => {
-  handleMutations(mutations, OBSERVER_CONFIG);
+  try {
+    handleMutations(mutations, OBSERVER_CONFIG);
+  } catch (e) {
+    // Defense in depth: handleMutations already re-attaches in a finally, but if
+    // anything else throws we must never leave the observer detached — that would
+    // silently stop all future caption processing.
+    debugLog('OBSERVER-ERROR', e?.message || String(e));
+    try { observer.observe(document.body, OBSERVER_CONFIG); } catch {}
+  }
 });
 
 // Set observer reference for dom-fighter
@@ -110,37 +116,55 @@ export function initializeGoogleMeet() {
   // Listen for messages from the popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'copyAll') {
-      const captions = extractCaptions();
+      // Copy the whole meeting from the session accumulator (includes lines that
+      // already scrolled out of Meet's on-screen rail), and mark every entry
+      // fully copied so a following "Copy New" returns nothing until more is said.
+      const lines = [];
+      for (const entry of sessionTranscript) {
+        const text = (entry.text || '').trim();
+        if (text) lines.push({ speaker: entry.speaker, text });
+        entry.copiedLen = text.length;
+      }
 
-      if (captions.length === 0) {
+      if (lines.length === 0) {
         sendResponse({ success: false, message: 'No captions found', text: null });
         return;
       }
 
-      const formatted = formatCaptions(captions);
-      setLastCopiedIndex(captions.length);
+      const formatted = formatTranscriptEntries(lines);
       sendResponse({
         success: true,
-        message: `Copied ${captions.length} caption(s)`,
+        message: `Copied ${lines.length} line(s)`,
         text: formatted
       });
       return;
     }
 
     if (request.action === 'copyNew') {
-      const captions = extractCaptions();
-      const newCaptions = captions.slice(lastCopiedIndex);
+      // Emit every entry whose text has grown since it was last copied. Meet
+      // appends words to a caption block in place, so a line we already copied
+      // can still grow. Comparing against the per-entry copiedLen high-water
+      // mark catches that growth (re-emitting the whole grown line), not just
+      // brand-new blocks.
+      const lines = [];
+      for (const entry of sessionTranscript) {
+        const text = (entry.text || '').trim();
+        const copied = entry.copiedLen ?? 0;
+        if (text.length > copied) {
+          lines.push({ speaker: entry.speaker, text });
+        }
+        entry.copiedLen = text.length;
+      }
 
-      if (newCaptions.length === 0) {
+      if (lines.length === 0) {
         sendResponse({ success: false, message: 'No new captions since last copy', text: null });
         return;
       }
 
-      const formatted = formatCaptions(newCaptions);
-      setLastCopiedIndex(captions.length);
+      const formatted = formatTranscriptEntries(lines);
       sendResponse({
         success: true,
-        message: `Copied ${newCaptions.length} new caption(s)`,
+        message: `Copied ${lines.length} line(s)`,
         text: formatted
       });
       return;

@@ -11,7 +11,9 @@ import {
   incrementObserverCallCount,
   resetObserverCallCount,
   sessionTranscript,
-  containerToTranscriptIndex
+  containerToTranscriptIndex,
+  transcriptOrphans,
+  TRANSCRIPT_REATTACH_WINDOW_MS
 } from '../core/state.js';
 import { findCachedTranslation } from '../core/cache.js';
 import { getCachedWordBreakdown } from '../core/word-cache.js';
@@ -25,7 +27,7 @@ import {
 } from './minimalistic-mode.js';
 import { updateBreakdownDelta } from './panel-mode.js';
 import { getWordTypeClass } from '../utils/text.js';
-import { updateVisualDelta } from './delta-translation.js';
+import { updateVisualDelta, classifyTextChange } from './delta-translation.js';
 import { handleCaptionClick } from './caption-handler.js';
 import { handleAnkiContextMenu } from '../chat/anki-quick-add.js';
 import { autoProcessPreviousCard } from './auto-processor.js';
@@ -48,6 +50,90 @@ export function setObserver(obs) {
  */
 export function getObserver() {
   return observer;
+}
+
+// We disconnect the observer while mutating the DOM ourselves so our own edits
+// don't re-trigger the handler. This module-level flag lets handleMutations
+// re-attach the observer from a `finally`, even when a fight-loop op throws —
+// otherwise one stray exception would leave the observer permanently
+// disconnected and every future caption stuck gray until a page reload.
+let observerSuspended = false;
+
+function suspendObserver() {
+  if (observerSuspended) return;
+  observer.disconnect();
+  observerSuspended = true;
+}
+
+function resumeObserver(observerConfig) {
+  if (!observerSuspended) return;
+  observer.observe(document.body, observerConfig);
+  observerSuspended = false;
+}
+
+/**
+ * Cancel any pending debounce/settle timers held on a container's state so they
+ * don't fire against a container that has been removed from the DOM.
+ */
+function cleanupContainerTimers(state) {
+  const ms = state?.minimalisticIncrementalState;
+  if (ms?.debounceTimer) clearTimeout(ms.debounceTimer);
+  if (ms?.settleTimer) clearTimeout(ms.settleTimer);
+  if (state?.sentenceState?.debounceTimer) clearTimeout(state.sentenceState.debounceTimer);
+}
+
+/**
+ * Free per-container resources before dropping its translation state: release the
+ * active content key (so pruneTranslationCache can reclaim the cache entry instead
+ * of leaking it for the whole session) and cancel pending timers.
+ */
+function cleanupContainerState(container) {
+  const state = translationState.get(container);
+  if (!state) return;
+  cleanupContainerTimers(state);
+  if (state.contentKey) activeContentKeys.delete(state.contentKey);
+}
+
+/**
+ * Stash a removed caption's transcript index so a replacement element Meet
+ * swaps in mid-utterance can reattach to the same entry instead of creating a
+ * duplicate. No-op for containers we never recorded.
+ * @param {HTMLElement} el
+ */
+function stashTranscriptOrphan(el) {
+  if (!containerToTranscriptIndex.has(el)) return;
+  const index = containerToTranscriptIndex.get(el);
+  const entry = sessionTranscript[index];
+  if (!entry) return;
+  transcriptOrphans.push({ index, text: entry.text, speaker: entry.speaker, removedAt: Date.now() });
+}
+
+/**
+ * Find a recently-removed transcript entry that `text` purely continues (same
+ * speaker, new text starts with the removed text) within the reattach window.
+ * Rejects corrections/unrelated text, so legitimately-repeated phrases (which
+ * arrive in still-present containers and are never orphaned) are never merged.
+ * Prunes expired orphans on the way; consumes the match (one-shot).
+ * @param {string} speaker
+ * @param {string} text
+ * @returns {number|null} transcript index to reattach to, or null
+ */
+function takeOrphanMatch(speaker, text) {
+  const now = Date.now();
+  for (let i = transcriptOrphans.length - 1; i >= 0; i--) {
+    const o = transcriptOrphans[i];
+    if (now - o.removedAt > TRANSCRIPT_REATTACH_WINDOW_MS) {
+      transcriptOrphans.splice(i, 1);
+      continue;
+    }
+    if (o.speaker !== speaker) continue;
+    const change = classifyTextChange(o.text, text);
+    if (change.type === 'append' || change.type === 'none') {
+      transcriptOrphans.splice(i, 1);
+      return o.index;
+    }
+  }
+  return null;
 }
 
 /**
@@ -78,6 +164,17 @@ export function recordCaptionToTranscript(container) {
       if (speaker) entry.speaker = speaker;
     }
   } else {
+    const reattachIndex = takeOrphanMatch(speaker, text);
+    if (reattachIndex !== null && sessionTranscript[reattachIndex]) {
+      // Meet swapped this caption's element mid-utterance; continue the existing
+      // entry instead of duplicating it (preserves its copiedLen high-water mark).
+      containerToTranscriptIndex.set(container, reattachIndex);
+      const entry = sessionTranscript[reattachIndex];
+      entry.text = text;
+      if (speaker) entry.speaker = speaker;
+      debugLog('TRANSCRIPT-REATTACH', `#${reattachIndex}: "${text.slice(0, 40)}"`);
+      return;
+    }
     const idx = sessionTranscript.length;
     containerToTranscriptIndex.set(container, idx);
     sessionTranscript.push({ speaker, text, firstSeen: Date.now() });
@@ -110,8 +207,13 @@ export function setupCaptionClickHandlers() {
 
     debugLog('SETUP', `New container: speaker="${speaker}", text="${originalText.slice(0, 40)}..."`);
 
-    // Auto-apply cached breakdown if this content is actively displayed
-    if (originalText && messageEl && activeContentKeys.size > 0) {
+    // Auto-apply cached breakdown if this content is actively displayed.
+    // Panel-mode only: this re-association path renders the full squared
+    // breakdown panel. In minimalistic mode the container is owned by
+    // initializeMinimalisticIncremental (live card) / initializeMinimalisticContainer
+    // (previous card), so gating it off here keeps recurring short phrases from
+    // popping the full panel instead of in-place coloring.
+    if (!minimalisticModeEnabled && originalText && messageEl && activeContentKeys.size > 0) {
       const cached = findCachedTranslation(speaker, originalText);
       if (cached && activeContentKeys.has(cached.contentKey)) {
         debugLog('AUTO-APPLY', `Re-applying breakdown to new container: ${originalText.slice(0, 40)}`);
@@ -191,6 +293,22 @@ export function handleMutations(mutations, observerConfig) {
     resetObserverCallCount();
   }
 
+  // Pre-pass: stash the transcript index of any caption container removed in this
+  // batch BEFORE we record or sweep, so a replacement element (a Meet mid-utterance
+  // DOM swap) inserted in the same batch reattaches instead of duplicating. Must run
+  // first: a replacement's characterData record below can otherwise be visited before
+  // the removal, pushing a duplicate before the orphan exists.
+  for (const mutation of mutations) {
+    for (const node of mutation.removedNodes) {
+      if (!(node instanceof HTMLElement)) continue;
+      if (node.classList?.contains('nMcdL')) stashTranscriptOrphan(node);
+      const inner = node.querySelectorAll?.('.nMcdL');
+      if (inner) {
+        for (const el of inner) stashTranscriptOrphan(el);
+      }
+    }
+  }
+
   let addedCount = 0;
   let removedCount = 0;
 
@@ -239,6 +357,7 @@ export function handleMutations(mutations, observerConfig) {
       // Check if the removed node itself is a translated container
       if (node.classList?.contains('nMcdL') && translationState.has(node)) {
         debugLog('MUTATION-REMOVED', 'Translated container removed from DOM');
+        cleanupContainerState(node);
         translationState.delete(node);
       }
 
@@ -248,6 +367,7 @@ export function handleMutations(mutations, observerConfig) {
         for (const el of inner) {
           if (translationState.has(el)) {
             debugLog('MUTATION-REMOVED', 'Translated container removed (nested)');
+            cleanupContainerState(el);
             translationState.delete(el);
           }
         }
@@ -255,8 +375,37 @@ export function handleMutations(mutations, observerConfig) {
     }
   }
 
-  // Clean up stale state: containers no longer in DOM
-  // Try to re-associate with new containers that have matching content
+  // Reconcile removed/stale containers, then fight Meet's re-insertions. Both run
+  // with the observer suspended; the try/finally guarantees it is always
+  // re-attached, so a throw mid-fight can never permanently wedge caption
+  // processing (which would otherwise leave every future caption stuck gray).
+  try {
+    reconcileStaleContainers();
+    fightMeetReinsertions();
+  } catch (err) {
+    debugLog('FIGHT-ERROR', err?.message || String(err));
+  } finally {
+    resumeObserver(observerConfig);
+  }
+
+  // Wire up any new containers
+  setupCaptionClickHandlers();
+
+  // Catch-all: sweep every visible caption so the session transcript
+  // captures text changes even when they don't surface as a characterData
+  // mutation we routed above (e.g., Meet replacing the text node wholesale).
+  for (const container of document.querySelectorAll('.nMcdL')) {
+    recordCaptionToTranscript(container);
+  }
+}
+
+/**
+ * Re-associate state for containers Meet removed from the DOM with any new
+ * container showing the same cached content; drop state that can't be matched.
+ * Suspends the observer (via suspendObserver) before mutating; handleMutations
+ * resumes it in a finally.
+ */
+function reconcileStaleContainers() {
   for (const [container, state] of translationState) {
     if (!document.body.contains(container)) {
       debugLog('CLEANUP', 'Stale container detected, attempting re-association');
@@ -294,8 +443,8 @@ export function handleMutations(mutations, observerConfig) {
             translatedEl.setAttribute('data-translated', 'true');
             translatedEl.textContent = state.translatedText;
 
-            // Disconnect observer during our DOM modification
-            observer.disconnect();
+            // Suspend the observer during our DOM modification
+            suspendObserver();
 
             // Use shadow element approach for incremental tracking
             hideOriginalElement(messageEl);
@@ -324,9 +473,6 @@ export function handleMutations(mutations, observerConfig) {
             newContainer.addEventListener('click', handleCaptionClick);
             newContainer.addEventListener('contextmenu', handleAnkiContextMenu, true);
 
-            // Reconnect observer
-            observer.observe(document.body, observerConfig);
-
             reassociated = true;
             break;
           }
@@ -335,24 +481,29 @@ export function handleMutations(mutations, observerConfig) {
 
       if (!reassociated) {
         debugLog('CLEANUP', 'No matching container found, removing state');
+        // Not handed off to a new container — free its content key + timers.
+        cleanupContainerState(container);
       }
 
       // Always remove the stale container entry
       translationState.delete(container);
     }
   }
+}
 
-  // Fight Meet re-insertions: protect translated containers
-  // Disconnect observer lazily to prevent infinite loop from our own DOM modifications
-  let didFight = false;
-
+/**
+ * Fight Meet's re-insertions: re-strip originals, re-insert our elements/panels,
+ * re-paint minimalistic coloring, and strip max-width caps. Suspends the observer
+ * lazily (on the first mutation) via suspendObserver; handleMutations resumes it.
+ */
+function fightMeetReinsertions() {
   for (const [container, state] of translationState) {
     // (A) Remove any original caption elements Meet re-inserted
     // BUT keep shadow original elements (they receive text updates)
     // Also keep minimalistic-colored elements (we painted word spans into them)
     const originals = container.querySelectorAll('.ygicle.VbkSUe:not([data-translated]):not([data-shadow-original]):not([data-mm-colored]):not([data-processing])');
     if (originals.length > 0) {
-      if (!didFight) { observer.disconnect(); didFight = true; }
+      suspendObserver();
       for (const orig of originals) {
         orig.remove();
       }
@@ -360,8 +511,14 @@ export function handleMutations(mutations, observerConfig) {
 
     // (B) Re-insert our element if dislodged
     if (state.translatedEl && !container.contains(state.translatedEl)) {
-      if (!didFight) { observer.disconnect(); didFight = true; }
-      container.appendChild(state.translatedEl);
+      suspendObserver();
+      try {
+        container.appendChild(state.translatedEl);
+      } catch (e) {
+        // Meet can reparent caption subtrees so translatedEl is no longer a valid
+        // child target (HierarchyRequestError); skip rather than abort the loop.
+        debugLog('FIGHT', `appendChild failed: ${e?.message || e}`);
+      }
     }
 
     // (C) Restore text if Meet overwrote it (but NOT if we're in the middle of updating or showing delta)
@@ -371,19 +528,19 @@ export function handleMutations(mutations, observerConfig) {
         !state.translatedEl.hasAttribute('data-updating') &&
         !state.translatedEl.hasAttribute('data-has-delta') &&
         state.translatedEl.textContent !== state.translatedText) {
-      if (!didFight) { observer.disconnect(); didFight = true; }
+      suspendObserver();
       state.translatedEl.textContent = state.translatedText;
     }
 
     // (D) Re-insert breakdown panel if dislodged (only for panel mode, not minimalistic)
     if (!state.minimalisticState && !state.sentenceState && state.breakdownData && !container.querySelector('.breakdown-wrapper:not([data-sentence-mode])')) {
-      if (!didFight) { observer.disconnect(); didFight = true; }
+      suspendObserver();
       renderBreakdownPanel(container, state.breakdownData, state.speakerName, state.isExpanded);
     }
 
     // (D2) Re-insert sentence-mode wrapper if dislodged
     if (state.sentenceState && !container.querySelector('.breakdown-wrapper[data-sentence-mode]')) {
-      if (!didFight) { observer.disconnect(); didFight = true; }
+      suspendObserver();
       // Rebuild the sentence wrapper from processed state
       rebuildSentenceWrapper(container, state);
     }
@@ -397,7 +554,7 @@ export function handleMutations(mutations, observerConfig) {
         const words = state.breakdownData?.words
           || getCachedWordBreakdown(state.originalText);
         if (words.length > 0) {
-          if (!didFight) { observer.disconnect(); didFight = true; }
+          suspendObserver();
           const sents = state.breakdownData
             ? [{ startIndex: 0, endIndex: state.originalText.length, breakdownData: state.breakdownData }]
             : null;
@@ -410,35 +567,20 @@ export function handleMutations(mutations, observerConfig) {
     if (state.minimalisticIncrementalState && state.shadowOriginalEl) {
       const el = state.shadowOriginalEl;
       if (el.hasAttribute('data-mm-colored') && !el.querySelector('.mm-word')) {
-        if (!didFight) { observer.disconnect(); didFight = true; }
+        suspendObserver();
         repaintIncremental(container);
       }
     }
 
     // (F) Strip inline max-width that Meet may re-apply (780px cap)
     if (container.style.maxWidth) {
-      if (!didFight) { observer.disconnect(); didFight = true; }
+      suspendObserver();
       container.style.removeProperty('max-width');
     }
     if (container.parentElement?.style.maxWidth) {
-      if (!didFight) { observer.disconnect(); didFight = true; }
+      suspendObserver();
       container.parentElement.style.removeProperty('max-width');
     }
-  }
-
-  // Reconnect observer after our DOM modifications are done
-  if (didFight) {
-    observer.observe(document.body, observerConfig);
-  }
-
-  // Wire up any new containers
-  setupCaptionClickHandlers();
-
-  // Catch-all: sweep every visible caption so the session transcript
-  // captures text changes even when they don't surface as a characterData
-  // mutation we routed above (e.g., Meet replacing the text node wholesale).
-  for (const container of document.querySelectorAll('.nMcdL')) {
-    recordCaptionToTranscript(container);
   }
 }
 
@@ -460,7 +602,7 @@ function rebuildSentenceWrapper(container, state) {
     const group = document.createElement('div');
     group.className = 'sentence-group';
 
-    sentence.breakdownData.words.forEach(word => {
+    (sentence.breakdownData?.words || []).forEach(word => {
       const block = document.createElement('div');
       block.className = 'word-block';
       const typeClass = getWordTypeClass(word.type);
@@ -476,7 +618,7 @@ function rebuildSentenceWrapper(container, state) {
 
     const translationDiv = document.createElement('div');
     translationDiv.className = 'breakdown-translation';
-    translationDiv.textContent = `"${sentence.breakdownData.translation}"`;
+    translationDiv.textContent = `"${sentence.breakdownData?.translation || ''}"`;
     group.appendChild(translationDiv);
 
     wrapper.appendChild(group);
