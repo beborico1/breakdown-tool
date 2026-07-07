@@ -17,6 +17,31 @@ export async function getApiKey() {
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
 
+// Upper bound for a single service-worker proxy round-trip. In MV3 the worker can
+// be torn down mid-request and drop the sendMessage callback without firing
+// chrome.runtime.lastError, which would hang the awaiting caller forever (and, in
+// minimalistic mode, leave ms.isProcessing stuck true). Reject past this so the
+// caller's catch can recover.
+const SW_PROXY_TIMEOUT_MS = 30000;
+
+/**
+ * Synchronously-readable mirror of the offline-NLP setting. Defaults to ON to match
+ * the storage default (`useOfflineNlp !== false`). Synchronous callers (e.g. the
+ * cached-word highlighter, which must decide instantly whether to run) read this via
+ * isOfflineNlpEnabledSync(); it is kept fresh below by an initial read + storage
+ * listener, and by isOfflineNlpEnabled() whenever it resolves.
+ */
+let _offlineNlpCached = true;
+
+try {
+  chrome.storage.sync.get(['useOfflineNlp'], (r) => { _offlineNlpCached = r?.useOfflineNlp !== false; });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.useOfflineNlp) {
+      _offlineNlpCached = changes.useOfflineNlp.newValue !== false;
+    }
+  });
+} catch { /* non-extension context (tests) */ }
+
 /**
  * Whether the user has opted into the offline NLP beta pipeline
  * (kuromoji + JMdict + Chrome Translator API). Returns false on any error.
@@ -25,9 +50,21 @@ export async function isOfflineNlpEnabled() {
   return new Promise((resolve) => {
     try {
       // Default to ON: only false when user has explicitly toggled it off.
-      chrome.storage.sync.get(['useOfflineNlp'], (r) => resolve(r?.useOfflineNlp !== false));
+      chrome.storage.sync.get(['useOfflineNlp'], (r) => {
+        _offlineNlpCached = r?.useOfflineNlp !== false;
+        resolve(_offlineNlpCached);
+      });
     } catch { resolve(false); }
   });
+}
+
+/**
+ * Synchronous read of the cached offline-NLP flag. Use when an async await is not
+ * possible (e.g. inside the synchronous highlighter pass).
+ * @returns {boolean}
+ */
+export function isOfflineNlpEnabledSync() {
+  return _offlineNlpCached;
 }
 
 /**
@@ -36,8 +73,17 @@ export async function isOfflineNlpEnabled() {
  */
 function nlpRequest(op, text) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('NLP proxy timeout'));
+    }, SW_PROXY_TIMEOUT_MS);
     try {
       chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op, text }, (response) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
           return;
@@ -49,6 +95,9 @@ function nlpRequest(op, text) {
         resolve(response);
       });
     } catch (e) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       reject(e);
     }
   });
@@ -73,7 +122,16 @@ async function resolveAuth() {
  */
 async function kaigiFetch(url, init) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('background fetch timeout'));
+    }, SW_PROXY_TIMEOUT_MS);
     chrome.runtime.sendMessage({ type: 'kaigi-fetch', url, init }, (response) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;

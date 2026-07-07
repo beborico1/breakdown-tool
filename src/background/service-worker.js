@@ -33,12 +33,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // Offscreen document management for offline NLP (kuromoji + JMdict + Translator API).
 // Only one offscreen doc may exist per extension. Created lazily on first NLP request.
 const OFFSCREEN_PATH = 'src/offscreen/offscreen.html';
-let offscreenReady = null;
+// Do NOT memoize success: a created offscreen doc can be reaped by the browser
+// (e.g. memory pressure late in a long meeting) while this worker stays alive.
+// Re-check existence on every request and recreate a destroyed doc; the transient
+// promise only dedupes concurrent createDocument calls.
+let offscreenCreating = null;
 
 async function ensureOffscreen() {
-  if (offscreenReady) return offscreenReady;
-  offscreenReady = (async () => {
-    if (chrome.offscreen.hasDocument && await chrome.offscreen.hasDocument()) return;
+  if (chrome.offscreen.hasDocument && await chrome.offscreen.hasDocument()) return;
+  if (offscreenCreating) return offscreenCreating;
+  offscreenCreating = (async () => {
     try {
       await chrome.offscreen.createDocument({
         url: OFFSCREEN_PATH,
@@ -46,10 +50,15 @@ async function ensureOffscreen() {
         justification: 'Run kuromoji tokenizer and Chrome Translator API for offline Japanese NLP.',
       });
     } catch (e) {
+      // A concurrent caller may have created it first — that race is benign.
       if (!String(e).includes('single offscreen')) throw e;
     }
   })();
-  return offscreenReady;
+  try {
+    await offscreenCreating;
+  } finally {
+    offscreenCreating = null;
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
