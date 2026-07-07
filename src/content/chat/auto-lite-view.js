@@ -1,68 +1,50 @@
 import { debugLog } from '../core/debug.js';
-import { getWordTypeClass, hasJapanese } from '../utils/text.js';
+import { hasJapanese, findSentenceBoundaries } from '../utils/text.js';
 import { buildTogglePanel } from '../core/auto-translate-panel.js';
+import { collectTextNodes, applyAutoWordsToTextNode } from '../utils/highlight.js';
+import { findQuotedBlockContainer } from './message-finder.js';
+import { getPreHighlightHTML } from './word-highlight.js';
 
 const liteState = new WeakMap();
-const THIN_SPACE = ' ';
 
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s ?? '';
-  return div.innerHTML;
-}
+// Text nodes inside these elements belong to mention chips / links and must be left
+// untouched so the styled username tags survive auto-analyze.
+const CHIP_SELECTOR = 'a, [data-member-id], [data-display-name], .fWwrkf';
 
-function isSafeMessageEl(messageEl) {
-  // Only mutate messages that are plain text (no rich children like links/mentions).
-  for (const child of messageEl.children) {
-    const tag = child.tagName;
-    if (tag !== 'SPAN' && tag !== 'BR') return false;
-  }
-  return true;
-}
-
-function renderWordsHtml(words) {
-  let html = '';
-  let prevWasJa = false;
-  let prevType = null;
-  let tone = 0;
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    const surface = w.japanese ?? '';
-    if (!surface) continue;
-
-    // Preserve newlines if the offline tokenizer emitted them.
-    if (surface === '\n' || surface === '\r\n') {
-      html += '<br>';
-      prevWasJa = false;
-      continue;
-    }
-
-    const isJa = hasJapanese(surface);
-    if (html !== '') {
-      if (w.spaceBefore) html += ' '; // restore original whitespace (Latin runs etc.)
-      else if (isJa && prevWasJa) html += THIN_SPACE; // readability gap between JA tokens
-    }
-    if (isJa) {
-      const typeClass = getWordTypeClass(w.type);
-      tone = (w.type && w.type === prevType) ? 1 - tone : 0;
-      const toneClass = tone === 1 ? ' gcwb-tone-alt' : '';
-      prevType = w.type;
-      const reading = (w.reading || '').trim() || surface;
-      const romaji = (w.romaji || '').trim() || '-';
-      const english = (w.english || '').trim() || '-';
-      html += `<span class="gcwb-auto-word gcwb-type-${typeClass}${toneClass}" data-word="${escapeHtml(surface)}" data-reading="${escapeHtml(reading)}" data-romaji="${escapeHtml(romaji)}" data-english="${escapeHtml(english)}" data-type="${escapeHtml(typeClass)}">${escapeHtml(surface)}</span>`;
-      prevWasJa = true;
-    } else {
-      html += escapeHtml(surface);
-      prevWasJa = false;
-    }
-  }
-  return html;
+function isInsideChip(textNode) {
+  const parent = textNode.parentElement;
+  return !!(parent && parent.closest(CHIP_SELECTOR));
 }
 
 /**
- * Render the lite auto-analyze view: original-looking text with thin spaces between
- * Japanese tokens, plus a top-right chevron that expands a purple translation panel.
+ * Map the breakdown's Japanese tokens onto character offsets within `fullText`.
+ * Search-based (indexOf from a moving cursor) so it tolerates whitespace differences
+ * between the tokenizer output and the live DOM. Non-Japanese tokens advance the
+ * cursor but are not wrapped.
+ * @returns {Array<{word: string, start: number, end: number, data: Object}>}
+ */
+function buildGlobalMatches(words, fullText) {
+  const matches = [];
+  let cursor = 0;
+  for (const w of words) {
+    const surface = w.japanese ?? '';
+    if (!surface || surface === '\n' || surface === '\r\n') continue;
+    const idx = fullText.indexOf(surface, cursor);
+    if (idx === -1) continue;
+    const end = idx + surface.length;
+    cursor = end;
+    if (hasJapanese(surface)) {
+      matches.push({ kind: 'word', word: surface, start: idx, end, data: w });
+    }
+  }
+  return matches;
+}
+
+/**
+ * Render the lite auto-analyze view in place: wraps Japanese tokens in interactive
+ * `gcwb-auto-word` spans by mutating text nodes only, so mention chips, links, and
+ * other rich children are preserved. Adds a top-right chevron that expands a purple
+ * translation panel.
  *
  * @param {HTMLElement} messageEl - The .Zc1Emd text container
  * @param {{words:Array,translation:string}} breakdownData
@@ -72,20 +54,80 @@ export function renderAutoLiteView(messageEl, breakdownData, bubbleEl) {
   if (!messageEl || !breakdownData?.words?.length) return;
   if (liteState.has(messageEl)) return;
   if (bubbleEl?.querySelector('.gcwb-auto-translate-toggle')) return;
-  if (!isSafeMessageEl(messageEl)) {
-    debugLog('AUTO-LITE', 'Skipping: message has non-text children');
+
+  // If the cached-word highlighter already fragmented this message (e.g. offline NLP
+  // was toggled on after the highlighter ran), restore the clean pre-highlight HTML
+  // first, so a token straddling a `.gcwb-cached-word` boundary isn't dropped by the
+  // node-containment check below. On the common path the highlighter is gated off and
+  // this is null (no-op).
+  const preHighlight = getPreHighlightHTML(messageEl);
+  if (preHighlight) messageEl.innerHTML = preHighlight;
+
+  // Collect text nodes the same way the analyzed text was extracted, so token
+  // surfaces line up with the live DOM (quoted blocks excluded, highlights included).
+  const quoted = findQuotedBlockContainer(messageEl);
+  const textNodes = collectTextNodes(messageEl, quoted, { includeHighlighted: true });
+  if (textNodes.length === 0) return;
+
+  const fullText = textNodes.map(n => n.nodeValue).join('');
+  const globalMatches = buildGlobalMatches(breakdownData.words, fullText);
+  if (globalMatches.length === 0) {
+    debugLog('AUTO-LITE', 'Skipping: no Japanese tokens mapped to text');
     return;
   }
 
   const originalHTML = messageEl.innerHTML;
-  const wordsHtml = renderWordsHtml(breakdownData.words);
-  if (!wordsHtml) return;
+  const translation = (breakdownData.translation || '').trim();
+
+  // Sentence-ending dots become hoverable boundary spans that reveal the
+  // whole-message translation (mirrors the Meet hover-dot feature). Only built
+  // when there is a translation to show, and never overlapping a wrapped word.
+  let allMatches = globalMatches;
+  if (translation) {
+    const boundaries = findSentenceBoundaries(fullText)
+      .filter(b => !globalMatches.some(w => b.start < w.end && w.start < b.end))
+      .map(b => ({
+        kind: 'boundary',
+        word: fullText.slice(b.start, b.end),
+        start: b.start,
+        end: b.end,
+        data: { english: translation },
+      }));
+    if (boundaries.length) {
+      allMatches = [...globalMatches, ...boundaries].sort((a, b) => a.start - b.start);
+    }
+  }
+
+  // Distribute matches onto individual text nodes (skipping chip/link nodes),
+  // then wrap in place. Iterate a snapshot since applying mutates the DOM live.
+  let offset = 0;
+  let appliedWords = 0;
+  for (const textNode of textNodes) {
+    const nodeStart = offset;
+    const nodeEnd = offset + (textNode.nodeValue?.length || 0);
+    offset = nodeEnd;
+    if (isInsideChip(textNode)) continue;
+
+    const local = [];
+    for (const m of allMatches) {
+      if (m.start >= nodeStart && m.end <= nodeEnd) {
+        local.push({ ...m, start: m.start - nodeStart, end: m.end - nodeStart });
+      }
+    }
+    if (local.length === 0) continue;
+    applyAutoWordsToTextNode(textNode, local);
+    appliedWords += local.filter(m => m.kind !== 'boundary').length;
+  }
+
+  if (appliedWords === 0) {
+    debugLog('AUTO-LITE', 'Skipping: all tokens fell inside chips/links');
+    messageEl.innerHTML = originalHTML; // undo any boundary-only wrapping
+    return;
+  }
 
   liteState.set(messageEl, { originalHTML });
-  messageEl.innerHTML = wordsHtml;
   messageEl.classList.add('gcwb-auto-lite');
 
-  const translation = (breakdownData.translation || '').trim();
   if (!translation || !bubbleEl) return;
 
   bubbleEl.classList.add('gcwb-auto-bubble');
