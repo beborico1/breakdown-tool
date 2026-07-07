@@ -46,7 +46,11 @@ const tokenizer = await new TokenizerBuilder({
 }).build();
 const jmdictGz = await readFile(path.join(ROOT, 'assets/jmdict/jmdict-en.json.gz'));
 const jmdict = JSON.parse((await gunzipAsync(jmdictGz)).toString('utf8'));
-console.log(`Loaded ${Object.keys(jmdict).length} JMdict entries\n`);
+const kanjiGz = await readFile(path.join(ROOT, 'assets/kanjidic/kanji-en.json.gz'));
+const kanji = JSON.parse((await gunzipAsync(kanjiGz)).toString('utf8'));
+console.log(`Loaded ${Object.keys(jmdict).length} JMdict entries, ${Object.keys(kanji).length} kanji\n`);
+
+const isSingleKanji = (s) => [...s].length === 1 && /[一-龯㐀-䶿]/.test(s);
 
 function analyze(text) {
   const tokens = tokenizer.tokenize(text);
@@ -56,7 +60,8 @@ function analyze(text) {
     const { type, label } = mapPOS(t);
     const readingKata = t.reading && t.reading !== '*' ? t.reading : '';
     const basic = t.basic_form && t.basic_form !== '*' ? t.basic_form : null;
-    const english = label || jmdict[basic] || jmdict[t.surface_form] || jmdict[kataToHira(readingKata)] || '';
+    let english = label || jmdict[basic] || jmdict[t.surface_form] || jmdict[kataToHira(readingKata)] || jmdict[readingKata] || '';
+    if (!english && isSingleKanji(t.surface_form)) english = kanji[t.surface_form] || '';
     words.push({
       japanese: t.surface_form,
       reading: /[一-龯]/.test(t.surface_form) ? kataToHira(readingKata) : '',
@@ -131,6 +136,26 @@ console.log('\nTest 5: mixed Latin + Japanese (に右手のurlを出してくだ
   assertEq('を is particle', map['を']?.type, 'particle');
   const hasVerb = w.some(x => x.type === 'verb');
   assertEq('has at least one verb', hasVerb, true);
+}
+
+console.log('\nTest 6: full-dictionary coverage (離れ / はなれ now resolve)');
+{
+  // The common-only subset lacked these; the full jmdict-eng dataset has them.
+  assertEq('jmdict has many more than the common subset', Object.keys(jmdict).length > 60000, true);
+  assertIncludes('離れ resolves', jmdict['離れ'], 'detached');
+  assertEq('はなれ resolves', Boolean(jmdict['はなれ']), true);
+  const w = analyze('家から離れます');
+  const hanare = w.find(x => x.japanese === '離れ' || x._basic === '離れる');
+  assertEq('離れ token gets a non-empty gloss', Boolean(hanare?.english), true);
+}
+
+console.log('\nTest 7: single-kanji KANJIDIC fallback');
+{
+  assertEq('kanji map loaded', Object.keys(kanji).length > 1000, true);
+  assertEq('離 has a kanji meaning', Boolean(kanji['離']), true);
+  // A bare single kanji should never come back blank now.
+  const w = analyze('離');
+  assertEq('bare 離 gets a non-empty gloss', Boolean(w[0]?.english), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

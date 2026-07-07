@@ -1,6 +1,7 @@
 import { toRomaji } from 'wanakana';
 import { ensureTokenizer } from './kuromoji-loader.js';
 import { lookup as jmdictLookup } from './jmdict.js';
+import { lookupKanji } from './kanjidic.js';
 import { translateJaEn, ensureJaEnTranslator, getTranslatorState } from './translator.js';
 import { mapPOS } from './pos-map.js';
 
@@ -27,6 +28,10 @@ function hasKanji(s) {
   return /[一-龯㐀-䶿]/.test(s);
 }
 
+function isSingleKanji(s) {
+  return [...s].length === 1 && hasKanji(s);
+}
+
 function enrichToken(t) {
   const surface = t.surface_form;
   if (!surface) return null;
@@ -49,22 +54,11 @@ function enrichToken(t) {
   }
 }
 
-async function analyze(text) {
-  if (!text || !text.trim()) {
-    return { original: text || '', translation: '', words: [] };
-  }
-  console.log('[offscreen] analyze:', text.slice(0, 40));
-
-  // Kick off sentence translation in parallel. Cap at 5s so a missing
-  // Translator model never blocks the breakdown.
-  const translationPromise = Promise.race([
-    translateJaEn(text),
-    new Promise((_, rej) => setTimeout(() => rej(new Error('translator timeout')), 5000)),
-  ]).catch((e) => {
-    console.warn('[offscreen] translate failed:', e?.message || e);
-    return '';
-  });
-
+/**
+ * Tokenize + enrich (POS, reading, romaji, JMdict/KANJIDIC meaning) without
+ * translating. Shared by analyze() and analyzeTokensOnly().
+ */
+async function buildWords(text) {
   const tokenizer = await ensureTokenizer();
   let tokens;
   try {
@@ -93,6 +87,15 @@ async function analyze(text) {
         english = '';
       }
     }
+    // Fallback for a bare single kanji with no word entry: use its per-character
+    // KANJIDIC meaning so it shows a gloss instead of a blank "-".
+    if (!english && isSingleKanji(enriched.surface)) {
+      try {
+        english = await lookupKanji(enriched.surface);
+      } catch (e) {
+        console.warn('[offscreen] kanji lookup failed', enriched.surface, e?.message || e);
+      }
+    }
     words.push({
       japanese: enriched.surface,
       reading: enriched.reading,
@@ -116,6 +119,26 @@ async function analyze(text) {
     });
   }
 
+  return words;
+}
+
+async function analyze(text) {
+  if (!text || !text.trim()) {
+    return { original: text || '', translation: '', words: [] };
+  }
+  console.log('[offscreen] analyze:', text.slice(0, 40));
+
+  // Kick off sentence translation in parallel. Cap at 5s so a missing
+  // Translator model never blocks the breakdown.
+  const translationPromise = Promise.race([
+    translateJaEn(text),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('translator timeout')), 5000)),
+  ]).catch((e) => {
+    console.warn('[offscreen] translate failed:', e?.message || e);
+    return '';
+  });
+
+  const words = await buildWords(text);
   const translation = await translationPromise;
   return { original: text, translation: translation || '', words };
 }

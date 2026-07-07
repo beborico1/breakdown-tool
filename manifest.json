@@ -15,6 +15,7 @@
       "resources": [
         "assets/kuromoji-dict/*",
         "assets/jmdict/*",
+        "assets/kanjidic/*",
         "src/offscreen/offscreen.html",
         "dist/offscreen.js",
         "src/pages/transcribe/pcm-worklet.js"
