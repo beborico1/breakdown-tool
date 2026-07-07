@@ -125,8 +125,66 @@ async function registerCustomSitesFromStorage() {
   }
 }
 
-chrome.runtime.onInstalled.addListener(registerCustomSitesFromStorage);
-chrome.runtime.onStartup.addListener(registerCustomSitesFromStorage);
+// Universal (all-sites) colorizer: a single dynamic registration gated behind a
+// one-time all-hosts permission grant + the `universalMode` storage flag.
+const UNIVERSAL_SCRIPT_ID = 'kaigi-universal';
+const BUILTIN_MATCHES = [
+  'https://meet.google.com/*',
+  'https://chat.google.com/*',
+  'https://mail.google.com/*',
+  'https://redmine.irvine.jp/*',
+];
+
+function universalScriptConfig() {
+  return {
+    id: UNIVERSAL_SCRIPT_ID,
+    matches: ['https://*/*', 'http://*/*'],
+    // The 4 built-ins are injected via the static manifest entry; excluding them
+    // here prevents a double injection into the same frame.
+    excludeMatches: BUILTIN_MATCHES,
+    js: ['dist/content.js'],
+    css: ['src/content/content.css'],
+    runAt: 'document_idle',
+    allFrames: true,
+  };
+}
+
+async function registerUniversalFromStorage() {
+  const { universalMode } = await chrome.storage.sync.get('universalMode');
+  if (!universalMode) return;
+  const has = await chrome.permissions.contains({ origins: ['https://*/*'] });
+  if (!has) {
+    // Permission revoked while the flag was on — self-heal the flag.
+    await chrome.storage.sync.set({ universalMode: false });
+    return;
+  }
+  const existing = await chrome.scripting.getRegisteredContentScripts();
+  if (existing.some(s => s.id === UNIVERSAL_SCRIPT_ID)) return;
+  try {
+    await chrome.scripting.registerContentScripts([universalScriptConfig()]);
+  } catch (e) {
+    console.warn('[Universal] registerContentScripts failed:', e);
+  }
+}
+
+async function reconcileDynamicScripts() {
+  await registerCustomSitesFromStorage();
+  await registerUniversalFromStorage();
+}
+
+chrome.runtime.onInstalled.addListener(reconcileDynamicScripts);
+chrome.runtime.onStartup.addListener(reconcileDynamicScripts);
+
+// If the all-hosts permission is revoked, tear down universal mode.
+chrome.permissions.onRemoved.addListener(async ({ origins = [] }) => {
+  if (!origins.some(o => o === 'https://*/*' || o === 'http://*/*')) return;
+  try {
+    await chrome.scripting.unregisterContentScripts({ ids: [UNIVERSAL_SCRIPT_ID] });
+  } catch (e) {
+    // Not registered; nothing to do.
+  }
+  await chrome.storage.sync.set({ universalMode: false });
+});
 
 chrome.permissions.onRemoved.addListener(async ({ origins = [] }) => {
   if (origins.length === 0) return;

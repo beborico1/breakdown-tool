@@ -143,6 +143,21 @@ async function analyze(text) {
   return { original: text, translation: translation || '', words };
 }
 
+/**
+ * Per-word breakdown without the full-sentence translation. The universal
+ * (all-sites) colorizer shows only per-word color + hover, so skipping the
+ * Chrome Translator round-trip removes the dominant per-block latency and avoids
+ * contending for the translator model.
+ */
+async function analyzeTokensOnly(text) {
+  if (!text || !text.trim()) {
+    return { original: text || '', translation: '', words: [] };
+  }
+  console.log('[offscreen] tokenize:', text.slice(0, 40));
+  const words = await buildWords(text);
+  return { original: text, translation: '', words };
+}
+
 async function translateOnly(text) {
   if (!text || !text.trim()) return '';
   try {
@@ -159,6 +174,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     try {
       if (msg.op === 'analyze') {
         const result = await analyze(msg.text);
+        sendResponse({ ok: true, result });
+      } else if (msg.op === 'tokenize') {
+        const result = await analyzeTokensOnly(msg.text);
         sendResponse({ ok: true, result });
       } else if (msg.op === 'translate') {
         const text = await translateOnly(msg.text);

@@ -33,6 +33,7 @@ const apiKeyHelpLink = document.getElementById('apiKeyHelp');
 const apiKeyTutorialEl = document.getElementById('apiKeyTutorial');
 const offlineNlpToggle = document.getElementById('offlineNlpToggle');
 const translatorStatusEl = document.getElementById('translatorStatus');
+const universalModeToggle = document.getElementById('universalModeToggle');
 
 function renderTranslatorStatus(state) {
   if (!translatorStatusEl) return;
@@ -525,6 +526,67 @@ customSiteUrlInput.addEventListener('keypress', (e) => {
     addCustomSite();
   }
 });
+
+// Universal (all-sites) colorizer toggle. Requests an all-hosts permission once
+// (from this user gesture), then registers the content script on https/http so
+// every site auto-colorizes. The 4 built-ins are excluded (already injected via
+// the static manifest entry).
+const UNIVERSAL_SCRIPT_ID = 'kaigi-universal';
+const UNIVERSAL_BUILTIN_MATCHES = [
+  'https://meet.google.com/*',
+  'https://chat.google.com/*',
+  'https://mail.google.com/*',
+  'https://redmine.irvine.jp/*',
+];
+
+async function registerUniversalScript() {
+  await chrome.scripting.registerContentScripts([{
+    id: UNIVERSAL_SCRIPT_ID,
+    matches: ['https://*/*', 'http://*/*'],
+    excludeMatches: UNIVERSAL_BUILTIN_MATCHES,
+    js: ['dist/content.js'],
+    css: ['src/content/content.css'],
+    runAt: 'document_idle',
+    allFrames: true,
+  }]);
+}
+
+if (universalModeToggle) {
+  chrome.storage.sync.get(['universalMode'], (r) => {
+    universalModeToggle.checked = r?.universalMode === true;
+  });
+
+  universalModeToggle.addEventListener('change', async () => {
+    if (universalModeToggle.checked) {
+      const granted = await chrome.permissions.request({ origins: ['https://*/*', 'http://*/*'] });
+      if (!granted) {
+        universalModeToggle.checked = false;
+        showStatus('Permission denied', false);
+        return;
+      }
+      try {
+        // Clear any stale registration before re-adding.
+        await chrome.scripting.unregisterContentScripts({ ids: [UNIVERSAL_SCRIPT_ID] }).catch(() => {});
+        await registerUniversalScript();
+      } catch (err) {
+        universalModeToggle.checked = false;
+        showStatus('Failed to enable: ' + err.message, false);
+        return;
+      }
+      await chrome.storage.sync.set({ universalMode: true });
+      showStatus('Enabled. Reload open tabs to start colorizing.', true);
+    } else {
+      try {
+        await chrome.scripting.unregisterContentScripts({ ids: [UNIVERSAL_SCRIPT_ID] });
+      } catch {
+        // Not registered; continue.
+      }
+      await chrome.storage.sync.set({ universalMode: false });
+      // Keep the host permission — custom sites may still rely on it.
+      showStatus('Disabled. Reload open tabs to stop colorizing.', true);
+    }
+  });
+}
 
 // Frequency section event listeners
 viewAllWordsBtn.addEventListener('click', openFrequencyPage);

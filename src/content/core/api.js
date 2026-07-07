@@ -409,6 +409,24 @@ Text: ${text}`;
 }
 
 /**
+ * Per-word breakdown WITHOUT the full-sentence translation, via the offline NLP
+ * pipeline (kuromoji + JMdict). Used by the universal (all-sites) colorizer,
+ * which shows only per-word color + hover, so skipping translation removes the
+ * dominant per-block latency. Falls back to the full analyzer when offline NLP
+ * is disabled.
+ * @param {string} text
+ * @returns {Promise<{original: string, translation: string, words: Array}>}
+ */
+export async function analyzeJapaneseTokensOnly(text) {
+  if (await isOfflineNlpEnabled()) {
+    const response = await nlpRequest('tokenize', text);
+    if (!response.ok) throw new Error(response.error || 'offline tokenize failed');
+    return response.result;
+  }
+  return analyzeJapaneseWithGemini(text);
+}
+
+/**
  * Parse and validate a breakdown JSON response from Gemini
  * @param {string} responseText - Raw response text
  * @returns {Object} - Parsed breakdown object
