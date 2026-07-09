@@ -29,7 +29,8 @@
   ],
   "optional_host_permissions": [
     "http://localhost:8765/*",
-    "https://*/*"
+    "https://*/*",
+    "http://*/*"
   ],
   "icons": {
     "16": "assets/icons/icon16.png",
