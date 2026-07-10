@@ -688,6 +688,19 @@
 .gcwb-type-auxiliary.gcwb-tone-alt  { color: #C84F4F; }
 .gcwb-type-copula.gcwb-tone-alt     { color: #1E9E8E; }
 
+/* Readability halo: on colored page backgrounds (e.g. a blue noun on a blue
+   button) the POS color can collide with the background. A faint white glow
+   keeps the glyph edge visible; on white backgrounds it is invisible.
+   Scoped to the in-page word spans (not .gcwb-type-*) so extension-owned
+   dark surfaces (popover, Meet overlay/captions) keep their current look. */
+.gcwb-auto-word,
+.gcwb-cached-word {
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.9),
+    0 0 2px rgba(255, 255, 255, 0.7),
+    0 0 4px rgba(255, 255, 255, 0.45);
+}
+
 /* Translation Section */
 .gcwb-overlay-translation {
   color: #E8EAED;

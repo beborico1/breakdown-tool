@@ -305,6 +305,25 @@ try {
   });
   assertEq('inline-box span does not seam the sentence', t14.assembled, 'これは大切です');
   assertEq('isBlockLevel treats -webkit-inline-box as inline', t14.spanIsBlock, false);
+
+  // ---- T15: readability halo — painted words carry the white text-shadow.
+  // Runs last: it injects content.css, which would perturb the computed-style
+  // block-detection assertions of the earlier tests. Fresh fixture first.
+  console.log('\nT15: painted words carry the white readability halo');
+  await loadFixture();
+  await page.addStyleTag({ path: path.join(ROOT, 'src/content/content.css') });
+  const t15 = await page.evaluate(() => {
+    const el = document.getElementById('t1h');
+    const W = (japanese, type) => ({ japanese, reading: '', romaji: '', english: 'x', type });
+    core.paintBlockTokens(el, '次の言い方で正しいものはどれか。',
+      [W('次', 'noun'), W('の', 'particle'), W('言い方', 'noun'), W('で', 'particle'),
+       W('正しい', 'adjective'), W('もの', 'noun'), W('は', 'particle'), W('どれ', 'noun'), W('か', 'particle')],
+      { marker: 'gcwbUniv', excludeTags: bw.SKIP_SUBTREE_TAGS, stopAtNestedBlocks: true });
+    const span = el.querySelector('.gcwb-auto-word');
+    return { shadow: span ? getComputedStyle(span).textShadow : null };
+  });
+  assertTrue('painted word has a text-shadow', !!t15.shadow && t15.shadow !== 'none');
+  assertTrue('halo is white', !!t15.shadow && t15.shadow.includes('255, 255, 255'));
 } finally {
   await browser.close();
   server.close();
