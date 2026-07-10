@@ -10,8 +10,11 @@ const THIN_SPACE = ' ';
  * tokens.
  *
  * @param {Text} textNode
- * @param {Array<{surface:string,start:number,end:number,reading:string,romaji:string,english:string,type:string}>} tokens
+ * @param {Array<{surface:string,start:number,end:number,word?:string,reading:string,romaji:string,english:string,type:string}>} tokens
  *   Local-offset tokens (start/end are offsets INTO this text node), in order.
+ *   `surface` is the exact slice of this node. `word` (optional) is the full
+ *   word when the token is one segment of a word split across text nodes; it
+ *   feeds data-word so the hover card shows the whole word.
  */
 export function wrapJapaneseTokensInTextNode(textNode, tokens) {
   if (!tokens?.length) return;
@@ -48,12 +51,15 @@ export function wrapJapaneseTokensInTextNode(textNode, tokens) {
     }
 
     const typeClass = getWordTypeClass(t.type);
+    // Tone state is node-local, so segments of a word split across nodes can
+    // land on different tones when the head follows a same-type word in its
+    // node; accepted as a subtle shade difference.
     tone = (t.type && t.type === prevType) ? 1 - tone : 0;
     const toneClass = tone === 1 ? ' gcwb-tone-alt' : '';
 
     const span = document.createElement('span');
     span.className = `gcwb-auto-word gcwb-type-${typeClass}${toneClass}`;
-    span.dataset.word = t.surface;
+    span.dataset.word = t.word || t.surface;
     span.dataset.reading = t.reading || '';
     span.dataset.romaji = t.romaji || '';
     span.dataset.english = t.english || '';
