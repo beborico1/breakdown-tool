@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <title>universal dom fixtures</title>
+<style>
+  .host-ruby-color ruby,
+  .host-ruby-color rt { color: rgb(51, 51, 51); }
+</style>
 </head>
 <body>
 
@@ -48,6 +52,20 @@
 
 <!-- T14: vendor-prefixed inline-level display is not a block boundary -->
 <div id="t14">これは<span id="t14s" style="display:-webkit-inline-box">大</span>切です</div>
+
+<!-- T16: native ruby base should be analyzed while its reading stays annotation-only. -->
+<div id="t16">
+  <p id="t16p" class="host-ruby-color"><span class="color4"><ruby id="t16rain">雨<rt class="site-reading">あめ</rt></ruby></span><span id="t16mo" class="colorB">も</span></p>
+</div>
+
+<!-- T17: each explicit ruby-base branch owns its following reading group. -->
+<div id="t17" class="host-ruby-color"><ruby><rb id="t17high">高</rb><rt id="t17high-reading">たか</rt><rb id="t17wave">波</rb><rt id="t17wave-reading">なみ</rt></ruby></div>
+
+<!-- T18: a word straddles native ruby and outside okurigana; readings may have rp fallbacks. -->
+<div id="t18" class="host-ruby-color"><ruby id="t18fall">降<rp>(</rp><rt id="t18fall-reading">ふ</rt><rt id="t18fall-latin">fu</rt><rp>)</rp></ruby><span id="t18okuri">り</span></div>
+
+<!-- T19: native-ruby reading decoration is opt-in for the universal renderer. -->
+<div id="t19" class="host-ruby-color"><ruby id="t19sea">海<rt>うみ</rt></ruby></div>
 
 </body>
 </html>

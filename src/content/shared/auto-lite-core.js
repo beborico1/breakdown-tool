@@ -99,15 +99,22 @@ export function collectBlockTextNodes(blockEl, excludeTags = DEFAULT_EXCLUDE_TAG
  * @param {HTMLElement} blockEl
  * @param {string} analyzerText - the exact text passed to the analyzer
  * @param {Array<{japanese:string,reading:string,romaji:string,english:string,type:string}>} words
- * @param {{marker?: string, excludeTags?: Set<string>, translation?: string, stopAtNestedBlocks?: boolean}} [opts]
+ * @param {{marker?: string, excludeTags?: Set<string>, translation?: string, stopAtNestedBlocks?: boolean, decorateNativeRuby?: boolean}} [opts]
  *   `translation` (optional): when set, sentence-ending dots are wrapped as
  *   hoverable boundary spans revealing this whole-message translation.
  *   `stopAtNestedBlocks` must match the collectBlockTextNodes call that built
  *   `analyzerText`, or the offset-safety check fails on every nested block.
+ *   `decorateNativeRuby` copies painted base colors onto excluded <rt> readings.
  * @returns {boolean} whether any word tokens were painted
  */
 export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
-  const { marker = 'gcwbAuto', excludeTags = DEFAULT_EXCLUDE_TAGS, translation = '', stopAtNestedBlocks = false } = opts;
+  const {
+    marker = 'gcwbAuto',
+    excludeTags = DEFAULT_EXCLUDE_TAGS,
+    translation = '',
+    stopAtNestedBlocks = false,
+    decorateNativeRuby = false,
+  } = opts;
   if (!blockEl || !Array.isArray(words) || words.length === 0) return false;
 
   const { assembled, ranges } = collectBlockTextNodes(blockEl, excludeTags, { stopAtNestedBlocks });
@@ -211,7 +218,7 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
       tokens.sort((a, b) => a.start - b.start);
       const hasWord = tokens.some(t => !t.isBoundary);
       try {
-        wrapJapaneseTokensInTextNode(node, tokens);
+        wrapJapaneseTokensInTextNode(node, tokens, { decorateNativeRuby });
         if (hasWord) painted = true;
       } catch (e) {
         debugLog('AUTO-LITE-CORE', 'wrap failed:', e?.message);

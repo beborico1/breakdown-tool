@@ -128,6 +128,7 @@ async function analyzeAndPaint(block) {
       marker: UNIVERSAL_MARKER,
       excludeTags: SKIP_SUBTREE_TAGS,
       stopAtNestedBlocks: true,
+      decorateNativeRuby: true,
     });
   });
 

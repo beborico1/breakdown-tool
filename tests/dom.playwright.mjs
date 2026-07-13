@@ -324,6 +324,148 @@ try {
   });
   assertTrue('painted word has a text-shadow', !!t15.shadow && t15.shadow !== 'none');
   assertTrue('halo is white', !!t15.shadow && t15.shadow.includes('255, 255, 255'));
+
+  // ---- T16: native ruby base + reading use the word's POS color.
+  console.log('\nT16: native ruby base and reading colorize together');
+  const t16 = await page.evaluate(() => {
+    const el = document.getElementById('t16p');
+    const blocks = bw.findJapaneseBlocks(document.getElementById('t16')).map(b => b.id);
+    const { assembled } = core.collectBlockTextNodes(
+      el, bw.SKIP_SUBTREE_TAGS, { stopAtNestedBlocks: true });
+    const W = (japanese, type) => ({ japanese, reading: '', romaji: '', english: 'x', type });
+    const painted = core.paintBlockTokens(el, assembled,
+      [W('雨', 'noun'), W('も', 'particle')],
+      {
+        marker: 'gcwbUniv',
+        excludeTags: bw.SKIP_SUBTREE_TAGS,
+        stopAtNestedBlocks: true,
+        decorateNativeRuby: true,
+      });
+    const ruby = document.getElementById('t16rain');
+    const base = ruby.querySelector(':scope > .gcwb-auto-word');
+    const reading = ruby.querySelector(':scope > rt');
+    const particle = document.querySelector('#t16mo > .gcwb-auto-word');
+    return {
+      blocks,
+      assembled,
+      painted,
+      baseWrapped: !!base,
+      baseColor: base ? getComputedStyle(base).color : getComputedStyle(ruby).color,
+      readingText: reading.textContent,
+      readingColor: getComputedStyle(reading).color,
+      readingWrapped: reading.matches('.gcwb-auto-word') || !!reading.querySelector('.gcwb-auto-word'),
+      readingMarker: reading.classList.contains('gcwb-ruby-reading'),
+      siteClassPreserved: reading.classList.contains('site-reading'),
+      particleColor: particle ? getComputedStyle(particle).color : null,
+    };
+  });
+  assertEq('native ruby resolves to its paragraph block', t16.blocks, ['t16p']);
+  assertEq('analyzer input includes base but excludes reading', t16.assembled, '雨も');
+  assertEq('painted', t16.painted, true);
+  assertEq('base is wrapped', t16.baseWrapped, true);
+  assertEq('base is noun blue', t16.baseColor, 'rgb(66, 133, 244)');
+  assertEq('reading text is preserved', t16.readingText, 'あめ');
+  assertEq('reading is noun blue', t16.readingColor, 'rgb(66, 133, 244)');
+  assertEq('reading is presentation-only', t16.readingWrapped, false);
+  assertEq('reading carries its dedicated marker', t16.readingMarker, true);
+  assertEq('reading preserves its site-owned class', t16.siteClassPreserved, true);
+  assertEq('adjacent particle still paints red', t16.particleColor, 'rgb(234, 67, 53)');
+
+  // ---- T17: explicit rb/rt pairs keep their own POS colors.
+  console.log('\nT17: explicit ruby-base pairs color their associated readings');
+  const t17 = await page.evaluate(() => {
+    const el = document.getElementById('t17');
+    const { assembled } = core.collectBlockTextNodes(
+      el, bw.SKIP_SUBTREE_TAGS, { stopAtNestedBlocks: true });
+    const W = (japanese, type) => ({ japanese, reading: '', romaji: '', english: 'x', type });
+    core.paintBlockTokens(el, assembled,
+      [W('高', 'adjective'), W('波', 'noun')],
+      {
+        marker: 'gcwbUniv',
+        excludeTags: bw.SKIP_SUBTREE_TAGS,
+        stopAtNestedBlocks: true,
+        decorateNativeRuby: true,
+      });
+    const baseColor = id => getComputedStyle(
+      document.querySelector(`#${id} > .gcwb-auto-word`)).color;
+    const color = id => getComputedStyle(document.getElementById(id)).color;
+    return {
+      assembled,
+      highColor: baseColor('t17high'),
+      highReadingColor: color('t17high-reading'),
+      waveColor: baseColor('t17wave'),
+      waveReadingColor: color('t17wave-reading'),
+      readingTargets: el.querySelectorAll('rt.gcwb-auto-word, rt .gcwb-auto-word').length,
+    };
+  });
+  assertEq('paired-ruby input excludes both readings', t17.assembled, '高波');
+  assertEq('first base is adjective yellow', t17.highColor, 'rgb(251, 188, 4)');
+  assertEq('first reading matches its base', t17.highReadingColor, 'rgb(251, 188, 4)');
+  assertEq('second base is noun blue', t17.waveColor, 'rgb(66, 133, 244)');
+  assertEq('second reading matches its base', t17.waveReadingColor, 'rgb(66, 133, 244)');
+  assertEq('paired readings stay non-interactive', t17.readingTargets, 0);
+
+  // ---- T18: a native-ruby word can straddle into outside okurigana.
+  console.log('\nT18: native ruby + outside okurigana retain one word');
+  const t18 = await page.evaluate(() => {
+    const el = document.getElementById('t18');
+    const { assembled } = core.collectBlockTextNodes(
+      el, bw.SKIP_SUBTREE_TAGS, { stopAtNestedBlocks: true });
+    core.paintBlockTokens(el, assembled,
+      [{ japanese: '降り', reading: 'ふり', romaji: 'furi', english: 'to fall', type: 'verb' }],
+      {
+        marker: 'gcwbUniv',
+        excludeTags: bw.SKIP_SUBTREE_TAGS,
+        stopAtNestedBlocks: true,
+        decorateNativeRuby: true,
+      });
+    const segments = [...el.querySelectorAll('.gcwb-auto-word')];
+    const readings = [...el.querySelectorAll('rt')];
+    return {
+      assembled,
+      segmentTexts: segments.map(s => s.textContent),
+      segmentWords: segments.map(s => s.dataset.word),
+      segmentColors: segments.map(s => getComputedStyle(s).color),
+      readingTexts: readings.map(r => r.textContent),
+      readingColors: readings.map(r => getComputedStyle(r).color),
+      readingTargets: readings.filter(r => r.matches('.gcwb-auto-word')).length,
+      fallbackMarkers: el.querySelectorAll('rp.gcwb-ruby-reading').length,
+    };
+  });
+  assertEq('split-word input excludes rt/rp text', t18.assembled, '降り');
+  assertEq('base and okurigana are separate segments', t18.segmentTexts, ['降', 'り']);
+  assertEq('both segments retain the full word', t18.segmentWords, ['降り', '降り']);
+  assertEq('both segments are verb green', t18.segmentColors, ['rgb(52, 168, 83)', 'rgb(52, 168, 83)']);
+  assertEq('all reading text is preserved', t18.readingTexts, ['ふ', 'fu']);
+  assertEq('consecutive readings match the verb', t18.readingColors, ['rgb(52, 168, 83)', 'rgb(52, 168, 83)']);
+  assertEq('readings stay non-interactive', t18.readingTargets, 0);
+  assertEq('rp fallbacks stay unmarked', t18.fallbackMarkers, 0);
+
+  // ---- T19: shared core keeps native-ruby reading decoration opt-in.
+  console.log('\nT19: native ruby reading decoration is opt-in');
+  const t19 = await page.evaluate(() => {
+    const el = document.getElementById('t19');
+    const { assembled } = core.collectBlockTextNodes(
+      el, bw.SKIP_SUBTREE_TAGS, { stopAtNestedBlocks: true });
+    core.paintBlockTokens(el, assembled,
+      [{ japanese: '海', reading: 'うみ', romaji: 'umi', english: 'sea', type: 'noun' }],
+      {
+        marker: 'gcwbAutoLite',
+        excludeTags: bw.SKIP_SUBTREE_TAGS,
+        stopAtNestedBlocks: true,
+      });
+    const ruby = document.getElementById('t19sea');
+    const base = ruby.querySelector(':scope > .gcwb-auto-word');
+    const reading = ruby.querySelector(':scope > rt');
+    return {
+      baseColor: getComputedStyle(base).color,
+      readingColor: getComputedStyle(reading).color,
+      readingMarked: reading.classList.contains('gcwb-ruby-reading'),
+    };
+  });
+  assertEq('default path still paints the base', t19.baseColor, 'rgb(66, 133, 244)');
+  assertEq('default path preserves the host reading color', t19.readingColor, 'rgb(51, 51, 51)');
+  assertEq('default path does not mark the reading', t19.readingMarked, false);
 } finally {
   await browser.close();
   server.close();

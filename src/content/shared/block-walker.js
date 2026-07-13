@@ -13,7 +13,7 @@ export const SKIP_SUBTREE_TAGS = new Set([
   'CODE', 'PRE', 'KBD', 'SAMP',
   'SVG', 'MATH', 'CANVAS',
   'VIDEO', 'AUDIO', 'IMG', 'OBJECT', 'EMBED', 'IFRAME',
-  'RUBY', 'RT', 'RP',   // already-furiganated text — leave the site's reading alone
+  'RT', 'RP',           // native ruby readings/fallbacks are annotations, not body text
   'SUP', 'SUB',         // fake-furigana readings and footnote marks — not body text
   'TIME',               // usually machine-readable
 ]);
