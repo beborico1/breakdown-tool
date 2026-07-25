@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>universal dom fixtures</title>
+<style>
+  .host-ruby-color ruby,
+  .host-ruby-color rt { color: rgb(51, 51, 51); }
+</style>
+</head>
+<body>
+
+<!-- T1: fake-furigana shape from the 語検 site: h2 with inline span.wruby
+     wrappers (kanji + sup reading) mixed with direct text nodes. -->
+<div id="t1">
+  <h2 id="t1h"><span class="wruby">次<sup>つぎ</sup></span>の<span class="wruby">言<sup>い</sup></span>い<span class="wruby">方<sup>かた</sup></span>で正しいものはどれか。</h2>
+</div>
+
+<!-- T2/T5: block with direct text plus a nested block -->
+<div id="t2">直接のテキスト<p id="t2p">段落の中の日本語</p>あとのテキスト</div>
+
+<!-- T3: computed display beats tag for generic containers; semantic tags win regardless -->
+<div id="t3"><span id="t3s" style="display:block">ブロック風スパン</span><div id="t3d" style="display:inline">インライン風</div>そとの文<ul id="t3u"><li id="t3li" style="display:inline">メニュー項目</li></ul></div>
+
+<!-- T4: sup/sub are never analyzed -->
+<div id="t4a"><sup>かな</sup></div>
+<div id="t4b">これは<sup>かな</sup>テスト<sub>した</sub>です</div>
+
+<!-- T6: token straddling the wruby text node and the following text node -->
+<div id="t6"><span class="wruby">合<sup>あ</sup></span>う</div>
+
+<!-- T7: token straddling an inline <b> boundary -->
+<div id="t7">これは<b>大</b>切です</div>
+
+<!-- T8: mapper-level word field on a single text node -->
+<div id="t8">ことばです</div>
+
+<!-- T9: Redmine-shaped block: default opts keep nested blocks in one unit -->
+<div id="t9" class="wiki">最初の文です。<p>中の言葉</p></div>
+
+<!-- T10: drift safety -->
+<div id="t10">何かの日本語</div>
+
+<!-- T11: fallback word containing a seam must not wrap across the gap -->
+<div id="t11">直接テキスト<p>中身の言葉</p>あとの部分</div>
+
+<!-- T12: display:none inline text stays out of the visible unit, no seam -->
+<div id="t12">合<span id="t12h" style="display:none">ごう</span>字</div>
+
+<!-- T13: <br> is a hard line break and seams the unit -->
+<div id="t13">一行目のテキスト<br>二行目のことば</div>
+
+<!-- T14: vendor-prefixed inline-level display is not a block boundary -->
+<div id="t14">これは<span id="t14s" style="display:-webkit-inline-box">大</span>切です</div>
+
+<!-- T16: native ruby base should be analyzed while its reading stays annotation-only. -->
+<div id="t16">
+  <p id="t16p" class="host-ruby-color"><span class="color4"><ruby id="t16rain">雨<rt class="site-reading">あめ</rt></ruby></span><span id="t16mo" class="colorB">も</span></p>
+</div>
+
+<!-- T17: each explicit ruby-base branch owns its following reading group. -->
+<div id="t17" class="host-ruby-color"><ruby><rb id="t17high">高</rb><rt id="t17high-reading">たか</rt><rb id="t17wave">波</rb><rt id="t17wave-reading">なみ</rt></ruby></div>
+
+<!-- T18: a word straddles native ruby and outside okurigana; readings may have rp fallbacks. -->
+<div id="t18" class="host-ruby-color"><ruby id="t18fall">降<rp>(</rp><rt id="t18fall-reading">ふ</rt><rt id="t18fall-latin">fu</rt><rp>)</rp></ruby><span id="t18okuri">り</span></div>
+
+<!-- T19: native-ruby reading decoration is opt-in for the universal renderer. -->
+<div id="t19" class="host-ruby-color"><ruby id="t19sea">海<rt>うみ</rt></ruby></div>
+
+</body>
+</html>

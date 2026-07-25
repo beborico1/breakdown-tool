@@ -78,11 +78,15 @@ function isBuiltInSurface() {
   );
 }
 
-/** Enqueue a block for viewport-gated analysis. */
+/**
+ * Enqueue a block for viewport-gated analysis. No painted-descendant veto
+ * here: with nested units, a painted child block must not starve its parent's
+ * own text, and analyzeAndPaint self-guards (re-collection excludes painted
+ * spans, so an already-painted unit assembles to nothing Japanese).
+ */
 function enqueueBlock(block) {
   if (!block || processed.has(block)) return;
   if (block.dataset[UNIVERSAL_MARKER] === '1') return;
-  if (block.querySelector?.('.gcwb-auto-word')) return;
   if (!io) return;
   processed.add(block);
   io.observe(block);
@@ -94,7 +98,8 @@ async function analyzeAndPaint(block) {
   if (block.dataset[UNIVERSAL_MARKER] === '1') return;
 
   // Assemble with the same exclusions the walker used so offsets line up.
-  const { assembled } = collectBlockTextNodes(block, SKIP_SUBTREE_TAGS);
+  // Nested blocks are their own units, so stop at them here and in the paint.
+  const { assembled } = collectBlockTextNodes(block, SKIP_SUBTREE_TAGS, { stopAtNestedBlocks: true });
   if (!assembled || !hasJapanese(assembled)) return;
 
   const chunks = assembled.length > UNIVERSAL_MAX_LEN
@@ -122,6 +127,8 @@ async function analyzeAndPaint(block) {
     painted = paintBlockTokens(block, assembled, words, {
       marker: UNIVERSAL_MARKER,
       excludeTags: SKIP_SUBTREE_TAGS,
+      stopAtNestedBlocks: true,
+      decorateNativeRuby: true,
     });
   });
 
@@ -215,6 +222,14 @@ function start() {
   setupWordTooltip();   // self-guards against double-binding
   setupObservers();
   scan();
+  // Block detection reads computed display; stylesheets still loading can
+  // misclassify styled spans as inline, so rescan once everything is loaded.
+  // A block already painted with pre-stylesheet boundaries stays as painted
+  // until a mutation inside it clears the marker — accepted: healing it here
+  // would need per-block seam signatures for a rare slow-CSS static page.
+  if (document.readyState !== 'complete') {
+    window.addEventListener('load', () => scan(), { once: true });
+  }
 }
 
 /**

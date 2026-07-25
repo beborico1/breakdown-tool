@@ -666,27 +666,65 @@
 }
 
 /* Word Type Colors for GCWB */
-.gcwb-type-noun { color: #4285F4; }
-.gcwb-type-verb { color: #34A853; }
-.gcwb-type-particle { color: #EA4335; }
-.gcwb-type-adjective { color: #FBBC04; }
-.gcwb-type-adverb { color: #A78BFA; }
-.gcwb-type-counter { color: #60A5FA; }
-.gcwb-type-expression { color: #F472B6; }
-.gcwb-type-auxiliary { color: #F87171; }
-.gcwb-type-copula { color: #2DD4BF; }
-.gcwb-type-other { color: #FB923C; }
+.gcwb-type-noun,
+.gcwb-ruby-reading.gcwb-type-noun { color: #4285F4; }
+.gcwb-type-verb,
+.gcwb-ruby-reading.gcwb-type-verb { color: #34A853; }
+.gcwb-type-particle,
+.gcwb-ruby-reading.gcwb-type-particle { color: #EA4335; }
+.gcwb-type-adjective,
+.gcwb-ruby-reading.gcwb-type-adjective { color: #FBBC04; }
+.gcwb-type-adverb,
+.gcwb-ruby-reading.gcwb-type-adverb { color: #A78BFA; }
+.gcwb-type-counter,
+.gcwb-ruby-reading.gcwb-type-counter { color: #60A5FA; }
+.gcwb-type-expression,
+.gcwb-ruby-reading.gcwb-type-expression { color: #F472B6; }
+.gcwb-type-auxiliary,
+.gcwb-ruby-reading.gcwb-type-auxiliary { color: #F87171; }
+.gcwb-type-copula,
+.gcwb-ruby-reading.gcwb-type-copula { color: #2DD4BF; }
+.gcwb-type-other,
+.gcwb-ruby-reading.gcwb-type-other { color: #FB923C; }
 
 /* Alternate tones for consecutive same-type words (set by render loop) */
-.gcwb-type-noun.gcwb-tone-alt       { color: #1A5EC4; }
-.gcwb-type-verb.gcwb-tone-alt       { color: #1E7A3B; }
-.gcwb-type-particle.gcwb-tone-alt   { color: #B22F27; }
-.gcwb-type-adjective.gcwb-tone-alt  { color: #C89702; }
-.gcwb-type-adverb.gcwb-tone-alt     { color: #7C6BD4; }
-.gcwb-type-counter.gcwb-tone-alt    { color: #3B7FCC; }
-.gcwb-type-expression.gcwb-tone-alt { color: #C24D8C; }
-.gcwb-type-auxiliary.gcwb-tone-alt  { color: #C84F4F; }
-.gcwb-type-copula.gcwb-tone-alt     { color: #1E9E8E; }
+.gcwb-type-noun.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-noun.gcwb-tone-alt { color: #1A5EC4; }
+.gcwb-type-verb.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-verb.gcwb-tone-alt { color: #1E7A3B; }
+.gcwb-type-particle.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-particle.gcwb-tone-alt { color: #B22F27; }
+.gcwb-type-adjective.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-adjective.gcwb-tone-alt { color: #C89702; }
+.gcwb-type-adverb.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-adverb.gcwb-tone-alt { color: #7C6BD4; }
+.gcwb-type-counter.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-counter.gcwb-tone-alt { color: #3B7FCC; }
+.gcwb-type-expression.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-expression.gcwb-tone-alt { color: #C24D8C; }
+.gcwb-type-auxiliary.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-auxiliary.gcwb-tone-alt { color: #C84F4F; }
+.gcwb-type-copula.gcwb-tone-alt,
+.gcwb-ruby-reading.gcwb-type-copula.gcwb-tone-alt { color: #1E9E8E; }
+
+/* Readability halo: on colored page backgrounds (e.g. a blue noun on a blue
+   button) the POS color can collide with the background. A thin crisp white
+   outline (eight zero-blur 1px shadows) keeps the glyph edge visible without
+   making it look glowy; on white backgrounds it is invisible.
+   Scoped to the in-page word spans (not .gcwb-type-*) so extension-owned
+   dark surfaces (popover, Meet overlay/captions) keep their current look. */
+.gcwb-auto-word,
+.gcwb-cached-word {
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.8),
+     1px -1px 0 rgba(255, 255, 255, 0.8),
+    -1px  1px 0 rgba(255, 255, 255, 0.8),
+     1px  1px 0 rgba(255, 255, 255, 0.8),
+    -1px  0   0 rgba(255, 255, 255, 0.8),
+     1px  0   0 rgba(255, 255, 255, 0.8),
+     0   -1px 0 rgba(255, 255, 255, 0.8),
+     0    1px 0 rgba(255, 255, 255, 0.8);
+}
 
 /* Translation Section */
 .gcwb-overlay-translation {

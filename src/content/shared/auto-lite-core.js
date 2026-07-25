@@ -1,6 +1,7 @@
 import { debugLog } from '../core/debug.js';
 import { hasJapanese, findSentenceBoundaries } from '../utils/text.js';
 import { wrapJapaneseTokensInTextNode } from '../utils/auto-token-mapper.js';
+import { isBlockLevel } from './block-walker.js';
 
 /**
  * Shared Auto-Lite Core
@@ -18,25 +19,50 @@ export const DEFAULT_EXCLUDE_TAGS = new Set(['PRE', 'CODE', 'IMG', 'OBJECT']);
  * assembled text plus a parallel range table so analyzer offsets can be mapped
  * back to specific text nodes.
  *
+ * With `stopAtNestedBlocks`, nested block-level subtrees are excluded too and
+ * replaced by a synthetic '\n' seam in `assembled` that has NO range entry:
+ * the unit is exactly the text that belongs to this block, and no analyzer
+ * token can span the seam (kuromoji surfaces never contain '\n'). `<br>` is a
+ * hard visual line break and seams the same way. Excluded tags and
+ * display:none subtrees produce no seam — inline holes like a skipped `<sup>`
+ * or a hidden reading span must let the surrounding base text join seamlessly
+ * (hidden elements own their text as separate units and paint on reveal).
+ *
  * @param {HTMLElement} blockEl
  * @param {Set<string>} [excludeTags] - uppercase tag names whose subtrees to skip
+ * @param {{stopAtNestedBlocks?: boolean}} [opts]
  * @returns {{ assembled: string, ranges: Array<{node: Text, start: number, end: number}> }}
  */
-export function collectBlockTextNodes(blockEl, excludeTags = DEFAULT_EXCLUDE_TAGS) {
+export function collectBlockTextNodes(blockEl, excludeTags = DEFAULT_EXCLUDE_TAGS, opts = {}) {
+  const { stopAtNestedBlocks = false } = opts;
+  const styleCache = stopAtNestedBlocks ? new Map() : null;
   const ranges = [];
   let assembled = '';
+  let pendingSeam = false;
 
-  const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT, {
+  const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      let p = node.parentElement;
-      while (p && p !== blockEl) {
-        if (excludeTags.has(p.tagName)) return NodeFilter.FILTER_REJECT;
-        if (p.isContentEditable) return NodeFilter.FILTER_REJECT;
-        if (p.getAttribute?.('role') === 'textbox') return NodeFilter.FILTER_REJECT;
-        if (p.dataset?.gcwbSkip != null) return NodeFilter.FILTER_REJECT;
-        if (p.classList?.contains('gcwb-auto-word')) return NodeFilter.FILTER_REJECT;
-        if (p.classList?.contains('gcwb-cached-word')) return NodeFilter.FILTER_REJECT;
-        p = p.parentElement;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (excludeTags.has(node.tagName)) return NodeFilter.FILTER_REJECT;
+        if (node.isContentEditable) return NodeFilter.FILTER_REJECT;
+        if (node.getAttribute?.('role') === 'textbox') return NodeFilter.FILTER_REJECT;
+        if (node.dataset?.gcwbSkip != null) return NodeFilter.FILTER_REJECT;
+        if (node.classList?.contains('gcwb-auto-word')) return NodeFilter.FILTER_REJECT;
+        if (node.classList?.contains('gcwb-cached-word')) return NodeFilter.FILTER_REJECT;
+        if (stopAtNestedBlocks) {
+          if (node.tagName === 'BR') {
+            pendingSeam = true;
+            return NodeFilter.FILTER_REJECT;
+          }
+          let d = '';
+          try { d = getComputedStyle(node).display || ''; } catch { /* keep '' */ }
+          if (d === 'none') return NodeFilter.FILTER_REJECT; // hidden: no seam
+          if (isBlockLevel(node, styleCache)) {
+            pendingSeam = true;
+            return NodeFilter.FILTER_REJECT;
+          }
+        }
+        return NodeFilter.FILTER_SKIP; // descend; only text nodes are emitted
       }
       return NodeFilter.FILTER_ACCEPT;
     }
@@ -46,6 +72,10 @@ export function collectBlockTextNodes(blockEl, excludeTags = DEFAULT_EXCLUDE_TAG
     const node = walker.currentNode;
     const val = node.nodeValue || '';
     if (!val) continue;
+    if (pendingSeam) {
+      if (assembled) assembled += '\n'; // no range entry: a gap no token can span
+      pendingSeam = false;
+    }
     const start = assembled.length;
     assembled += val;
     ranges.push({ node, start, end: assembled.length });
@@ -69,16 +99,25 @@ export function collectBlockTextNodes(blockEl, excludeTags = DEFAULT_EXCLUDE_TAG
  * @param {HTMLElement} blockEl
  * @param {string} analyzerText - the exact text passed to the analyzer
  * @param {Array<{japanese:string,reading:string,romaji:string,english:string,type:string}>} words
- * @param {{marker?: string, excludeTags?: Set<string>, translation?: string}} [opts]
+ * @param {{marker?: string, excludeTags?: Set<string>, translation?: string, stopAtNestedBlocks?: boolean, decorateNativeRuby?: boolean}} [opts]
  *   `translation` (optional): when set, sentence-ending dots are wrapped as
  *   hoverable boundary spans revealing this whole-message translation.
+ *   `stopAtNestedBlocks` must match the collectBlockTextNodes call that built
+ *   `analyzerText`, or the offset-safety check fails on every nested block.
+ *   `decorateNativeRuby` copies painted base colors onto excluded <rt> readings.
  * @returns {boolean} whether any word tokens were painted
  */
 export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
-  const { marker = 'gcwbAuto', excludeTags = DEFAULT_EXCLUDE_TAGS, translation = '' } = opts;
+  const {
+    marker = 'gcwbAuto',
+    excludeTags = DEFAULT_EXCLUDE_TAGS,
+    translation = '',
+    stopAtNestedBlocks = false,
+    decorateNativeRuby = false,
+  } = opts;
   if (!blockEl || !Array.isArray(words) || words.length === 0) return false;
 
-  const { assembled, ranges } = collectBlockTextNodes(blockEl, excludeTags);
+  const { assembled, ranges } = collectBlockTextNodes(blockEl, excludeTags, { stopAtNestedBlocks });
 
   const offsetSafe = assembled === analyzerText;
   if (!offsetSafe) {
@@ -96,6 +135,9 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
     for (const w of words) {
       const surface = w.japanese ?? '';
       if (!surface) continue;
+      // The analyzer's no-token fallback word is the whole chunk text and can
+      // contain a synthetic seam; it must never wrap across the gap.
+      if (surface.includes('\n')) continue;
 
       const start = assembled.indexOf(surface, searchPos);
       if (start < 0) continue; // unlocatable; skip rather than corrupt
@@ -104,27 +146,47 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
 
       if (!hasJapanese(surface)) continue;
 
-      // Advance rangeIdx until the current range can contain [start, end).
+      // Advance rangeIdx until the current range can contain `start`.
       while (rangeIdx < ranges.length && ranges[rangeIdx].end <= start) {
         rangeIdx++;
       }
-      const r = ranges[rangeIdx];
-      if (!r) continue;
-      if (start < r.start || end > r.end) continue; // straddles a node boundary
+      if (!ranges[rangeIdx]) continue;
+      if (start < ranges[rangeIdx].start) continue; // starts inside a seam gap
 
-      const localStart = start - r.start;
-      const localEnd = end - r.start;
-      const bucket = buckets.get(r.node) || [];
-      bucket.push({
-        surface,
-        start: localStart,
-        end: localEnd,
-        reading: w.reading,
-        romaji: w.romaji,
-        english: w.english,
-        type: w.type
-      });
-      buckets.set(r.node, bucket);
+      // Split [start, end) across consecutive ranges. A token that straddles
+      // text-node boundaries (kanji inside a wrapper span, okurigana outside)
+      // becomes one segment per node, each carrying the full word metadata.
+      const segs = [];
+      let pos = start;
+      let segIdx = rangeIdx;
+      let ok = true;
+      while (pos < end) {
+        const sr = ranges[segIdx];
+        if (!sr || pos < sr.start) { ok = false; break; } // gap mid-token: bail
+        const segEnd = Math.min(end, sr.end);
+        if (segEnd <= pos) { ok = false; break; } // defensive: no empty segments
+        segs.push({ node: sr.node, start: pos - sr.start, end: segEnd - sr.start, from: pos, to: segEnd });
+        pos = segEnd;
+        if (pos < end) segIdx++;
+      }
+      if (!ok || segs.length === 0) continue;
+      rangeIdx = segIdx; // last range may still hold the next word's start
+
+      const multi = segs.length > 1;
+      for (const seg of segs) {
+        const bucket = buckets.get(seg.node) || [];
+        bucket.push({
+          surface: assembled.slice(seg.from, seg.to), // exact node-local slice
+          start: seg.start,
+          end: seg.end,
+          word: multi ? surface : undefined, // full word for dataset/tooltip
+          reading: w.reading,
+          romaji: w.romaji,
+          english: w.english,
+          type: w.type
+        });
+        buckets.set(seg.node, bucket);
+      }
     }
 
     // Sentence-ending dots → hoverable boundary spans showing the whole-message
@@ -156,7 +218,7 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
       tokens.sort((a, b) => a.start - b.start);
       const hasWord = tokens.some(t => !t.isBoundary);
       try {
-        wrapJapaneseTokensInTextNode(node, tokens);
+        wrapJapaneseTokensInTextNode(node, tokens, { decorateNativeRuby });
         if (hasWord) painted = true;
       } catch (e) {
         debugLog('AUTO-LITE-CORE', 'wrap failed:', e?.message);
