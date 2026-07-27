@@ -28,7 +28,13 @@ const URL_POLL_MS = 1500;
 const IO_ROOT_MARGIN = '200px';               // analyze blocks just before they enter view
 
 const processed = new WeakSet();               // blocks already observed/handled
-const retried = new WeakSet();                 // blocks given one post-drift retry
+// Separate retry budgets. These are different failures with different causes —
+// a cold-start analyze timeout and a DOM edit landing mid-paint — and sharing one
+// budget stranded any block that hit both: whichever came first spent the retry,
+// and the second left the block permanently uncoloured with no marker for a
+// rescan to clear.
+const analyzeRetried = new WeakSet();          // blocks given one post-failure retry
+const paintRetried = new WeakSet();            // blocks given one post-drift retry
 // The IntersectionObserver holds observed blocks strongly and only releases
 // them when they scroll into view. On an infinite-scroll or virtualized page,
 // blocks recycled away before ever intersecting would be retained (with their
@@ -142,8 +148,8 @@ async function analyzeAndPaint(block) {
     // clearMarkedAncestor to clear, so no later rescan would ever revisit it.
     // The offscreen document closes when idle, so the first analyze after a quiet
     // spell failing is routine rather than exceptional.
-    if (!retried.has(block)) {
-      retried.add(block);
+    if (!analyzeRetried.has(block)) {
+      analyzeRetried.add(block);
       processed.delete(block);
       setTimeout(() => enqueueBlock(block), RESCAN_DEBOUNCE_MS);
     }
@@ -168,8 +174,8 @@ async function analyzeAndPaint(block) {
 
   // If the DOM drifted between assemble and paint, paintBlockTokens marks but
   // doesn't wrap. Give the block one retry so transient drift still colorizes.
-  if (!painted && !retried.has(block)) {
-    retried.add(block);
+  if (!painted && !paintRetried.has(block)) {
+    paintRetried.add(block);
     delete block.dataset[UNIVERSAL_MARKER];
     processed.delete(block);
     setTimeout(() => enqueueBlock(block), RESCAN_DEBOUNCE_MS);

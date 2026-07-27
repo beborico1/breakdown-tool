@@ -1706,6 +1706,14 @@ html.kaigi-hide-translation .gcwb-inline-translation { display: none; }
   transition: border-bottom-color 120ms ease, background-color 120ms ease;
 }
 
+/* Set by the token mapper only where two coloured words abut with nothing
+   between them. Japanese is written without spaces, so a hairline gap is what
+   makes word boundaries readable — but it has to be margin, not a space
+   character, or Ctrl+F and copy-paste see text the page never contained. */
+.gcwb-auto-word.gcwb-abut {
+  margin-inline-start: 0.09em;
+}
+
 .gcwb-auto-word:hover {
   border-bottom-color: rgba(187, 134, 252, 0.55);
   background-color: rgba(187, 134, 252, 0.08);

@@ -155,7 +155,7 @@ try {
       supPainted: !!el.querySelector('sup .gcwb-auto-word'),
       supText: el.querySelector('sup').textContent,
       marker: el.dataset.gcwbUniv,
-      visible: el.textContent.replace(/ /g, ''),
+      visible: el.textContent,
     };
   });
   assertEq('painted', t6.painted, true);
@@ -189,10 +189,11 @@ try {
   assertEq('two segments for 大切', t7.taisetsuTexts, ['大', '切']);
   assertEq('これ stays one span', t7.koreCount, 1);
 
-  // ---- T8: mapper word field + thin space
+  // ---- T8: mapper word field + abutting-token separation
   console.log('\nT8: wrapJapaneseTokensInTextNode word field');
   const t8 = await page.evaluate(() => {
     const el = document.getElementById('t8');
+    const before = el.textContent;
     const textNode = el.firstChild;
     mapper.wrapJapaneseTokensInTextNode(textNode, [
       { surface: 'ことば', word: '言葉', start: 0, end: 3, reading: 'ことば', romaji: 'kotoba', english: 'word', type: 'noun' },
@@ -202,12 +203,18 @@ try {
     return {
       words: spans.map(s => s.dataset.word),
       texts: spans.map(s => s.textContent),
+      before,
       joined: el.textContent,
+      abut: spans.map(s => s.classList.contains('gcwb-abut')),
     };
   });
   assertEq('dataset.word uses t.word then falls back to surface', t8.words, ['言葉', 'です']);
   assertEq('visible text stays the node slices', t8.texts, ['ことば', 'です']);
-  assertEq('separator space still inserted between abutting words', t8.joined, 'ことば です');
+  // Separation is a CSS margin now. Injecting a real space broke Ctrl+F across a
+  // token boundary and put spaces into anything the user copied.
+  assertEq('painting does not alter the page text', t8.joined, t8.before);
+  assertEq('no separator character is inserted', t8.joined, 'ことばです');
+  assertEq('the abutting token is marked for CSS spacing', t8.abut, [false, true]);
 
   // ---- T9: Redmine-shaped default path with translation boundary
   console.log('\nT9: default opts keep nested p in one unit; boundary span works');
@@ -584,9 +591,8 @@ try {
     const before = document.getElementById('t23').textContent;
     window.paintClauseFixture('t23');
     const el = document.getElementById('t23');
-    // Thin spaces are the painter's own separators and are stripped the same way
-    // T6 does; nothing else may differ.
-    const after = el.textContent.replace(/ /g, '');
+    // Painting must not change the page's text at all — separation is CSS.
+    const after = el.textContent;
     return { before, after, dots: window.dotsOf('t23') };
   });
   assertEq('textContent is byte-identical after painting', t23.after, t23.before);

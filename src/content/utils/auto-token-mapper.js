@@ -1,7 +1,13 @@
 import { getWordTypeClass } from './text.js';
 import { createAutoBoundarySpan } from './highlight.js';
 
-const THIN_SPACE = ' ';
+// Adjacent tokens are separated visually by a CSS margin, never by an inserted
+// character. A real space in the DOM changes the page's own text: Ctrl+F stops
+// matching a phrase that spans two coloured words, and copying a sentence yields
+// text with spaces the site never had. The class is set only where the offsets
+// prove the two tokens abut, which a `.gcwb-auto-word + .gcwb-auto-word` rule
+// could not do — the sibling combinator ignores the punctuation between them.
+const ABUT_CLASS = 'gcwb-abut';
 
 // Resolve the annotation group owned by this ruby-base branch before wrapping
 // mutates its text nodes. Whitespace/comments and <rp> fallbacks do not break a
@@ -154,10 +160,9 @@ export function wrapJapaneseTokensInTextNode(textNode, tokens, opts = {}) {
       });
     }
 
-    // Insert thin space if previous token ended exactly where this one starts.
-    if (prevEnd === t.start) {
-      parent.insertBefore(document.createTextNode(THIN_SPACE), currentNode);
-    }
+    // Separate this token from the previous one when they abut, without adding
+    // any character to the page's text.
+    if (prevEnd === t.start) span.classList.add(ABUT_CLASS);
 
     parent.replaceChild(span, currentNode);
 
