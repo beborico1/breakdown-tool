@@ -1,5 +1,5 @@
 import { debugLog } from '../core/debug.js';
-import { getCachedWords } from '../core/word-cache.js';
+import { getCachedWords, getWordCacheSize } from '../core/word-cache.js';
 import { inlineBreakdownState } from '../core/state.js';
 import { collectTextNodes, applyHighlightsToTextNode } from '../utils/highlight.js';
 import { getGmailMessageBodies } from './message-finder.js';
@@ -11,6 +11,10 @@ import { getGmailMessageBodies } from './message-finder.js';
 
 // Track highlighted messages to avoid re-processing
 const highlightedMessages = new WeakMap();
+
+// messageEl -> word-cache size when it last yielded no matches, so a message
+// with nothing to highlight is not re-walked until the cache changes.
+const noMatchAtCacheSize = new WeakMap();
 
 /**
  * Highlight known words in a Gmail message body element
@@ -27,6 +31,13 @@ export function highlightGmailMessage(messageEl) {
   // Skip if already highlighted
   if (highlightedMessages.get(messageEl)) {
     debugLog('GMAIL-HIGHLIGHT', 'Skipping - already highlighted');
+    return;
+  }
+
+  // A message that matched nothing was re-walked on every pass, because only
+  // successful highlights were recorded. The answer can only change once new
+  // words are learned, which invalidates every memo at once.
+  if (noMatchAtCacheSize.get(messageEl) === getWordCacheSize()) {
     return;
   }
 
@@ -62,6 +73,7 @@ export function highlightGmailMessage(messageEl) {
   }
 
   if (totalMatches === 0) {
+    noMatchAtCacheSize.set(messageEl, getWordCacheSize());
     debugLog('GMAIL-HIGHLIGHT', 'No cached words found in message');
     return;
   }

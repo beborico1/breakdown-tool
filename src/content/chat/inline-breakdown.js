@@ -93,9 +93,11 @@ export async function showInlineBreakdown(messageEl, text) {
       return;
     }
 
-    // Cache the result
+    // Cache the result. contentKey is declared out here so the state below can
+    // carry it and restoreOriginalContent can release the cache pin.
+    let contentKey = null;
     if (breakdownData && !breakdownData.truncated) {
-      const contentKey = generateContentKey('GCWB', text, getTimeBucket());
+      contentKey = generateContentKey('GCWB', text, getTimeBucket());
       translationCache.set(contentKey, {
         translatedText: breakdownData.translation,
         breakdownData: breakdownData,
@@ -115,7 +117,8 @@ export async function showInlineBreakdown(messageEl, text) {
     }
 
     // Update state with breakdown data. contentKey is carried so
-    // restoreOriginalContent can release the translationCache pin it took.
+    // restoreOriginalContent can release the translationCache pin it took;
+    // null when nothing was cached, and the release is guarded on it.
     inlineBreakdownState.set(messageEl, {
       ...currentState,
       breakdownData: breakdownData,
