@@ -1736,12 +1736,48 @@ html.kaigi-light .gcwb-auto-boundary:hover {
   background-color: rgba(99, 40, 137, 0.1);
 }
 
+/* A synthetic dot stands in for a closing mark the text never had. It owns no
+   text node, so the glyph comes from ::after and is excluded from selection:
+   Chrome copies generated content into a manual selection, and the page's own
+   text must survive a copy unchanged. */
+.gcwb-auto-boundary[data-gcwb-synth] {
+  display: inline-block;
+  min-width: 0.5em;
+  user-select: none;
+  -webkit-user-select: none;
+  border-bottom: none;
+}
+
+.gcwb-auto-boundary[data-gcwb-synth]::after {
+  content: '\00B7';
+  opacity: 0.55;
+}
+
+.gcwb-auto-boundary[data-gcwb-synth]:hover::after {
+  opacity: 1;
+}
+
+/* Still resolving the clause: dim the placeholder so it reads as pending. */
+.gcwb-boundary-meaning.gcwb-boundary-pending {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+/* A coloured native reading answers a hover with its base word. */
+.gcwb-ruby-reading {
+  cursor: help;
+}
+
 /* When the user hides translations, a boundary dot carries no information:
    make it inert so its hover tooltip can't fire (mirrors hiding the panel). */
 html.kaigi-hide-translation .gcwb-auto-boundary {
   border-bottom-color: transparent;
   cursor: text;
   pointer-events: none;
+}
+
+html.kaigi-hide-translation .gcwb-auto-boundary[data-gcwb-synth]::after {
+  content: none;
 }
 
 .nF6pT.gcwb-auto-bubble,

@@ -70,15 +70,16 @@ export function isOfflineNlpEnabledSync() {
 /**
  * Round-trip a request to the offscreen NLP pipeline via the service worker.
  * Returns the offscreen handler's response object: { ok, result?, text?, error? }.
+ * `timeoutMs` lets an interactive caller give up sooner than a batch one.
  */
-function nlpRequest(op, text) {
+function nlpRequest(op, text, timeoutMs = SW_PROXY_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       reject(new Error('NLP proxy timeout'));
-    }, SW_PROXY_TIMEOUT_MS);
+    }, timeoutMs);
     try {
       chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op, text }, (response) => {
         if (settled) return;
@@ -101,6 +102,43 @@ function nlpRequest(op, text) {
       reject(e);
     }
   });
+}
+
+/** Interactive budget: a hover should give up long before the batch timeout. */
+const CLAUSE_TRANSLATE_TIMEOUT_MS = 15000;
+
+/**
+ * Translate Japanese to English with the on-device translator only.
+ *
+ * The 'translate' op resolves entirely inside the offscreen document, so this
+ * never reaches a network model and needs no offline-NLP gate. Returns '' on any
+ * failure so a caller can render a fallback instead of handling an error.
+ * @param {string} text
+ * @param {number} [timeoutMs]
+ * @returns {Promise<string>}
+ */
+export async function translateJapanese(text, timeoutMs = CLAUSE_TRANSLATE_TIMEOUT_MS) {
+  if (!text || !text.trim()) return '';
+  try {
+    const response = await nlpRequest('translate', text, timeoutMs);
+    return response.ok ? (response.text || '') : '';
+  } catch (e) {
+    debugLog('API', 'clause translate failed:', e?.message);
+    return '';
+  }
+}
+
+/**
+ * Ask the offscreen document to load the tokenizer and start the translator
+ * model download. Fire and forget: callers use this to hide a cold start, not to
+ * sequence work.
+ */
+export function warmupNlp() {
+  try {
+    chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'warmup', text: '' }, () => {
+      void chrome.runtime.lastError; // a closed port here is not worth reporting
+    });
+  } catch { /* non-extension context */ }
 }
 
 /**

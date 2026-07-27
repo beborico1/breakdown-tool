@@ -45,11 +45,34 @@ function findRubyReadings(textNode) {
   return readings;
 }
 
-function decorateRubyReadings(readings, typeClass, isAltTone) {
+/**
+ * Colour a base word's native readings to match it, and give them the same
+ * tooltip data as the base.
+ *
+ * An <rt> is excluded from analysis, so it never becomes a word span, but it is
+ * coloured like one and therefore reads as interactive. Copying the base's data
+ * lets the tooltip answer a hover over the furigana with the base word, which is
+ * what the reader is asking about. Every word selector in the codebase matches
+ * on class, so an <rt> carrying data-word is still never treated as a word by
+ * the Anki or context-menu paths.
+ *
+ * @param {Element[]} readings
+ * @param {string} typeClass
+ * @param {boolean} isAltTone
+ * @param {{word?: string, reading?: string, romaji?: string, english?: string}} [data]
+ */
+function decorateRubyReadings(readings, typeClass, isAltTone, data) {
   for (const reading of readings) {
     if (reading.classList.contains('gcwb-ruby-reading')) continue;
     reading.classList.add('gcwb-ruby-reading', `gcwb-type-${typeClass}`);
     if (isAltTone) reading.classList.add('gcwb-tone-alt');
+    if (data?.word) {
+      reading.dataset.word = data.word;
+      reading.dataset.reading = data.reading || '';
+      reading.dataset.romaji = data.romaji || '';
+      reading.dataset.english = data.english || '';
+      reading.dataset.type = typeClass;
+    }
   }
 }
 
@@ -123,7 +146,12 @@ export function wrapJapaneseTokensInTextNode(textNode, tokens, opts = {}) {
     span.appendChild(document.createTextNode(t.surface));
 
     if (decorateNativeRuby) {
-      decorateRubyReadings(rubyReadings, typeClass, tone === 1);
+      decorateRubyReadings(rubyReadings, typeClass, tone === 1, {
+        word: t.word || t.surface,
+        reading: t.reading,
+        romaji: t.romaji,
+        english: t.english,
+      });
     }
 
     // Insert thin space if previous token ended exactly where this one starts.

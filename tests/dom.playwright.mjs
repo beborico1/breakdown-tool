@@ -52,6 +52,9 @@ async function loadFixture() {
     window.bw = await import('/src/content/shared/block-walker.js');
     window.core = await import('/src/content/shared/auto-lite-core.js');
     window.mapper = await import('/src/content/utils/auto-token-mapper.js');
+    // Chrome-free: debug.js guards its chrome.storage access, so the tooltip's
+    // target test can be exercised on a plain page.
+    window.tip = await import('/src/content/chat/word-tooltip.js');
   });
 }
 
@@ -650,6 +653,59 @@ try {
   assertEq('the anchor text earns a dot', t27.dots.length, 1);
   assertEq('no dot remains inside the anchor', t27.insideAnchor, 0);
   assertEq('the dot is re-parented to the block', t27.dots[0].parentId, 't27');
+
+  // ---- T28: a coloured native reading is hoverable and answers with its base
+  console.log('\nT28: native ruby readings are hoverable');
+  const t28 = await page.evaluate(() => {
+    // #t16 was painted with decorateNativeRuby in T16.
+    const reading = document.querySelector('#t16rain > rt');
+    const base = document.querySelector('#t16rain > .gcwb-auto-word');
+    return {
+      readingWord: reading?.dataset.word ?? null,
+      readingEnglish: reading?.dataset.english ?? null,
+      baseWord: base?.dataset.word ?? null,
+      isTarget: window.tip.isTooltipTarget(reading),
+      // The reading must stay out of every class-based word selector.
+      countsAsWord: reading?.classList.contains('gcwb-auto-word'),
+      readingTargets: document.querySelectorAll('#t16 rt.gcwb-auto-word').length,
+      rpIsTarget: window.tip.isTooltipTarget(document.querySelector('#t18 rp')),
+    };
+  });
+  assertEq('the reading carries its base word', t28.readingWord, t28.baseWord);
+  assertEq('the reading carries the base gloss', t28.readingEnglish, 'x');
+  assertEq('the tooltip accepts the reading', t28.isTarget, true);
+  assertEq('the reading is still not a word span', t28.countsAsWord, false);
+  assertEq('no rt was wrapped as a word', t28.readingTargets, 0);
+  assertEq('an rp fallback is not a tooltip target', t28.rpIsTarget, false);
+
+  // ---- T29: a zero-length boundary token wraps without disturbing the text
+  console.log('\nT29: zero-length synthetic token is safe');
+  const t29 = await page.evaluate(() => {
+    const el = document.getElementById('t29');
+    const node = el.firstChild;
+    const before = el.textContent;
+    let threw = null;
+    try {
+      window.mapper.wrapJapaneseTokensInTextNode(node, [
+        { surface: 'ことば', start: 0, end: 3, type: 'noun', english: 'word' },
+        { surface: '', start: 3, end: 3, isBoundary: true, synthetic: true, clause: 'ことば' },
+      ]);
+    } catch (e) {
+      threw = String(e && e.name || e);
+    }
+    const dot = el.querySelector('.gcwb-auto-boundary');
+    return {
+      threw,
+      before,
+      after: el.textContent,
+      dotIsLast: dot === el.lastElementChild,
+      dotChildren: dot ? dot.childNodes.length : -1,
+    };
+  });
+  assertEq('wrapping a zero-length token does not throw', t29.threw, null);
+  assertEq('the visible text is unchanged', t29.after, t29.before);
+  assertEq('the dot is the trailing element', t29.dotIsLast, true);
+  assertEq('the dot holds no children', t29.dotChildren, 0);
 } finally {
   await browser.close();
   server.close();

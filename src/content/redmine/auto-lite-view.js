@@ -39,6 +39,10 @@ export function renderRedmineAutoLite(blockEl, analyzerText, breakdownData) {
   paintBlockTokens(blockEl, analyzerText, breakdownData.words, {
     marker: 'gcwbAutoLite',
     excludeTags: REDMINE_EXCLUDE_TAGS,
+    boundaryDots: true,
+    marks: 'ja',
+    // Seeds the dot only when the block turns out to be a single clause; with
+    // more, each dot resolves its own clause on hover.
     translation,
   });
 

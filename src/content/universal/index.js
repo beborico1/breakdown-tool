@@ -8,6 +8,7 @@ import { findJapaneseBlocks, nearestBlockRoot, SKIP_SUBTREE_TAGS } from '../shar
 import { collectBlockTextNodes, paintBlockTokens } from '../shared/auto-lite-core.js';
 import { createAnalyzeQueue } from '../shared/analyze-queue.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
+import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
 
 /**
  * Universal (all-sites) Japanese colorizer.
@@ -137,6 +138,15 @@ async function analyzeAndPaint(block) {
     }
   } catch (e) {
     debugLog('UNIVERSAL', 'analyze failed:', e?.message);
+    // Leaving the block in `processed` would strand it: it carries no marker for
+    // clearMarkedAncestor to clear, so no later rescan would ever revisit it.
+    // The offscreen document closes when idle, so the first analyze after a quiet
+    // spell failing is routine rather than exceptional.
+    if (!retried.has(block)) {
+      retried.add(block);
+      processed.delete(block);
+      setTimeout(() => enqueueBlock(block), RESCAN_DEBOUNCE_MS);
+    }
     return;
   }
   if (!words.length) return;
@@ -147,6 +157,10 @@ async function analyzeAndPaint(block) {
     painted = paintBlockTokens(block, assembled, words, {
       marker: UNIVERSAL_MARKER,
       excludeTags: SKIP_SUBTREE_TAGS,
+      // No block translation: dots carry their clause and resolve it on hover,
+      // so paint stays a tokenize-only round trip.
+      boundaryDots: true,
+      marks: 'ja',
       stopAtNestedBlocks: true,
       decorateNativeRuby: true,
     });
@@ -305,7 +319,7 @@ function setupObservers() {
 function start() {
   if (started) return;
   started = true;
-  setupWordTooltip();   // self-guards against double-binding
+  setupWordTooltip({ translateClause, warmClauseTranslator });   // self-guards against double-binding
   setupObservers();
   scan();
   // Block detection reads computed display; stylesheets still loading can

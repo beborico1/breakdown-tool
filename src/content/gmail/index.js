@@ -5,6 +5,7 @@ import { showInlineBreakdown } from '../chat/inline-breakdown.js';
 import { showCustomContextMenu } from '../chat/context-menu.js';
 import { highlightGmailMessage, highlightAllGmailMessages, clearGmailHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
+import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
 
 /**
  * Handle right-click on Gmail message bodies
@@ -160,7 +161,7 @@ export async function initializeGmail() {
   const setup = () => {
     setupGmailContextMenu();
     setupGmailAutoHighlighting();
-    setupWordTooltip();
+    setupWordTooltip({ translateClause, warmClauseTranslator });
     setupGmailNavigationWatcher();
 
     // Listen for content-restored events from inline-breakdown

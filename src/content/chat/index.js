@@ -4,6 +4,7 @@ import { showCustomContextMenu } from './context-menu.js';
 import { initWordCache } from '../core/word-cache.js';
 import { highlightKnownWords, highlightAllMessages, clearHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from './word-tooltip.js';
+import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
 import { translateToJapaneseWithGemini } from '../core/api.js';
 import { maybeAutoAnalyzeChat, watchOfflineToggle } from '../core/auto-analyze.js';
 import { initAnkiQuickAdd } from './anki-quick-add.js';
@@ -260,7 +261,7 @@ export async function initializeGoogleChat() {
   const setup = () => {
     setupChatContextMenu();
     setupAutoHighlighting();
-    setupWordTooltip();
+    setupWordTooltip({ translateClause, warmClauseTranslator });
     initAnkiQuickAdd();
 
     // Cache selection text on selection change (popup steals focus)
