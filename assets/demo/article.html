@@ -1,0 +1,89 @@
+<!doctype html>
+<!--
+  Demo page for the store screenshots. Original prose written for this purpose, so the
+  listing shows the extension working on a real-looking article without putting anyone
+  else's content or branding in it.
+
+  Two constraints on the markup, both load-bearing:
+
+  1. It must NOT look like Redmine to the detector in
+     src/content/redmine/message-finder.js — body class matching /controller-\w+/ AND
+     /action-\w+/ plus #wrapper or #top-menu. If it did, isBuiltInSurface() would
+     return true and the all-sites colorizer would silently skip the page.
+  2. Paragraphs must be genuine block elements so src/content/shared/block-walker.js
+     treats each as its own unit.
+
+  Not shipped: assets/demo/ is outside the packaging allowlist.
+-->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>日本語で読む — 秋の京都</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0;
+      background: #fdfdfb;
+      color: #1f2328;
+      font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+      line-height: 2.05;
+    }
+    .masthead {
+      border-bottom: 1px solid #e6e6e2;
+      padding: 14px 0;
+      background: #fff;
+    }
+    .masthead .inner,
+    main {
+      max-width: 660px;
+      margin: 0 auto;
+      padding: 0 28px;
+    }
+    .masthead strong {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      letter-spacing: .04em;
+      color: #632889;
+    }
+    main { padding-top: 30px; padding-bottom: 60px; }
+    h1 {
+      font-size: 30px;
+      line-height: 1.5;
+      margin: 0 0 6px;
+      font-weight: 600;
+    }
+    .byline {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+      color: #6b7177;
+      margin: 0 0 26px;
+    }
+    p { font-size: 17.5px; margin: 0 0 20px; }
+    h2 {
+      font-size: 19px;
+      margin: 34px 0 14px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="masthead"><div class="inner"><strong>よみもの</strong></div></div>
+  <main>
+    <h1>秋の京都を歩いて、静かな朝に気づいたこと</h1>
+    <p class="byline">2026年10月14日</p>
+
+    <p>朝の六時に宿を出ると、通りにはまだ人がほとんどいませんでした。空気が冷たくて、息が白く見えます。京都の秋は、こうして静かに始まります。</p>
+
+    <p>川に沿って北へ歩くと、右手に古い橋が見えてきました。橋の上で立ち止まって、水の音を聞いていました。都会の音がまったくしないので、自分の足音だけがよく聞こえます。</p>
+
+    <h2>店が開くまでの一時間</h2>
+
+    <p>七時になると、小さなパン屋が店を開けました。中に入ると、焼きたての匂いがして、思わず二つも買ってしまいました。店の人が「今日は寒いですね」と話しかけてくれました。</p>
+
+    <p>公園のベンチに座って、買ったパンを食べました。木の葉が赤や黄色に変わっていて、風が吹くたびに少しずつ落ちてきます。誰も急いでいない朝でした。</p>
+
+    <p>旅の楽しみは、有名な場所を見ることだけではないと思います。知らない町で、ただゆっくり歩く時間そのものが、いちばん心に残るのかもしれません。</p>
+  </main>
+</body>
+</html>

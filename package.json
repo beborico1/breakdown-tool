@@ -9,6 +9,7 @@
     "build:code": "rollup -c",
     "package": "node scripts/package.mjs",
     "icons": "node scripts/make-icons.mjs",
+    "screenshots": "node scripts/make-screenshots.mjs",
     "watch": "rollup -c -w",
     "test:nlp": "node tests/nlp.node.test.mjs",
     "test:unit": "node tests/word-cache.node.test.mjs && node tests/frequency-store.node.test.mjs && node tests/jmdict-index.node.test.mjs && node tests/clauses.node.test.mjs && node tests/metrics.node.test.mjs",
