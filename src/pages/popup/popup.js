@@ -551,6 +551,55 @@ async function registerUniversalScript() {
   }]);
 }
 
+/** Pages the extension can never be injected into. */
+const UNINJECTABLE_URL_RE = /^(chrome|edge|about|devtools|chrome-extension|moz-extension|view-source):|^https:\/\/chromewebstore\.google\.com\//;
+
+/**
+ * Colorize the tab the user is looking at, for this visit only.
+ *
+ * Uses activeTab, so it needs no host permission and grants nothing lasting: the
+ * user gets to see what the feature does before deciding to turn it on
+ * everywhere, which Chrome requires an explicit grant for. Re-injection is safe
+ * because the content bundle guards on window.__kaigiLoaded.
+ * @returns {Promise<boolean>} whether injection ran
+ */
+async function colorizeActiveTab() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url || UNINJECTABLE_URL_RE.test(tab.url)) return false;
+    await chrome.scripting.insertCSS({
+      target: { tabId: tab.id, allFrames: true },
+      files: ['src/content/content.css'],
+    });
+    // Runs in the isolated world, the same one the content bundle uses, so the
+    // gate below sees this flag.
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: () => { window.__kaigiUniversalTrial = true; },
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      files: ['dist/content.js'],
+    });
+    return true;
+  } catch (err) {
+    console.warn('[popup] colorize this page failed:', err?.message);
+    return false;
+  }
+}
+
+const colorizeThisPageBtn = document.getElementById('colorizeThisPage');
+if (colorizeThisPageBtn) {
+  colorizeThisPageBtn.addEventListener('click', async () => {
+    colorizeThisPageBtn.disabled = true;
+    const ok = await colorizeActiveTab();
+    colorizeThisPageBtn.disabled = false;
+    showStatus(ok
+      ? 'Colorizing this page. Japanese text will color as it loads.'
+      : 'This page cannot be colorized.', ok);
+  });
+}
+
 if (universalModeToggle) {
   chrome.storage.sync.get(['universalMode'], (r) => {
     universalModeToggle.checked = r?.universalMode === true;
@@ -574,7 +623,12 @@ if (universalModeToggle) {
         return;
       }
       await chrome.storage.sync.set({ universalMode: true });
-      showStatus('Enabled. Reload open tabs to start colorizing.', true);
+      // The registration only applies to future navigations, so colorize the tab
+      // the user is looking at now instead of asking them to reload it.
+      const injected = await colorizeActiveTab();
+      showStatus(injected
+        ? 'On. This page is colorizing now; reload other tabs.'
+        : 'Enabled. Reload open tabs to start colorizing.', true);
     } else {
       try {
         await chrome.scripting.unregisterContentScripts({ ids: [UNIVERSAL_SCRIPT_ID] });

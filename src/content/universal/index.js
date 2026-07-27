@@ -334,19 +334,26 @@ function start() {
 
 /**
  * Initialize the universal colorizer. No-op on built-in surfaces, cross-origin
- * subframes, when the toggle is off, or when the offline NLP pipeline is off.
+ * subframes, when neither the toggle nor a one-page trial is on, or when the
+ * offline NLP pipeline is off.
  */
 export async function initializeUniversal() {
   if (isBuiltInSurface() || !isAllowedFrame()) return;
+
+  // A one-page trial injected from the popup via activeTab. Chrome requires an
+  // explicit grant before the colorizer can run everywhere, so this lets the
+  // user see what it does on the page in front of them first. It lasts only
+  // until this page navigates.
+  const trial = window.__kaigiUniversalTrial === true;
 
   let universalMode = false;
   try {
     const r = await chrome.storage.sync.get('universalMode');
     universalMode = r?.universalMode === true;
   } catch {
-    return;
+    if (!trial) return;
   }
-  if (!universalMode) return;
+  if (!universalMode && !trial) return;
 
   try {
     if (!(await isOfflineNlpEnabled())) {

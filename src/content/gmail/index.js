@@ -6,6 +6,7 @@ import { showCustomContextMenu } from '../chat/context-menu.js';
 import { highlightGmailMessage, highlightAllGmailMessages, clearGmailHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
 import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
+import { maybeAutoAnalyzeGmail, watchOfflineToggle } from '../core/auto-analyze.js';
 
 /**
  * Handle right-click on Gmail message bodies
@@ -137,6 +138,7 @@ function setupGmailNavigationWatcher() {
     debugLog('GMAIL', 'Hash changed, re-highlighting after delay');
     setTimeout(() => {
       highlightAllGmailMessages();
+      maybeAutoAnalyzeGmail();
     }, 500);
   });
 }
@@ -163,6 +165,8 @@ export async function initializeGmail() {
     setupGmailAutoHighlighting();
     setupWordTooltip({ translateClause, warmClauseTranslator });
     setupGmailNavigationWatcher();
+    maybeAutoAnalyzeGmail();
+    watchOfflineToggle(() => maybeAutoAnalyzeGmail());
 
     // Listen for content-restored events from inline-breakdown
     document.addEventListener('gcwb-content-restored', (event) => {

@@ -607,3 +607,26 @@ select.input {
   color: #c5221f;
 }
 
+
+/* Colorize-this-page card. Sits above the caption tools because it is the one
+   action that works on whatever the user currently has open, and the all-sites
+   toggle it points at cannot be on by default: Chrome requires an explicit
+   grant for all-origins host access. */
+.promo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d7c4f0;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #faf6ff 0%, #f3ebfd 100%);
+}
+
+.promo-card .setting-title {
+  color: #4a2a75;
+}
+
+.promo-footnote {
+  font-size: 10px;
+  color: #7a6a90;
+}

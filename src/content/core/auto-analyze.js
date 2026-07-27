@@ -7,12 +7,15 @@ import { extractChatMessageText, findChatMessageElement } from '../chat/message-
 import { renderAutoLiteView } from '../chat/auto-lite-view.js';
 import { getRedmineTextBlocks, extractRedmineText } from '../redmine/message-finder.js';
 import { renderRedmineAutoLite, assembleRedmineText } from '../redmine/auto-lite-view.js';
+import { getGmailMessageBodies } from '../gmail/message-finder.js';
+import { renderGmailAutoLite, assembleGmailText } from '../gmail/auto-lite-view.js';
 
 const REDMINE_MAX_LEN = 6000;
+const GMAIL_MAX_LEN = 6000;
 
 const processed = new WeakSet();
 const pendingText = new WeakMap();
-const pendingMode = new WeakMap(); // 'chat-lite' | 'redmine-lite'
+const pendingMode = new WeakMap(); // 'chat-lite' | 'redmine-lite' | 'gmail-lite'
 let observer = null;
 
 // An IntersectionObserver holds its targets strongly, and a target is only
@@ -77,6 +80,15 @@ function ensureObserver() {
             renderRedmineAutoLite(el, assembled, breakdown);
           })
           .catch((e) => debugLog('AUTO-ANALYZE', 'redmine lite failed:', e?.message));
+      } else if (mode === 'gmail-lite') {
+        const assembled = assembleGmailText(el);
+        if (!assembled || !hasJapanese(assembled)) continue;
+        analyzeJapaneseWithGemini(assembled)
+          .then((breakdown) => {
+            if (!breakdown?.words?.length) return;
+            renderGmailAutoLite(el, assembled, breakdown);
+          })
+          .catch((e) => debugLog('AUTO-ANALYZE', 'gmail lite failed:', e?.message));
       } else {
         try {
           showInlineBreakdown(el, text);
@@ -123,6 +135,23 @@ export async function maybeAutoAnalyzeRedmine() {
     if (!hasJapanese(text)) continue;
     if (text.length > REDMINE_MAX_LEN) continue;
     enqueue(el, text, 'redmine-lite');
+  }
+}
+
+/**
+ * Paint Gmail message bodies. Without this Gmail only ever colored words the
+ * cache already knew, so a cold cache left nothing under the cursor and the
+ * hover tooltip appeared broken.
+ */
+export async function maybeAutoAnalyzeGmail() {
+  if (!(await isOfflineNlpEnabled())) return;
+  sweepDetachedTargets();
+  for (const el of getGmailMessageBodies()) {
+    if (processed.has(el)) continue;
+    const text = assembleGmailText(el);
+    if (!hasJapanese(text)) continue;
+    if (text.length > GMAIL_MAX_LEN) continue;
+    enqueue(el, text, 'gmail-lite');
   }
 }
 
