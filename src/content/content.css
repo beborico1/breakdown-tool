@@ -709,17 +709,21 @@
 
 /* Readability halo: on colored page backgrounds (e.g. a blue noun on a blue
    button) the POS color can collide with the background. A thin crisp white
-   outline (eight zero-blur 1px shadows) keeps the glyph edge visible without
-   making it look glowy; on white backgrounds it is invisible.
+   outline keeps the glyph edge visible without making it look glowy; on white
+   backgrounds it is invisible.
    Scoped to the in-page word spans (not .gcwb-type-*) so extension-owned
-   dark surfaces (popover, Meet overlay/captions) keep their current look. */
+   dark surfaces (popover, Meet overlay/captions) keep their current look.
+
+   Four cardinal shadows, not eight: every shadow is another full glyph raster,
+   paid per tile whenever colorized text is painted, and on a dense Japanese
+   page that is thousands of spans. The diagonals contribute almost nothing at
+   1px once the four cardinals are present. A -webkit-text-stroke would be one
+   pass instead of four, but a CSS stroke is centred on the glyph outline, so
+   half of it eats inward and closes up the counters on dense kanji at reading
+   sizes — which is the legibility this rule exists to protect. */
 .gcwb-auto-word,
 .gcwb-cached-word {
   text-shadow:
-    -1px -1px 0 rgba(255, 255, 255, 0.8),
-     1px -1px 0 rgba(255, 255, 255, 0.8),
-    -1px  1px 0 rgba(255, 255, 255, 0.8),
-     1px  1px 0 rgba(255, 255, 255, 0.8),
     -1px  0   0 rgba(255, 255, 255, 0.8),
      1px  0   0 rgba(255, 255, 255, 0.8),
      0   -1px 0 rgba(255, 255, 255, 0.8),

@@ -8,6 +8,9 @@ import { translateToJapaneseWithGemini } from '../core/api.js';
 import { maybeAutoAnalyzeChat, watchOfflineToggle } from '../core/auto-analyze.js';
 import { initAnkiQuickAdd } from './anki-quick-add.js';
 
+// Let a burst of DOM churn settle into one re-highlight pass.
+const HIGHLIGHT_DEBOUNCE_MS = 150;
+
 /**
  * Handle right-click on Google Chat messages
  * @param {MouseEvent} event - Context menu event
@@ -52,6 +55,7 @@ function setupAutoHighlighting() {
   watchOfflineToggle(() => maybeAutoAnalyzeChat());
 
   // Watch for new messages
+  let highlightTimer = null;
   const observer = new MutationObserver((mutations) => {
     let shouldHighlight = false;
 
@@ -70,11 +74,14 @@ function setupAutoHighlighting() {
     }
 
     if (shouldHighlight) {
-      // Small delay to let DOM settle
-      setTimeout(() => {
+      // Coalesce: a burst of mutations (loading a conversation, a run of
+      // incoming messages) used to schedule one full re-highlight per batch.
+      if (highlightTimer) return;
+      highlightTimer = setTimeout(() => {
+        highlightTimer = null;
         highlightAllMessages();
         maybeAutoAnalyzeChat();
-      }, 50);
+      }, HIGHLIGHT_DEBOUNCE_MS);
     }
   });
 

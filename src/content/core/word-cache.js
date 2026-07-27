@@ -283,6 +283,15 @@ export async function pruneWordCache() {
 }
 
 /**
+ * Number of cached words. O(1) — unlike getWordCacheStats, which scans every
+ * entry, so this is safe to call from a highlight pass.
+ * @returns {number}
+ */
+export function getWordCacheSize() {
+  return wordCache.size;
+}
+
+/**
  * Get cache statistics
  * @returns {{size: number, oldestEntry: number|null}}
  */

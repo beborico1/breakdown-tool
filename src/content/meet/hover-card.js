@@ -9,6 +9,10 @@ let hideTimer = null;
 const HIDE_DELAY_MS = 150;
 const VIEWPORT_PADDING = 8;
 
+// Surfaces that can contain colorized words — the only places a hit-test can
+// turn up anything.
+const CAPTION_SURFACE_SELECTOR = '.nMcdL, .segment-card, [data-mm-words-root]';
+
 let documentListenerInstalled = false;
 const registeredContainers = new WeakSet();
 let pendingFrame = false;
@@ -131,12 +135,18 @@ function processPointer() {
   const e = lastPointerEvent;
   if (!e) return;
 
-  // elementsFromPoint handles overlays; closest() rescues edge-clipped words
-  // where the hit-test point lands on a parent instead of the word span.
-  const wordEl =
-    getWordElAtPoint(e.clientX, e.clientY) ||
-    (e.target && e.target.closest && e.target.closest('.mm-word, .mm-boundary')) ||
-    null;
+  // Cheap check first: when the pointer really is over a word, the event target
+  // is inside it and no hit-test is needed. elementsFromPoint forces a layout,
+  // and this runs on every animation frame the mouse moves.
+  let wordEl = (e.target && e.target.closest && e.target.closest('.mm-word, .mm-boundary')) || null;
+
+  // The hit-test only rescues words sitting under an overlay or clipped at an
+  // edge, which can only happen over a caption surface or under an open
+  // popover. Anywhere else on the page there is nothing for it to find, so
+  // ordinary mouse movement no longer pays for a layout every frame.
+  if (!wordEl && (activePopover || e.target?.closest?.(CAPTION_SURFACE_SELECTOR))) {
+    wordEl = getWordElAtPoint(e.clientX, e.clientY);
+  }
 
   if (wordEl) {
     showWordPopover(wordEl);
@@ -149,7 +159,7 @@ function processPointer() {
   if (allEls.some(el => el?.classList?.contains('gcwb-word-popover'))) return;
 
   if (activeWordEl) {
-    const activeCaption = activeWordEl.closest('.nMcdL, .segment-card, [data-mm-words-root]');
+    const activeCaption = activeWordEl.closest(CAPTION_SURFACE_SELECTOR);
     if (activeCaption && allEls.some(el => activeCaption.contains(el))) return;
   }
 
