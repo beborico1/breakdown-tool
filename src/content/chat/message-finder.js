@@ -1,4 +1,4 @@
-import { debugLog } from '../core/debug.js';
+import { debugLog, isDebugEnabled } from '../core/debug.js';
 import { collectTextNodes } from '../utils/highlight.js';
 
 /**
@@ -140,7 +140,10 @@ export function findQuotedBlockContainer(messageEl) {
     }
   }
 
-  debugLog('GCWB-FIND', 'No quoted block detected; messageEl outerHTML:', messageEl.outerHTML.slice(0, 600));
+  // Serialising the subtree is the expensive part, so skip it unless logging is on.
+  if (isDebugEnabled()) {
+    debugLog('GCWB-FIND', 'No quoted block detected; messageEl outerHTML:', messageEl.outerHTML.slice(0, 600));
+  }
   return null;
 }
 

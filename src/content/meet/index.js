@@ -101,10 +101,15 @@ async function initializeObserver() {
  * Initialize Google Meet features
  */
 export function initializeGoogleMeet() {
-  if (location.hostname === 'meet.google.com') {
-    initAnkiQuickAdd();
-    attachAnkiContextMenu();
-  }
+  // Every sibling initializer bails on the wrong host (chat/index.js,
+  // gmail/index.js, redmine/index.js) — this one used to gate only the Anki
+  // helpers, so a document-wide MutationObserver running the caption pipeline,
+  // two intervals and several listeners were installed in every frame of every
+  // matched site. There are no Meet captions to find anywhere else.
+  if (location.hostname !== 'meet.google.com') return;
+
+  initAnkiQuickAdd();
+  attachAnkiContextMenu();
 
   // Initialize when DOM is ready
   if (document.readyState === 'loading') {

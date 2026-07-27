@@ -81,15 +81,16 @@ function setupRedmineContextMenu() {
 export async function initializeRedmine() {
   debugLog('REDMINE-INIT', `Document readyState: ${document.readyState}`);
 
-  // Initialize word cache from storage
-  await initWordCache();
-
   if (!isRedmine()) {
     debugLog('REDMINE-INIT', 'Not on Redmine, skipping initialization');
     return;
   }
 
   debugLog('REDMINE-INIT', 'Initializing Redmine features');
+
+  // Initialize word cache from storage (after the host check — loading it on
+  // sites that never highlight was a wasted storage read per frame)
+  await initWordCache();
 
   const setup = () => {
     setupRedmineContextMenu();

@@ -241,13 +241,14 @@ async function handleTranslateToJapaneseReplace() {
 export async function initializeGoogleChat() {
   debugLog('GCWB-INIT', `Document readyState: ${document.readyState}`);
 
-  // Initialize word cache from storage
-  await initWordCache();
-
   if (!isGoogleChat()) {
     debugLog('GCWB-INIT', 'Not on Google Chat, skipping');
     return;
   }
+
+  // Initialize word cache from storage (after the host check — loading it on
+  // sites that never highlight was a wasted storage read per frame)
+  await initWordCache();
 
   const setup = () => {
     setupChatContextMenu();

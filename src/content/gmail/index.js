@@ -146,15 +146,16 @@ function setupGmailNavigationWatcher() {
 export async function initializeGmail() {
   debugLog('GMAIL-INIT', `Document readyState: ${document.readyState}`);
 
-  // Initialize word cache from storage
-  await initWordCache();
-
   if (!isGmail()) {
     debugLog('GMAIL-INIT', 'Not on Gmail, skipping initialization');
     return;
   }
 
   debugLog('GMAIL-INIT', 'Initializing Gmail features');
+
+  // Initialize word cache from storage (after the host check — loading it on
+  // sites that never highlight was a wasted storage read per frame)
+  await initWordCache();
 
   const setup = () => {
     setupGmailContextMenu();

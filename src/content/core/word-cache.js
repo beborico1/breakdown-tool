@@ -9,6 +9,26 @@ import { debugLog } from './debug.js';
 // In-memory cache loaded from storage
 let wordCache = new Map();
 
+// Length of the longest matchable key. getCachedWords probes substrings of the
+// input text against the cache rather than scanning the cache against the text,
+// so it needs an upper bound on how far to look ahead from each position.
+// Maintained on insert; recomputed after a load or a prune.
+let maxKeyLen = 0;
+
+/** Whether a cache key can ever be matched by getCachedWords. */
+function isMatchableKey(word) {
+  return word.length > 0 && JAPANESE_CHAR_RE.test(word);
+}
+
+function noteKey(word) {
+  if (isMatchableKey(word) && word.length > maxKeyLen) maxKeyLen = word.length;
+}
+
+function recomputeMaxKeyLen() {
+  maxKeyLen = 0;
+  for (const word of wordCache.keys()) noteKey(word);
+}
+
 // Cache staleness threshold (30 days)
 const WORD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -19,25 +39,40 @@ const JAPANESE_CHAR_RE = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
 let saveTimeout = null;
 const SAVE_DEBOUNCE_MS = 1000;
 
+// Every site subsystem calls initWordCache() during startup, so a single frame
+// asks for the cache up to four times. They all populate the same module-level
+// Map, so the extra calls bought nothing but repeated storage round-trips, Map
+// rebuilds and prune passes. Memoize the load; callers keep awaiting it.
+let initPromise = null;
+
 /**
- * Initialize word cache from chrome.storage.local
+ * Initialize word cache from chrome.storage.local. Idempotent — concurrent and
+ * repeat callers share one load.
  * @returns {Promise<void>}
  */
-export async function initWordCache() {
+export function initWordCache() {
+  if (!initPromise) initPromise = loadWordCache();
+  return initPromise;
+}
+
+async function loadWordCache() {
   try {
     const result = await chrome.storage.local.get('wordCache');
     if (result.wordCache && typeof result.wordCache === 'object') {
       wordCache = new Map(Object.entries(result.wordCache));
+      recomputeMaxKeyLen();
       debugLog('WORD-CACHE', `Loaded ${wordCache.size} cached words`);
       // Prune stale entries on startup
       await pruneWordCache();
     } else {
       wordCache = new Map();
+      maxKeyLen = 0;
       debugLog('WORD-CACHE', 'Initialized empty word cache');
     }
   } catch (error) {
     debugLog('WORD-CACHE', 'Error loading word cache:', error.message);
     wordCache = new Map();
+    maxKeyLen = 0;
   }
 }
 
@@ -86,6 +121,7 @@ export function cacheWords(words) {
         (entry.english && !existing.english) ||
         (entry.reading && !existing.reading)) {
       wordCache.set(word.japanese, entry);
+      noteKey(word.japanese);
       addedCount++;
     } else {
       // Just update lastUsed timestamp
@@ -117,60 +153,68 @@ export function getCachedWord(japanese) {
 }
 
 /**
- * Find all known words in a text string
- * Uses a greedy longest-match approach
+ * Find all known words in a text string, longest match first.
+ *
+ * Candidates are found by probing substrings of `text` against the cache, not
+ * by scanning the whole cache against `text`. Cost is O(text.length x
+ * maxKeyLen) hash lookups — independent of how many words are cached, which
+ * matters because this runs once per text node during a highlight pass.
+ *
+ * Resolution is unchanged: longest words claim their span first, and a
+ * candidate overlapping an already-claimed position is dropped. Where two
+ * *different* words of equal length overlap, the earlier position now wins;
+ * previously the winner was whichever happened to be learned first, which
+ * varied per user and was not reproducible.
+ *
  * @param {string} text - Text to scan for known words
  * @returns {Array<{word: string, start: number, end: number, data: Object}>}
  */
 export function getCachedWords(text) {
-  if (!text || wordCache.size === 0) return [];
+  if (!text || wordCache.size === 0 || maxKeyLen === 0) return [];
 
-  const matches = [];
-  const sortedWords = Array.from(wordCache.keys())
-    .filter(w => w.length > 0 && JAPANESE_CHAR_RE.test(w))
-    .sort((a, b) => b.length - a.length); // Longest first for greedy matching
-
-  // Track which positions have been matched
-  const matched = new Set();
-
-  for (const word of sortedWords) {
-    let startIndex = 0;
-    while (true) {
-      const pos = text.indexOf(word, startIndex);
-      if (pos === -1) break;
-
-      // Check if any position in this match is already covered
-      let overlaps = false;
-      for (let i = pos; i < pos + word.length; i++) {
-        if (matched.has(i)) {
-          overlaps = true;
-          break;
-        }
+  // Collect every (position, cached word) pair present in the text.
+  const candidates = [];
+  for (let i = 0; i < text.length; i++) {
+    const limit = Math.min(maxKeyLen, text.length - i);
+    for (let len = limit; len > 0; len--) {
+      const slice = text.slice(i, i + len);
+      if (wordCache.has(slice) && isMatchableKey(slice)) {
+        candidates.push({ word: slice, start: i });
       }
-
-      if (!overlaps) {
-        // Mark positions as matched
-        for (let i = pos; i < pos + word.length; i++) {
-          matched.add(i);
-        }
-
-        const data = wordCache.get(word);
-        matches.push({
-          word,
-          start: pos,
-          end: pos + word.length,
-          data: {
-            japanese: word,
-            reading: data.reading,
-            romaji: data.romaji,
-            english: data.english,
-            type: data.type
-          }
-        });
-      }
-
-      startIndex = pos + 1;
     }
+  }
+  if (candidates.length === 0) return [];
+
+  // Longest first, then leftmost — the greedy order the resolution below wants.
+  candidates.sort((a, b) => (b.word.length - a.word.length) || (a.start - b.start));
+
+  const claimed = new Uint8Array(text.length);
+  const matches = [];
+
+  for (const { word, start } of candidates) {
+    const end = start + word.length;
+
+    let overlaps = false;
+    for (let i = start; i < end; i++) {
+      if (claimed[i]) { overlaps = true; break; }
+    }
+    if (overlaps) continue;
+
+    for (let i = start; i < end; i++) claimed[i] = 1;
+
+    const data = wordCache.get(word);
+    matches.push({
+      word,
+      start,
+      end,
+      data: {
+        japanese: word,
+        reading: data.reading,
+        romaji: data.romaji,
+        english: data.english,
+        type: data.type
+      }
+    });
   }
 
   // Sort by position for proper rendering
@@ -204,6 +248,9 @@ export async function pruneWordCache() {
   }
 
   if (prunedCount > 0) {
+    // Dropping the longest key would leave maxKeyLen too high: still correct,
+    // but it costs wasted probes on every lookup until the next load.
+    recomputeMaxKeyLen();
     debugLog('WORD-CACHE', `Pruned ${prunedCount} stale words`);
     saveWordCache();
   }
