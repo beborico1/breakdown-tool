@@ -556,7 +556,12 @@ function fightMeetReinsertions() {
         if (words.length > 0) {
           suspendObserver();
           const sents = state.breakdownData
-            ? [{ startIndex: 0, endIndex: state.originalText.length, breakdownData: state.breakdownData }]
+            ? [{
+                text: state.originalText,
+                startIndex: 0,
+                endIndex: state.originalText.length,
+                breakdownData: state.breakdownData,
+              }]
             : null;
           paintWordColoring(el, state.originalText, words, sents);
         }

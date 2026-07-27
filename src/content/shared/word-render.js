@@ -70,7 +70,15 @@ function buildScopedBoundaries(text, sentences) {
 
   for (const sentence of sentences) {
     const sentText = sentence?.text;
-    if (!sentText) continue;
+    if (!sentText) {
+      // A record with no text can never anchor, so the whole caption would fall
+      // back to plain text. That is a caller bug, not a revised sentence, so it
+      // gets its own message rather than sharing the one below.
+      if (typeof console !== 'undefined') {
+        console.debug?.('[word-render] sentence record has no text field; nothing will paint');
+      }
+      continue;
+    }
     const at = text.indexOf(sentText, cursor);
     if (at === -1) {
       // Sentence was revised out of the current text — skip it (stays plain),

@@ -122,7 +122,10 @@ function applyBreakdown(container, messageEl, text, breakdownData, speaker) {
   state.breakdownData = breakdownData;
   state.translatedText = breakdownData.translation;
 
+  // `text` is required: buildScopedBoundaries re-anchors each sentence by
+  // searching for its own text, and drops any record that carries none.
   const syntheticSentences = [{
+    text,
     startIndex: 0,
     endIndex: text.length,
     breakdownData,
