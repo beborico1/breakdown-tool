@@ -45,6 +45,7 @@ const analyzeQueue = createAnalyzeQueue({ concurrency: 3 });
 let io = null;
 let mo = null;
 let rescanTimer = null;
+let urlPollTimer = null;
 let suppressDepth = 0;                          // >0 while we mutate the DOM ourselves
 let started = false;
 
@@ -338,13 +339,80 @@ function start() {
   }
 }
 
+/** Which built-in surface this page is, for the popup's status line. */
+function surfaceName() {
+  if (window.location.hostname === 'meet.google.com') return 'meet';
+  if (isGoogleChat()) return 'chat';
+  if (isGmail()) return 'gmail';
+  if (isRedmine()) return 'redmine';
+  return 'universal';
+}
+
+/** Coloured words currently painted in this frame. */
+function paintedWordCount() {
+  return document.querySelectorAll('.gcwb-auto-word').length;
+}
+
+/**
+ * Tear down so the page can be left as we found it. Every guard that says
+ * "already handled" has to be reset here, or a later resume finds every block
+ * still in `processed` and paints nothing.
+ */
+function stopUniversal() {
+  if (rescanTimer) { clearTimeout(rescanTimer); rescanTimer = null; }
+  if (urlPollTimer) { clearInterval(urlPollTimer); urlPollTimer = null; }
+  if (io) { io.disconnect(); io = null; }
+  if (mo) { mo.disconnect(); mo = null; }
+  window.removeEventListener('popstate', onSoftNav);
+  window.removeEventListener('hashchange', onSoftNav);
+  for (const block of observedBlocks) processed.delete(block);
+  observedBlocks.clear();
+  started = false;
+}
+
+/**
+ * Answer the popup. Installed before the built-in-surface check on purpose: on
+ * Meet/Chat/Gmail/Redmine the universal colorizer does not run, but the popup
+ * still needs to know the page is handled — otherwise it reports "this tab was
+ * open before you turned it on" while the extension is working perfectly.
+ */
+function installControlListener() {
+  if (window.__kaigiControlBound) return;
+  window.__kaigiControlBound = true;
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== 'kaigi-universal-control') return false;
+    const surface = surfaceName();
+    if (msg.op === 'status') {
+      sendResponse({
+        ok: true,
+        surface,
+        builtIn: surface !== 'universal',
+        running: started,
+        painted: paintedWordCount(),
+        origin: location.origin,
+      });
+    } else if (msg.op === 'pause') {
+      stopUniversal();
+      sendResponse({ ok: true });
+    } else if (msg.op === 'resume') {
+      start();
+      sendResponse({ ok: true });
+    } else {
+      sendResponse({ ok: false, error: 'unknown op' });
+    }
+    return true;
+  });
+}
+
 /**
  * Initialize the universal colorizer. No-op on built-in surfaces, cross-origin
  * subframes, when neither the toggle nor a one-page trial is on, or when the
- * offline NLP pipeline is off.
+ * user has paused this origin.
  */
 export async function initializeUniversal() {
-  if (isBuiltInSurface() || !isAllowedFrame()) return;
+  if (!isAllowedFrame()) return;
+  installControlListener();
+  if (isBuiltInSurface()) return;
 
   // A one-page trial injected from the popup via activeTab. Chrome requires an
   // explicit grant before the colorizer can run everywhere, so this lets the
@@ -353,13 +421,20 @@ export async function initializeUniversal() {
   const trial = window.__kaigiUniversalTrial === true;
 
   let universalMode = false;
+  let pausedSites = [];
   try {
-    const r = await chrome.storage.sync.get('universalMode');
+    const r = await chrome.storage.sync.get(['universalMode', 'pausedSites']);
     universalMode = r?.universalMode === true;
+    pausedSites = Array.isArray(r?.pausedSites) ? r.pausedSites : [];
   } catch {
     if (!trial) return;
   }
   if (!universalMode && !trial) return;
+  // A trial is an explicit "show me on this page", so it overrides a pause.
+  if (!trial && pausedSites.includes(location.origin)) {
+    debugLog('UNIVERSAL', 'paused on this site');
+    return;
+  }
 
   debugLog('UNIVERSAL', 'initializing universal colorizer');
   if (document.readyState === 'loading') {

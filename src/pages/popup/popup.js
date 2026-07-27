@@ -1,792 +1,246 @@
-import {
-  initDisplayPreferences,
-  loadDisplayPreferences,
-  saveDisplayPreferences
-} from '../../content/core/display-preferences.js';
+import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+
+const ORIGINS = ['https://*/*', 'http://*/*'];
 
 const statusEl = document.getElementById('status');
-const copyAllBtn = document.getElementById('copyAll');
-const copyNewBtn = document.getElementById('copyNew');
-const downloadTranscriptBtn = document.getElementById('downloadTranscript');
-const apiKeyInput = document.getElementById('apiKey');
-const saveKeyBtn = document.getElementById('saveKey');
-const keyStatusEl = document.getElementById('keyStatus');
-const viewAllWordsBtn = document.getElementById('viewAllWords');
-const liveTranscribeBtn = document.getElementById('liveTranscribe');
-const translateToJapaneseBtn = document.getElementById('translateToJapanese');
-const tokenCountEl = document.getElementById('tokenCount');
-const tokenCostEl = document.getElementById('tokenCost');
-const resetUsageBtn = document.getElementById('resetUsage');
-const usageSinceEl = document.getElementById('usageSince');
-const modelSelectEl = document.getElementById('modelSelect');
-const modelCostHintEl = document.getElementById('modelCostHint');
-const fontSizeSlider = document.getElementById('fontSizeSlider');
-const fontSizeValueEl = document.getElementById('fontSizeValue');
-const chunkSizeSlider = document.getElementById('chunkSizeSlider');
-const chunkSizeValueEl = document.getElementById('chunkSizeValue');
-const stabilityBufferSlider = document.getElementById('stabilityBufferSlider');
-const stabilityBufferValueEl = document.getElementById('stabilityBufferValue');
-const apiKeyHelpLink = document.getElementById('apiKeyHelp');
-const apiKeyTutorialEl = document.getElementById('apiKeyTutorial');
-const offlineNlpToggle = document.getElementById('offlineNlpToggle');
-const translatorStatusEl = document.getElementById('translatorStatus');
-const universalModeToggle = document.getElementById('universalModeToggle');
+const toggle = document.getElementById('universalModeToggle');
+const heroSub = document.getElementById('heroSub');
+const heroAsk = document.getElementById('heroAsk');
+const heroStatus = document.getElementById('heroStatus');
+const heroDot = document.getElementById('heroDot');
+const heroStatusText = document.getElementById('heroStatusText');
+const siteToggleBtn = document.getElementById('siteToggleBtn');
+const reloadTabBtn = document.getElementById('reloadTabBtn');
+const meetCard = document.getElementById('meetCard');
 
-function renderTranslatorStatus(state) {
-  if (!translatorStatusEl) return;
-  if (!offlineNlpToggle?.checked) {
-    translatorStatusEl.style.display = 'none';
-    return;
-  }
-  let text = '';
-  if (!state || state.availability === 'unknown') {
-    text = 'Translator model: checking…';
-  } else if (state.availability === 'unavailable') {
-    text = 'Translator model: unavailable (sentence hover will be empty)';
-  } else if (state.availability === 'available' && state.ready) {
-    text = 'Translator model: ready';
-  } else if (state.availability === 'downloading') {
-    text = `Translator model: downloading… ${state.downloadPct || 0}%`;
-  } else if (state.availability === 'downloadable') {
-    text = 'Translator model: starting download…';
-  } else if (state.availability === 'available') {
-    text = 'Translator model: warming up…';
-  }
-  translatorStatusEl.textContent = text;
-  translatorStatusEl.style.display = text ? '' : 'none';
-}
+const SUB_ON = 'Hover any colored word to see how it is read and what it means.';
+const SUB_OFF = 'Every Japanese word gets a color for its job in the sentence. Hover a word to see how it is read and what it means.';
 
-function requestTranslatorState() {
-  try {
-    chrome.runtime.sendMessage(
-      { type: 'kaigi-nlp-proxy', op: 'translator-state', text: '' },
-      (resp) => {
-        if (chrome.runtime.lastError) return;
-        if (resp?.ok) renderTranslatorStatus(resp.state);
-      }
-    );
-  } catch {}
-}
+/** Pages Chrome will not let any extension touch. */
+const RESTRICTED = [
+  'chrome://', 'chrome-extension://', 'edge://', 'about:', 'devtools://',
+  'https://chrome.google.com/webstore', 'https://chromewebstore.google.com',
+];
 
-if (offlineNlpToggle) {
-  chrome.storage.sync.get(['useOfflineNlp'], (r) => {
-    // Default to ON. Only off when user has explicitly disabled it.
-    offlineNlpToggle.checked = r?.useOfflineNlp !== false;
-    if (offlineNlpToggle.checked) {
-      requestTranslatorState();
-      // Kick warmup so popup re-open reflects fresh state even if user never re-toggled.
-      try { chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'warmup', text: '' }); } catch {}
-    }
-  });
-  offlineNlpToggle.addEventListener('change', () => {
-    const enabled = offlineNlpToggle.checked;
-    chrome.storage.sync.set({ useOfflineNlp: enabled });
-    if (enabled) {
-      try {
-        chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'warmup', text: '' });
-      } catch {}
-      requestTranslatorState();
-    } else {
-      renderTranslatorStatus(null);
-    }
-  });
+let activeTab = null;
 
-  // Live updates from the offscreen translator monitor.
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg?.type === 'kaigi-translator-progress') {
-      renderTranslatorStatus(msg.state);
-    }
-  });
-}
-
-// USD per 1M tokens, split by modality. Output prices include thinking
-// tokens, which Google bills as output on the 2.5 family. Update from
-// https://ai.google.dev/gemini-api/docs/pricing when rates change.
-const GEMINI_MODELS = {
-  'gemini-2.5-flash':      { label: 'Gemini 2.5 Flash',
-    price: { textIn: 0.30, audioIn: 1.00, imageIn: 0.30, out: 2.50 } },
-  'gemini-2.5-flash-lite': { label: 'Gemini 2.5 Flash Lite',
-    price: { textIn: 0.10, audioIn: 0.30, imageIn: 0.10, out: 0.40 } },
-  'gemini-2.5-pro':        { label: 'Gemini 2.5 Pro',
-    price: { textIn: 1.25, audioIn: 1.25, imageIn: 1.25, out: 10.00 } },
-  'gemini-2.0-flash':      { label: 'Gemini 2.0 Flash',
-    price: { textIn: 0.10, audioIn: 0.70, imageIn: 0.10, out: 0.40 } },
-  'gemini-2.0-flash-lite': { label: 'Gemini 2.0 Flash Lite',
-    price: { textIn: 0.075, audioIn: 0.075, imageIn: 0.075, out: 0.30 } },
-};
-
-const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
-let currentModelId = DEFAULT_MODEL;
-
-/* Commented out - Minimalistic Mode and Word Frequency stats removed
-const minimalisticToggle = document.getElementById('minimalisticToggle');
-const uniqueWordsEl = document.getElementById('uniqueWords');
-const totalWordsEl = document.getElementById('totalWords');
-const topWordsEl = document.getElementById('topWords');
-const clearDataBtn = document.getElementById('clearData');
-*/
-
-/**
- * Show status message
- * @param {string} message
- * @param {boolean} isSuccess
- */
 function showStatus(message, isSuccess) {
   statusEl.textContent = message;
   statusEl.className = `status ${isSuccess ? 'success' : 'error'}`;
   statusEl.style.display = 'block';
-
-  // Auto-hide after 3 seconds
-  setTimeout(() => {
-    statusEl.style.display = 'none';
-  }, 3000);
 }
 
-/**
- * Show key status message
- * @param {string} message
- * @param {boolean} isSuccess
- */
-function showKeyStatus(message, isSuccess) {
-  keyStatusEl.textContent = message;
-  keyStatusEl.className = `key-status ${isSuccess ? 'success' : 'error'}`;
-  keyStatusEl.style.display = 'block';
-
-  setTimeout(() => {
-    keyStatusEl.style.display = 'none';
-  }, 3000);
+function clearStatus() {
+  statusEl.style.display = 'none';
 }
 
-/**
- * Load saved API key
- */
-async function loadApiKey() {
-  chrome.storage.sync.get(['geminiApiKey'], (result) => {
-    if (result.geminiApiKey) {
-      // Show masked key
-      apiKeyInput.value = '••••••••••••••••';
-      apiKeyInput.dataset.hasKey = 'true';
-    }
-  });
+function isRestricted(url) {
+  return !url || RESTRICTED.some(p => url.startsWith(p));
 }
 
-/**
- * Save API key
- */
-async function saveApiKey() {
-  const key = apiKeyInput.value.trim();
-
-  // Don't save if it's the masked placeholder
-  if (key === '••••••••••••••••' || key === '') {
-    showKeyStatus('Enter a valid API key', false);
-    return;
-  }
-
-  chrome.storage.sync.set({ geminiApiKey: key }, () => {
-    showKeyStatus('API key saved', true);
-    apiKeyInput.value = '••••••••••••••••';
-    apiKeyInput.dataset.hasKey = 'true';
-  });
-}
-
-/**
- * Send message to content script and copy result to clipboard
- * @param {string} action
- */
-async function sendAction(action) {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    if (!tab?.url?.includes('meet.google.com')) {
-      showStatus('Please open a Google Meet first', false);
-      return;
-    }
-
-    chrome.tabs.sendMessage(tab.id, { action }, async (response) => {
-      if (chrome.runtime.lastError) {
-        showStatus('Error: Refresh the Meet page and try again', false);
-        return;
-      }
-
-      if (response) {
-        if (response.success && response.text) {
-          // Copy to clipboard from popup (which has focus)
-          try {
-            await navigator.clipboard.writeText(response.text);
-            showStatus(response.message, true);
-          } catch (err) {
-            showStatus('Failed to copy to clipboard', false);
-          }
-        } else {
-          showStatus(response.message, response.success);
-        }
-      }
-    });
-  } catch (err) {
-    showStatus('Error: ' + err.message, false);
-  }
-}
-
-// Clear the masked value when user focuses the input
-apiKeyInput.addEventListener('focus', () => {
-  if (apiKeyInput.dataset.hasKey === 'true') {
-    apiKeyInput.value = '';
-  }
-});
-
-// Restore masked value if user leaves without entering anything
-apiKeyInput.addEventListener('blur', () => {
-  if (apiKeyInput.dataset.hasKey === 'true' && apiKeyInput.value === '') {
-    apiKeyInput.value = '••••••••••••••••';
-  }
-});
-
-// Toggle API key tutorial
-apiKeyHelpLink.addEventListener('click', (e) => {
-  e.preventDefault();
-  apiKeyTutorialEl.classList.toggle('open');
-});
-
-copyAllBtn.addEventListener('click', () => sendAction('copyAll'));
-copyNewBtn.addEventListener('click', () => sendAction('copyNew'));
-downloadTranscriptBtn.addEventListener('click', () => sendAction('downloadTranscript'));
-saveKeyBtn.addEventListener('click', saveApiKey);
-
-// Allow Enter key to save
-apiKeyInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    saveApiKey();
-  }
-});
-
-/* Commented out - Minimalistic Mode functions removed
-/**
- * Load minimalistic mode setting
- */
-/*
-async function loadMinimalisticMode() {
-  chrome.storage.sync.get(['minimalisticModeEnabled'], (result) => {
-    minimalisticToggle.checked = result.minimalisticModeEnabled || false;
-  });
-}
-*/
-
-/**
- * Save minimalistic mode setting
- */
-/*
-function saveMinimalisticMode() {
-  const enabled = minimalisticToggle.checked;
-  chrome.storage.sync.set({ minimalisticModeEnabled: enabled });
-}
-
-// Handle minimalistic mode toggle
-minimalisticToggle.addEventListener('change', saveMinimalisticMode);
-*/
-
-/* Commented out - Word Frequency stats functions removed
-/**
- * Load word frequency stats from storage
- */
-/*
-async function loadFrequencyStats() {
-  chrome.storage.local.get(['wordFrequencyData'], (result) => {
-    const data = result.wordFrequencyData;
-
-    if (!data || data.uniqueWords === 0) {
-      uniqueWordsEl.textContent = '0 unique';
-      totalWordsEl.textContent = '0 total';
-      topWordsEl.innerHTML = '<span class="top-words-empty">No words tracked yet</span>';
-      return;
-    }
-
-    uniqueWordsEl.textContent = `${data.uniqueWords.toLocaleString()} unique`;
-    totalWordsEl.textContent = `${data.totalWords.toLocaleString()} total`;
-
-    // Get top 3 words by count
-    const sortedWords = Object.values(data.words)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-
-    if (sortedWords.length > 0) {
-      topWordsEl.innerHTML = sortedWords
-        .map(w => `<span class="top-word"><span class="top-word-text">${w.japanese}</span><span class="top-word-count">(${w.count})</span></span>`)
-        .join(' ');
-    } else {
-      topWordsEl.innerHTML = '<span class="top-words-empty">No words tracked yet</span>';
-    }
-  });
-}
-*/
-
-/**
- * Clear all frequency data
- */
-/*
-async function clearFrequencyData() {
-  if (!confirm('Are you sure you want to clear all word frequency data? This cannot be undone.')) {
-    return;
-  }
-
-  chrome.storage.local.remove(['wordFrequencyData'], () => {
-    loadFrequencyStats();
-    showStatus('Word frequency data cleared', true);
-  });
-}
-*/
-
-/**
- * Open the full frequency analytics page
- */
-function openFrequencyPage() {
-  chrome.tabs.create({ url: 'src/pages/frequency/frequency.html' });
-}
-
-// Reveal Translate-to-Japanese section only on Gmail / Google Chat tabs
-(async () => {
-  const wrap = document.getElementById('translateJpWrap');
-  if (!wrap) return;
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const isChatOrGmail =
-      tab?.url?.includes('chat.google.com') ||
-      tab?.url?.includes('mail.google.com');
-    if (isChatOrGmail) wrap.hidden = false;
-  } catch {}
-})();
-
-// Translate to Japanese button
-translateToJapaneseBtn.addEventListener('click', async () => {
-  // Check API key first
-  const keyResult = await new Promise(resolve =>
-    chrome.storage.sync.get(['geminiApiKey'], resolve)
-  );
-  if (!keyResult.geminiApiKey) {
-    showStatus('Set a Gemini API key first', false);
-    return;
-  }
-
-  // Check active tab is Google Chat
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const isChatPage = tab?.url?.includes('chat.google.com') ||
-    (tab?.url?.includes('mail.google.com') && tab?.url?.includes('#chat'));
-  if (!isChatPage) {
-    showStatus('Please open Google Chat first', false);
-    return;
-  }
-
-  // Show loading state
-  translateToJapaneseBtn.disabled = true;
-  translateToJapaneseBtn.textContent = 'Translating...';
-
-  try {
-    const response = await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tab.id, { action: 'translate-to-japanese' }, (resp) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error('Refresh the Chat page and try again'));
-          return;
-        }
-        resolve(resp);
+/** Ask the content script in a tab what it is doing. Null when it is not there. */
+function askTab(tabId, op) {
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: 'kaigi-universal-control', op }, (resp) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        resolve(resp || null);
       });
-    });
+    } catch { resolve(null); }
+  });
+}
 
-    if (response?.success) {
-      showStatus(response.message, true);
-    } else {
-      showStatus(response?.message || 'Translation failed', false);
+async function getPausedSites() {
+  const { pausedSites } = await chrome.storage.sync.get('pausedSites');
+  return Array.isArray(pausedSites) ? pausedSites : [];
+}
+
+function setDot(kind) {
+  heroDot.className = `status-dot is-${kind}`;
+}
+
+function hostOf(origin) {
+  try { return new URL(origin).host; } catch { return origin; }
+}
+
+/**
+ * Resolve one of several states and render it.
+ *
+ * Being explicit here is the point: the popup used to say nothing at all, so a
+ * user whose tab predated the grant had no way to tell "not working" from "no
+ * Japanese on this page". The built-in-surface state matters just as much —
+ * without it Meet, Chat, Gmail and Redmine all report "this tab was open before
+ * you turned it on" while the extension is working perfectly.
+ */
+async function renderHero() {
+  const on = toggle.checked;
+  heroSub.textContent = on ? SUB_ON : SUB_OFF;
+  heroAsk.hidden = on;
+  heroStatus.hidden = !on;
+  siteToggleBtn.hidden = true;
+  reloadTabBtn.hidden = true;
+  if (!on) return;
+
+  if (isRestricted(activeTab?.url)) {
+    setDot('idle');
+    heroStatusText.textContent = 'Chrome does not let extensions run on this page.';
+    return;
+  }
+
+  const info = await askTab(activeTab.id, 'status');
+
+  if (!info) {
+    setDot('warn');
+    heroStatusText.textContent = 'This tab was open before you turned it on.';
+    reloadTabBtn.hidden = false;
+    return;
+  }
+
+  if (info.builtIn) {
+    const label = { meet: 'Google Meet', chat: 'Google Chat', gmail: 'Gmail', redmine: 'Redmine' }[info.surface];
+    setDot('on');
+    heroStatusText.textContent = `Coloring ${label} on this page.`;
+    return;
+  }
+
+  const paused = (await getPausedSites()).includes(info.origin);
+  siteToggleBtn.hidden = false;
+  siteToggleBtn.textContent = paused ? 'Resume on this site' : 'Pause on this site';
+
+  if (paused) {
+    setDot('warn');
+    heroStatusText.textContent = `Paused on ${hostOf(info.origin)}`;
+  } else if (info.painted > 0) {
+    setDot('on');
+    heroStatusText.textContent =
+      `Coloring this page — ${info.painted} Japanese ${info.painted === 1 ? 'word' : 'words'}.`;
+  } else {
+    setDot('idle');
+    heroStatusText.textContent = 'No Japanese found on this page yet.';
+  }
+}
+
+/** Message every tab, tolerating the many that have no content script. */
+async function broadcast(msg) {
+  const tabs = await chrome.tabs.query({});
+  await Promise.allSettled(tabs.map(t => (
+    t.id == null ? Promise.resolve() : chrome.tabs.sendMessage(t.id, msg).catch(() => {})
+  )));
+}
+
+toggle.addEventListener('change', async () => {
+  clearStatus();
+  if (toggle.checked) {
+    // Must run synchronously from this gesture, so no confirmation dialog can
+    // come first — the explanation lives in the resting copy above instead.
+    const granted = await chrome.permissions.request({ origins: ORIGINS });
+    if (!granted) {
+      toggle.checked = false;
+      await renderHero();
+      showStatus('Not enabled. Chrome needs all-sites access to find Japanese on the pages you visit.', false);
+      return;
     }
-  } catch (err) {
-    showStatus(err.message, false);
-  } finally {
-    translateToJapaneseBtn.disabled = false;
-    translateToJapaneseBtn.textContent = 'Translate Selection to Japanese';
+    const reg = await chrome.runtime.sendMessage({ type: 'kaigi-universal-register', enabled: true });
+    if (!reg?.ok) {
+      toggle.checked = false;
+      await chrome.permissions.remove({ origins: ORIGINS }).catch(() => {});
+      await renderHero();
+      showStatus('Could not enable: ' + (reg?.error || 'unknown error'), false);
+      return;
+    }
+    await chrome.storage.sync.set({ universalMode: true });
+    // Colour the page the user is already looking at, rather than telling them
+    // to go and reload their tabs and hoping that they do.
+    if (!isRestricted(activeTab?.url)) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: activeTab.id, allFrames: true },
+          files: ['dist/content.js'],
+        });
+        await chrome.scripting.insertCSS({
+          target: { tabId: activeTab.id, allFrames: true },
+          files: ['src/content/content.css'],
+        });
+      } catch { /* restricted page, or already injected */ }
+    }
+    await renderHero();
+    showStatus('On. Other tabs that are already open need a reload.', true);
+  } else {
+    // Order matters: revoke before broadcasting. A rejected sendMessage must
+    // never be able to strand the all-hosts grant while the switch reads off.
+    await chrome.storage.sync.set({ universalMode: false });
+    await chrome.runtime.sendMessage({ type: 'kaigi-universal-register', enabled: false }).catch(() => {});
+    await chrome.permissions.remove({ origins: ORIGINS }).catch(() => {});
+    await broadcast({ type: 'kaigi-universal-control', op: 'pause' });
+    await renderHero();
+    showStatus('Off. Chrome no longer has all-sites access.', true);
   }
 });
 
-// Transcription page
-liveTranscribeBtn.addEventListener('click', () => {
+siteToggleBtn.addEventListener('click', async () => {
+  const info = await askTab(activeTab.id, 'status');
+  if (!info) return;
+  const paused = await getPausedSites();
+  const isPaused = paused.includes(info.origin);
+  const next = isPaused
+    ? paused.filter(o => o !== info.origin)
+    : [...paused, info.origin].slice(-200);   // sync has a per-item quota, so bound it
+  await chrome.storage.sync.set({ pausedSites: next });
+  await askTab(activeTab.id, isPaused ? 'resume' : 'pause');
+  await renderHero();
+});
+
+reloadTabBtn.addEventListener('click', async () => {
+  await chrome.tabs.reload(activeTab.id);
+  window.close();
+});
+
+/** Meet-only actions. The card holding them is hidden everywhere else. */
+function sendAction(action) {
+  chrome.tabs.sendMessage(activeTab.id, { action }, async (response) => {
+    if (chrome.runtime.lastError) {
+      showStatus('Refresh the Meet page and try again', false);
+      return;
+    }
+    if (!response) return;
+    if (response.success && response.text) {
+      try {
+        await navigator.clipboard.writeText(response.text);
+        showStatus(response.message, true);
+      } catch {
+        showStatus('Could not copy to the clipboard', false);
+      }
+    } else {
+      showStatus(response.message, response.success);
+    }
+  });
+}
+
+document.getElementById('copyAll').addEventListener('click', () => sendAction('copyAll'));
+document.getElementById('copyNew').addEventListener('click', () => sendAction('copyNew'));
+document.getElementById('downloadTranscript').addEventListener('click', () => sendAction('downloadTranscript'));
+
+document.getElementById('viewAllWords').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'src/pages/frequency/frequency.html' });
+});
+document.getElementById('liveTranscribe').addEventListener('click', () => {
   chrome.tabs.create({ url: 'src/pages/transcribe/transcribe.html' });
 });
+document.getElementById('openWelcome').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'src/pages/welcome/welcome.html' });
+});
 
-// Universal (all-sites) colorizer toggle. Requests an all-hosts permission once
-// (from this user gesture), then registers the content script on https/http so
-// every site auto-colorizes. The 4 built-ins are excluded (already injected via
-// the static manifest entry).
-if (universalModeToggle) {
-  chrome.storage.sync.get(['universalMode'], (r) => {
-    universalModeToggle.checked = r?.universalMode === true;
-  });
-
-  universalModeToggle.addEventListener('change', async () => {
-    if (universalModeToggle.checked) {
-      const granted = await chrome.permissions.request({ origins: ['https://*/*', 'http://*/*'] });
-      if (!granted) {
-        universalModeToggle.checked = false;
-        showStatus('Permission denied', false);
-        return;
-      }
-      const reg = await chrome.runtime.sendMessage({ type: 'kaigi-universal-register', enabled: true });
-      if (!reg?.ok) {
-        universalModeToggle.checked = false;
-        showStatus('Failed to enable: ' + (reg?.error || 'unknown error'), false);
-        return;
-      }
-      await chrome.storage.sync.set({ universalMode: true });
-      // The registration only applies to future navigations, so colorize the tab
-      // the user is looking at now instead of asking them to reload it.
-      const injected = await colorizeActiveTab();
-      showStatus(injected
-        ? 'On. This page is colorizing now; reload other tabs.'
-        : 'Enabled. Reload open tabs to start colorizing.', true);
-    } else {
-      await chrome.runtime.sendMessage({ type: 'kaigi-universal-register', enabled: false });
-      await chrome.storage.sync.set({ universalMode: false });
-      // Release the all-hosts grant too: nothing else needs it now that Custom
-      // Sites is gone, and leaving it makes Chrome keep warning that this
-      // extension can "read your data on all websites" while it is switched off.
-      await chrome.permissions.remove({ origins: ['https://*/*', 'http://*/*'] }).catch(() => {});
-      showStatus('Disabled. Reload open tabs to stop colorizing.', true);
-    }
-  });
-}
-
-// Frequency section event listeners
-viewAllWordsBtn.addEventListener('click', openFrequencyPage);
-// clearDataBtn.addEventListener('click', clearFrequencyData);
-
-/**
- * Initialize popup - check if on Google Meet
- */
 async function init() {
+  initDisplayPreferences();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const isOnMeet = tab?.url?.includes('meet.google.com');
+  activeTab = tab || null;
 
-  const buttonsDiv = document.querySelector('.buttons');
-  buttonsDiv.style.display = isOnMeet ? 'flex' : 'none';
+  const { universalMode } = await chrome.storage.sync.get('universalMode');
+  toggle.checked = universalMode === true;
+
+  meetCard.hidden = !activeTab?.url?.includes('meet.google.com');
+
+  await renderHero();
 }
 
-/**
- * Format token count for display (e.g., 1234 -> "1,234", 1234567 -> "1.2M")
- * @param {number} tokens
- * @returns {string}
- */
-function formatTokenCount(tokens) {
-  if (tokens >= 1000000) {
-    return (tokens / 1000000).toFixed(1) + 'M';
-  }
-  if (tokens >= 10000) {
-    return (tokens / 1000).toFixed(1) + 'K';
-  }
-  return tokens.toLocaleString();
-}
-
-// Pre-migration `tokenUsage` was a single number. Normalize to the new
-// per-modality shape so downstream code only handles one form.
-function normalizeUsage(raw) {
-  if (raw && typeof raw === 'object') {
-    return {
-      textIn:  Number(raw.textIn)  || 0,
-      audioIn: Number(raw.audioIn) || 0,
-      imageIn: Number(raw.imageIn) || 0,
-      out:     Number(raw.out)     || 0,
-      total:   Number(raw.total)
-            || ((Number(raw.textIn) || 0) + (Number(raw.audioIn) || 0)
-              + (Number(raw.imageIn) || 0) + (Number(raw.out) || 0)),
-      legacy: false,
-    };
-  }
-  const n = Number(raw) || 0;
-  return { textIn: n, audioIn: 0, imageIn: 0, out: 0, total: n, legacy: n > 0 };
-}
-
-/**
- * Compute USD cost from a per-modality usage object using the current model's
- * price table. Legacy scalar usage is priced at the textIn rate (a lower bound
- * — the real cost was likely higher because we couldn't distinguish modalities).
- */
-function computeCost(usage) {
-  const model = GEMINI_MODELS[currentModelId];
-  if (!model) return 0;
-  const p = model.price;
-  if (usage.legacy) {
-    return (usage.total / 1_000_000) * p.textIn;
-  }
-  return (
-    usage.textIn  * p.textIn  +
-    usage.audioIn * p.audioIn +
-    usage.imageIn * p.imageIn +
-    usage.out     * p.out
-  ) / 1_000_000;
-}
-
-function formatCostValue(cost) {
-  if (cost < 0.01) return '~$' + cost.toFixed(4);
-  return '~$' + cost.toFixed(2);
-}
-
-function formatBreakdown(usage) {
-  if (usage.legacy || usage.total === 0) return '';
-  const parts = [];
-  if (usage.audioIn) parts.push(`${formatTokenCount(usage.audioIn)} audio in`);
-  if (usage.out)     parts.push(`${formatTokenCount(usage.out)} out`);
-  if (usage.textIn)  parts.push(`${formatTokenCount(usage.textIn)} text in`);
-  if (usage.imageIn) parts.push(`${formatTokenCount(usage.imageIn)} image in`);
-  return parts.length ? `(${parts.join(' · ')})` : '';
-}
-
-/**
- * Update the usage display with optional animation
- * @param {object|number} raw - usage object (new shape) or legacy scalar
- * @param {boolean} animate
- */
-function updateUsageDisplay(raw, animate = false) {
-  const usage = normalizeUsage(raw);
-  const breakdown = formatBreakdown(usage);
-  tokenCountEl.textContent = formatTokenCount(usage.total)
-    + (breakdown ? '  ' + breakdown : '');
-  tokenCostEl.textContent = formatCostValue(computeCost(usage));
-
-  // Disable reset button if zero tokens
-  resetUsageBtn.disabled = usage.total === 0;
-
-  if (animate) {
-    tokenCountEl.classList.add('updating');
-    tokenCostEl.classList.add('updating');
-    setTimeout(() => {
-      tokenCountEl.classList.remove('updating');
-      tokenCostEl.classList.remove('updating');
-    }, 300);
-  }
-}
-
-/**
- * Format a timestamp as "since Mon DD, YYYY"
- * @param {number} timestamp
- * @returns {string}
- */
-function formatSinceDate(timestamp) {
-  const date = new Date(timestamp);
-  return 'since ' + date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-/**
- * Load token usage from storage
- */
-function loadUsage() {
-  chrome.storage.local.get(['tokenUsage', 'tokenUsageSince'], (result) => {
-    updateUsageDisplay(result.tokenUsage);
-
-    if (result.tokenUsageSince) {
-      usageSinceEl.textContent = formatSinceDate(result.tokenUsageSince);
-    } else {
-      const now = Date.now();
-      chrome.storage.local.set({ tokenUsageSince: now });
-      usageSinceEl.textContent = formatSinceDate(now);
-    }
-  });
-}
-
-/**
- * Reset token usage counter
- */
-function resetUsage() {
-  if (!confirm('Reset token usage counter to zero?')) {
-    return;
-  }
-
-  const now = Date.now();
-  const zero = { textIn: 0, audioIn: 0, imageIn: 0, out: 0, total: 0 };
-  chrome.storage.local.set({ tokenUsage: zero, tokenUsageSince: now }, () => {
-    updateUsageDisplay(zero, true);
-    usageSinceEl.textContent = formatSinceDate(now);
-    showStatus('Token usage reset', true);
-  });
-}
-
-/**
- * Update the cost hint text with the selected model info
- * @param {string} modelId
- */
-function updateCostHint(modelId) {
-  const model = GEMINI_MODELS[modelId];
-  if (!model) return;
-  const p = model.price;
-  modelCostHintEl.textContent =
-    `Uses ${model.label} ($${p.textIn} text / $${p.audioIn} audio in · $${p.out} out per 1M tokens)`;
-}
-
-/**
- * Load saved model from storage
- */
-function loadModel() {
-  chrome.storage.sync.get(['geminiModel'], (result) => {
-    currentModelId = result.geminiModel || DEFAULT_MODEL;
-    modelSelectEl.value = currentModelId;
-    updateCostHint(currentModelId);
-    loadUsage(); // re-render cost with correct model rate
-  });
-}
-
-// Handle model selection change
-modelSelectEl.addEventListener('change', () => {
-  const modelId = modelSelectEl.value;
-  currentModelId = modelId;
-  chrome.storage.sync.set({ geminiModel: modelId });
-  updateCostHint(modelId);
-  loadUsage(); // re-render cost with new model rate
-});
-
-// Listen for storage changes to update in real-time
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'local' && changes.tokenUsage) {
-    updateUsageDisplay(changes.tokenUsage.newValue, true);
-  }
-  if (areaName === 'sync' && changes.geminiModel) {
-    currentModelId = changes.geminiModel.newValue || DEFAULT_MODEL;
-    modelSelectEl.value = currentModelId;
-    updateCostHint(currentModelId);
-    loadUsage();
-  }
-  if (areaName === 'sync' && changes.sentenceChunkSize && chunkSizeSlider) {
-    const size = changes.sentenceChunkSize.newValue || 2;
-    chunkSizeSlider.value = size;
-    chunkSizeValueEl.textContent = size;
-  }
-  if (areaName === 'sync' && changes.sentenceStabilityBuffer !== undefined && stabilityBufferSlider) {
-    const buffer = typeof changes.sentenceStabilityBuffer.newValue === 'number'
-      ? changes.sentenceStabilityBuffer.newValue
-      : 1;
-    stabilityBufferSlider.value = buffer;
-    stabilityBufferValueEl.textContent = buffer;
-  }
-});
-
-// Reset usage button handler — stop propagation to prevent collapsible toggle
-resetUsageBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  resetUsage();
-});
-
-/**
- * Load font size setting from storage
- */
-function loadFontSize() {
-  if (!fontSizeSlider) return;
-  chrome.storage.sync.get(['wordBlockFontSize'], (result) => {
-    const size = result.wordBlockFontSize || 15;
-    fontSizeSlider.value = size;
-    fontSizeValueEl.textContent = `${size}px`;
-  });
-}
-
-// Font size slider handler
-if (fontSizeSlider) {
-  fontSizeSlider.addEventListener('input', () => {
-    const size = parseInt(fontSizeSlider.value, 10);
-    fontSizeValueEl.textContent = `${size}px`;
-    chrome.storage.sync.set({ wordBlockFontSize: size });
-  });
-}
-
-/**
- * Load sentence chunk size setting from storage
- */
-function loadChunkSize() {
-  if (!chunkSizeSlider) return;
-  chrome.storage.sync.get(['sentenceChunkSize'], (result) => {
-    const size = result.sentenceChunkSize || 2;
-    chunkSizeSlider.value = size;
-    chunkSizeValueEl.textContent = size;
-  });
-}
-
-// Chunk size slider handler
-if (chunkSizeSlider) {
-  chunkSizeSlider.addEventListener('input', () => {
-    const size = parseInt(chunkSizeSlider.value, 10);
-    chunkSizeValueEl.textContent = size;
-    chrome.storage.sync.set({ sentenceChunkSize: size });
-  });
-}
-
-function loadStabilityBuffer() {
-  if (!stabilityBufferSlider) return;
-  chrome.storage.sync.get(['sentenceStabilityBuffer'], (result) => {
-    const buffer = typeof result.sentenceStabilityBuffer === 'number'
-      ? result.sentenceStabilityBuffer
-      : 1;
-    stabilityBufferSlider.value = buffer;
-    stabilityBufferValueEl.textContent = buffer;
-  });
-}
-
-if (stabilityBufferSlider) {
-  stabilityBufferSlider.addEventListener('input', () => {
-    const buffer = parseInt(stabilityBufferSlider.value, 10);
-    stabilityBufferValueEl.textContent = buffer;
-    chrome.storage.sync.set({ sentenceStabilityBuffer: buffer });
-  });
-}
-
-// Collapsible section toggle
-document.querySelectorAll('.collapsible-header').forEach(header => {
-  header.addEventListener('click', () => {
-    const collapsible = header.closest('.collapsible');
-    const body = collapsible.querySelector('.collapsible-body');
-    if (collapsible.classList.contains('expanded')) {
-      body.style.maxHeight = body.scrollHeight + 'px';
-      body.offsetHeight; // force reflow
-      body.style.maxHeight = '0';
-      collapsible.classList.remove('expanded');
-    } else {
-      collapsible.classList.add('expanded');
-      body.style.maxHeight = body.scrollHeight + 'px';
-      body.addEventListener('transitionend', () => {
-        if (collapsible.classList.contains('expanded')) {
-          body.style.maxHeight = 'none';
-        }
-      }, { once: true });
-    }
-  });
-});
-
-// Load saved key and model on popup open
-loadApiKey();
-loadModel();
-loadFontSize();
-loadChunkSize();
-loadStabilityBuffer();
-
-// Display preferences toggles
-const displayToggleIds = {
-  showReading: 'showReadingToggle',
-  showRomaji: 'showRomajiToggle',
-  showMeaning: 'showMeaningToggle',
-  showTranslation: 'showTranslationToggle'
-};
-
-function syncDisplayToggles(prefs) {
-  for (const [key, id] of Object.entries(displayToggleIds)) {
-    const el = document.getElementById(id);
-    if (el) el.checked = !!prefs[key];
-  }
-}
-
-for (const [key, id] of Object.entries(displayToggleIds)) {
-  const el = document.getElementById(id);
-  if (!el) continue;
-  el.addEventListener('change', () => {
-    saveDisplayPreferences({ [key]: el.checked });
-  });
-}
-
-loadDisplayPreferences().then(syncDisplayToggles);
-initDisplayPreferences();
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'sync' || !changes.displayPreferences) return;
-  syncDisplayToggles(changes.displayPreferences.newValue || {});
-});
-
-// Initialize popup state
 init();

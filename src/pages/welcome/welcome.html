@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Japanese in Color</title>
+  <!-- The real in-page stylesheet. The sample below is painted by the real
+       pipeline, so it needs the real word colours, halo and tooltip — and it
+       means the legend can never drift from what pages actually look like. -->
+  <link rel="stylesheet" href="../../content/content.css">
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <img src="../../../assets/icons/icon128.png" alt="" class="hero-icon">
+      <h1>Japanese in Color</h1>
+      <p class="lede">Every Japanese word on the web, colored by the job it does in the sentence.</p>
+      <p class="muted">Free. No account, no API key. The text on your pages is analyzed on your
+        computer and is never uploaded.</p>
+    </header>
+
+    <section class="band">
+      <h2>Try it — hover a word</h2>
+      <p class="sample" id="sample">今日は新しい単語を三つ覚えました。</p>
+      <p class="hint" id="sampleHint">Getting the dictionary ready…</p>
+    </section>
+
+    <section class="band">
+      <h2>What the colors mean</h2>
+      <ul class="legend" id="legend"></ul>
+    </section>
+
+    <section class="band">
+      <h2>Turn it on</h2>
+      <p>Coloring works on every site once you switch it on. Chrome will ask to let this
+        extension <strong>read data on all sites</strong> — that is how it finds Japanese on the
+        page you are reading.</p>
+      <button id="enableBtn" class="cta">Turn on coloring</button>
+      <p class="hint" id="enableHint">You can pause it on any individual site from the toolbar
+        popup, or switch it off entirely at any time.</p>
+    </section>
+
+    <section class="band">
+      <h2>Keep the words you meet</h2>
+      <p>Every word you hover is saved to <strong>Your words</strong>, where you can review what
+        you have seen and send a selection to Anki. Cards go to Anki running on your own machine.</p>
+      <p class="muted">There is also <strong>Speak &amp; check</strong>: say something in Japanese
+        and see it broken down. That one uses Chrome's speech service, so your microphone audio
+        goes to Google while it is listening.</p>
+    </section>
+  </main>
+  <script type="module" src="welcome.js"></script>
+</body>
+</html>

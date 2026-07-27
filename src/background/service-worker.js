@@ -265,8 +265,17 @@ async function reconcileDynamicScripts() {
   await registerUniversalFromStorage();
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   reconcileDynamicScripts().catch(e => console.warn('[Init] reconcile failed:', e));
+
+  // Show the welcome page on a fresh install, and once on the 1.x -> 2.x upgrade:
+  // that release removed the API key those users had configured and renamed the
+  // product, so landing them on an unchanged toolbar icon would be confusing.
+  const fresh = reason === 'install';
+  const rebranded = reason === 'update' && String(previousVersion || '').startsWith('1.');
+  if (fresh || rebranded) {
+    chrome.tabs.create({ url: 'src/pages/welcome/welcome.html' }).catch(() => {});
+  }
 });
 chrome.runtime.onStartup.addListener(() => {
   reconcileDynamicScripts().catch(e => console.warn('[Init] reconcile failed:', e));

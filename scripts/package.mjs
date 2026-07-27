@@ -28,6 +28,7 @@ const STAGE = path.join(ROOT, 'build');
  * discovered automatically; these are the ones only a string literal knows about.
  */
 const CODE_OPENED_PAGES = [
+  'src/pages/welcome/welcome.html',
   'src/pages/frequency/frequency.html',
   'src/pages/transcribe/transcribe.html',
   'src/offscreen/offscreen.html',
