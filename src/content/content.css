@@ -1736,6 +1736,32 @@ html.kaigi-light .gcwb-auto-boundary:hover {
   background-color: rgba(99, 40, 137, 0.1);
 }
 
+/* Meet's synthetic dot, same contract as the auto-lite one below: no text node
+   of its own, so a caption copy and the transcript download are unaffected. */
+.mm-boundary-synthetic {
+  display: inline-block;
+  min-width: 0.5em;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mm-boundary-synthetic::after {
+  content: '\00B7';
+  opacity: 0.55;
+}
+
+.mm-boundary-synthetic:hover::after {
+  opacity: 1;
+}
+
+html.kaigi-hide-translation .mm-boundary-synthetic {
+  pointer-events: none;
+}
+
+html.kaigi-hide-translation .mm-boundary-synthetic::after {
+  content: none;
+}
+
 /* A synthetic dot stands in for a closing mark the text never had. It owns no
    text node, so the glyph comes from ::after and is excluded from selection:
    Chrome copies generated content into a manual selection, and the page's own

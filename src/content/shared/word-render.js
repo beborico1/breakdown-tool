@@ -1,4 +1,9 @@
-import { getWordTypeClass } from '../utils/text.js';
+import {
+  getWordTypeClass,
+  segmentClauses,
+  alignClauseTranslations,
+  MIN_SYNTHETIC_CLAUSE_CHARS,
+} from '../utils/text.js';
 import { isAnkiAdded } from '../core/anki-added.js';
 
 function escapeHtml(str) {
@@ -113,11 +118,41 @@ function buildScopedBoundaries(text, sentences) {
       ...sentence,
       startIndex: at,
       endIndex: end,
+      clauseParts: buildClauseParts(sentText, at, sentence.breakdownData?.translation),
     });
     cursor = end;
   }
 
   return { boundaries, anchoredSentences };
+}
+
+/**
+ * Pair each Japanese clause of a sentence chunk with its own slice of the
+ * chunk's English, in current-text coordinates.
+ *
+ * A chunk holds up to `sentenceChunkSize` sentences and is translated as one
+ * unit, so without this every mark in the chunk reveals the same multi-sentence
+ * English. Returns null when the English cannot be split to match, in which case
+ * the caller falls back to the whole-chunk translation.
+ *
+ * @param {string} sentText - the chunk's text
+ * @param {number} at - where the chunk anchors in the current text
+ * @param {string} [translation]
+ * @returns {Array<{start: number, end: number, contentEnd: number, terminated: boolean, translation: string}>|null}
+ */
+function buildClauseParts(sentText, at, translation) {
+  const clauses = segmentClauses(sentText, { marks: 'ja-ascii' }).filter(c => c.hasJapanese);
+  if (clauses.length < 2) return null;
+  const parts = alignClauseTranslations(clauses.length, translation);
+  if (!parts) return null;
+  return clauses.map((c, i) => ({
+    start: at + c.start,
+    end: at + c.end,
+    contentEnd: at + c.contentEnd,
+    terminated: c.terminated,
+    text: c.text,
+    translation: parts[i],
+  }));
 }
 
 /**
@@ -159,28 +194,71 @@ export function paintWordColoring(messageEl, text, words, sentences) {
   let html = '';
   let i = 0;
   let bIdx = 0;
-  let sIdx = 0;
   let prevType = null;
   let tone = 0;
 
+  // A plain index lookup rather than a monotonic cursor: synthetic dots are
+  // resolved out of order relative to the paint loop, and a cursor would be
+  // dragged past sentences it still needs.
   const sentenceTranslationAt = (idx) => {
     if (!sents) return null;
-    while (sIdx < sents.length && sents[sIdx].endIndex <= idx) sIdx++;
+    const sIdx = sents.findIndex(s => idx >= s.startIndex && idx < s.endIndex);
+    if (sIdx === -1) return null;
     const s = sents[sIdx];
-    if (!s) return null;
-    if (idx >= s.startIndex && idx < s.endIndex) {
-      const own = s.breakdownData?.translation || null;
-      if (own && !isDegenerateTranslation(own)) return own;
-      for (let j = sIdx - 1; j >= 0; j--) {
-        const prev = sents[j]?.breakdownData?.translation;
-        if (prev && !isDegenerateTranslation(prev)) return prev;
-      }
-      return own;
+
+    // Prefer the clause that actually contains this index.
+    const part = s.clauseParts?.find(p => idx >= p.start && idx < p.end);
+    if (part && !isDegenerateTranslation(part.translation)) return part.translation;
+
+    const own = s.breakdownData?.translation || null;
+    if (own && !isDegenerateTranslation(own)) return own;
+    for (let j = sIdx - 1; j >= 0; j--) {
+      const prev = sents[j]?.breakdownData?.translation;
+      if (prev && !isDegenerateTranslation(prev)) return prev;
     }
-    return null;
+    return own;
+  };
+
+  // Offsets where a clause ends without a closing mark, so an unterminated
+  // phrase is still hoverable. Only anchored sentences contribute: the live tail
+  // Meet is still revising must not sprout a dot that moves on every update.
+  const syntheticAnchors = [];
+  if (sents) {
+    for (const s of sents) {
+      const clauses = s.clauseParts
+        || segmentClauses(s.text || '', { marks: 'ja-ascii' })
+          .filter(c => c.hasJapanese)
+          .map(c => ({
+            contentEnd: s.startIndex + c.contentEnd,
+            terminated: c.terminated,
+            text: c.text,
+          }));
+      for (const c of clauses) {
+        if (c.terminated) continue;
+        if ((c.text?.length || 0) < MIN_SYNTHETIC_CLAUSE_CHARS) continue;
+        syntheticAnchors.push(c.contentEnd);
+      }
+    }
+    syntheticAnchors.sort((a, b) => a - b);
+  }
+
+  let aIdx = 0;
+  // The paint loop jumps over whole words, so anchors are flushed by position
+  // rather than visited one character at a time.
+  const emitSyntheticsUpTo = (limit) => {
+    while (aIdx < syntheticAnchors.length && syntheticAnchors[aIdx] <= limit) {
+      const anchor = syntheticAnchors[aIdx];
+      aIdx++;
+      // Look up just inside the clause: an anchor sitting exactly on a
+      // sentence's endIndex belongs to the sentence that ends there.
+      const translation = sentenceTranslationAt(anchor - 1);
+      if (!translation) continue;
+      html += `<span class="mm-boundary mm-boundary-synthetic" data-english="${escapeHtml(translation)}"></span>`;
+    }
   };
 
   while (i < text.length) {
+    emitSyntheticsUpTo(i);
     const boundary = boundaries[bIdx];
     if (boundary && i === boundary.startIdx) {
       const word = boundary.word;
@@ -210,6 +288,7 @@ export function paintWordColoring(messageEl, text, words, sentences) {
       tone = 0;
     }
   }
+  emitSyntheticsUpTo(text.length);
 
   messageEl.innerHTML = html;
   messageEl.setAttribute('data-mm-colored', 'true');

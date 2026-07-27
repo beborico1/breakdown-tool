@@ -55,6 +55,9 @@ async function loadFixture() {
     // Chrome-free: debug.js guards its chrome.storage access, so the tooltip's
     // target test can be exercised on a plain page.
     window.tip = await import('/src/content/chat/word-tooltip.js');
+    // Meet's renderer is a separate innerHTML path, so it needs its own coverage.
+    // Its only non-text import guards its chrome access.
+    window.wr = await import('/src/content/shared/word-render.js');
   });
 }
 
@@ -706,6 +709,83 @@ try {
   assertEq('the visible text is unchanged', t29.after, t29.before);
   assertEq('the dot is the trailing element', t29.dotIsLast, true);
   assertEq('the dot holds no children', t29.dotChildren, 0);
+
+  // ---- T30: a two-sentence chunk gives each mark its own sentence
+  // Meet batches sentences into one chunk and translates the chunk as a unit, so
+  // without splitting, both marks would reveal the same two-sentence English.
+  console.log('\nT30: each Meet dot reveals only its own sentence');
+  const t30 = await page.evaluate(() => {
+    const el = document.getElementById('t30');
+    const text = '行きます。着きました。';
+    const words = [
+      { japanese: '行き', reading: '', romaji: '', english: 'go', type: 'verb' },
+      { japanese: 'ます', reading: '', romaji: '', english: 'polite', type: 'auxiliary' },
+      { japanese: '着き', reading: '', romaji: '', english: 'arrive', type: 'verb' },
+      { japanese: 'ました', reading: '', romaji: '', english: 'past', type: 'auxiliary' },
+    ];
+    const sentences = [{
+      text,
+      startIndex: 0,
+      endIndex: text.length,
+      breakdownData: { translation: "I'll go. I arrived.", words },
+    }];
+    window.wr.paintWordColoring(el, text, words, sentences);
+    return {
+      dots: [...el.querySelectorAll('.mm-boundary')].map(d => d.dataset.english),
+      textContent: el.textContent,
+      wordCount: el.querySelectorAll('.mm-word').length,
+    };
+  });
+  assertEq('one dot per sentence', t30.dots.length, 2);
+  assertEq('each dot carries its own sentence', t30.dots, ["I'll go.", 'I arrived.']);
+  assertEq('the caption text is preserved exactly', t30.textContent, '行きます。着きました。');
+  assertEq('words still paint', t30.wordCount, 4);
+
+  // ---- T31: a translation that cannot be split falls back, it does not guess
+  console.log('\nT31: unsplittable translations fall back to the chunk');
+  const t31 = await page.evaluate(() => {
+    const el = document.getElementById('t31');
+    const text = '行きます。着きました。';
+    const words = [{ japanese: '行き', reading: '', romaji: '', english: 'go', type: 'verb' }];
+    const sentences = [{
+      text,
+      startIndex: 0,
+      endIndex: text.length,
+      breakdownData: { translation: 'I went and then arrived.', words },
+    }];
+    window.wr.paintWordColoring(el, text, words, sentences);
+    return [...el.querySelectorAll('.mm-boundary')].map(d => d.dataset.english);
+  });
+  assertEq('both dots keep the whole-chunk translation', t31,
+    ['I went and then arrived.', 'I went and then arrived.']);
+
+  // ---- T32: an unterminated caption still gets a hoverable dot, with no text
+  console.log('\nT32: Meet synthetic dot adds no caption text');
+  const t32 = await page.evaluate(() => {
+    const el = document.getElementById('t32');
+    const text = 'まだ終わっていない文章';
+    const words = [{ japanese: '文章', reading: '', romaji: '', english: 'text', type: 'noun' }];
+    const sentences = [{
+      text,
+      startIndex: 0,
+      endIndex: text.length,
+      breakdownData: { translation: 'It is not finished yet.', words },
+    }];
+    window.wr.paintWordColoring(el, text, words, sentences);
+    const dot = el.querySelector('.mm-boundary-synthetic');
+    return {
+      textContent: el.textContent,
+      hasDot: !!dot,
+      dotEnglish: dot ? dot.dataset.english : null,
+      dotChildren: dot ? dot.childNodes.length : -1,
+      dotIsLast: dot === el.lastElementChild,
+    };
+  });
+  assertEq('the unterminated caption gets a dot', t32.hasDot, true);
+  assertEq('the dot carries the sentence translation', t32.dotEnglish, 'It is not finished yet.');
+  assertEq('caption text is byte-identical', t32.textContent, 'まだ終わっていない文章');
+  assertEq('the dot holds no text node', t32.dotChildren, 0);
+  assertEq('the dot trails the caption', t32.dotIsLast, true);
 } finally {
   await browser.close();
   server.close();
