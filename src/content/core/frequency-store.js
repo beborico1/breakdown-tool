@@ -1,3 +1,5 @@
+import { count, markOnce } from '../../metrics/index.js';
+import { M, F } from '../../metrics/events.js';
 /**
  * Sharded persistence for word frequency data.
  *
@@ -152,6 +154,15 @@ export async function mergeWordCounts(updates) {
   write[META_KEY] = meta;
 
   await storageSet(write);
+
+  // The retention loop, measured at the one place that already knows both
+  // numbers rather than re-deriving them at each caller.
+  if (addedCount) count(M.VOCAB_COUNTED, addedCount);
+  if (newWords) {
+    count(M.VOCAB_NEW_WORDS, newWords);
+    markOnce(F.FIRST_WORD_SAVED);
+  }
+
   return { newWords, addedCount };
 }
 

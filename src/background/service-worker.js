@@ -1,3 +1,4 @@
+import { ingest, commit, seedMeta, prune, readAll, reset } from '../metrics/sink-local.js';
 // Fetch proxy: content scripts in MV3 cannot reliably reach a local server from
 // strict-CSP pages (chat.google.com, meet.google.com). The service worker has
 // extension-origin privileges + host_permissions, so it can fetch any allowed URL.
@@ -82,14 +83,56 @@ function scheduleOffscreenIdleClose() {
   }
 }
 
+const METRICS_PRUNE_ALARM = 'kaigi-metrics-prune';
+
+// One dispatching listener. An early return on a name mismatch would make every
+// alarm added after the first one silently unreachable.
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name !== OFFSCREEN_IDLE_ALARM) return;
-  try {
-    if (chrome.offscreen.hasDocument && !(await chrome.offscreen.hasDocument())) return;
-    await chrome.offscreen.closeDocument();
-  } catch (e) {
-    // Already gone, or closed underneath us — nothing to do.
+  if (alarm.name === OFFSCREEN_IDLE_ALARM) {
+    // Land any counters the offscreen work produced before the doc goes away.
+    await commit().catch(() => {});
+    try {
+      if (chrome.offscreen.hasDocument && !(await chrome.offscreen.hasDocument())) return;
+      await chrome.offscreen.closeDocument();
+    } catch (e) {
+      // Already gone, or closed underneath us — nothing to do.
+    }
+  } else if (alarm.name === METRICS_PRUNE_ALARM) {
+    await commit().catch(() => {});
+    await prune().catch(e => console.warn('[Metrics] prune failed:', e));
   }
+});
+
+// Metrics ingest: the worker is the only writer, so concurrent tabs cannot
+// clobber each other's increments.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'kaigi-metric') return false;
+  try {
+    ingest(msg.batch, msg.funnel);
+    sendResponse({ ok: true });
+  } catch (e) {
+    sendResponse({ ok: false, error: String(e?.message || e) });
+  }
+  return true;
+});
+
+// Insights page reads and reset.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'kaigi-metrics-read' && msg?.type !== 'kaigi-metrics-reset') return false;
+  (async () => {
+    try {
+      if (msg.type === 'kaigi-metrics-reset') {
+        await reset();
+        sendResponse({ ok: true });
+        return;
+      }
+      await commit();
+      sendResponse({ ok: true, data: await readAll() });
+    } catch (e) {
+      sendResponse({ ok: false, error: String(e?.message || e) });
+    }
+  })();
+  return true;
 });
 
 async function ensureOffscreen() {
@@ -267,6 +310,16 @@ async function reconcileDynamicScripts() {
 
 chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
   reconcileDynamicScripts().catch(e => console.warn('[Init] reconcile failed:', e));
+
+  try {
+    chrome.alarms.create(METRICS_PRUNE_ALARM, { periodInMinutes: 360 });
+  } catch (e) {
+    console.warn('[Metrics] could not schedule prune:', e);
+  }
+  seedMeta({
+    origin: reason === 'install' ? 'install' : 'update',
+    version: chrome.runtime.getManifest().version,
+  }).catch(() => {});
 
   // Show the welcome page on a fresh install, and once on the 1.x -> 2.x upgrade:
   // that release removed the API key those users had configured and renamed the

@@ -30,6 +30,7 @@ const STAGE = path.join(ROOT, 'build');
 const CODE_OPENED_PAGES = [
   'src/pages/welcome/welcome.html',
   'src/pages/frequency/frequency.html',
+  'src/pages/insights/insights.html',
   'src/pages/transcribe/transcribe.html',
   'src/offscreen/offscreen.html',
 ];

@@ -1,4 +1,6 @@
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+import { count, markOnce, flush } from '../../metrics/index.js';
+import { M, F, R } from '../../metrics/events.js';
 
 const ORIGINS = ['https://*/*', 'http://*/*'];
 
@@ -133,8 +135,10 @@ toggle.addEventListener('change', async () => {
   if (toggle.checked) {
     // Must run synchronously from this gesture, so no confirmation dialog can
     // come first — the explanation lives in the resting copy above instead.
+    count(M.PERM_REQUESTED, 1, R.ALLHOSTS);
     const granted = await chrome.permissions.request({ origins: ORIGINS });
     if (!granted) {
+      count(M.PERM_DENIED, 1, R.ALLHOSTS);
       toggle.checked = false;
       await renderHero();
       showStatus('Not enabled. Chrome needs all-sites access to find Japanese on the pages you visit.', false);
@@ -148,6 +152,9 @@ toggle.addEventListener('change', async () => {
       showStatus('Could not enable: ' + (reg?.error || 'unknown error'), false);
       return;
     }
+    count(M.PERM_GRANTED, 1, R.ALLHOSTS);
+    count(M.SETTING_UNIVERSAL_ON);
+    markOnce(F.ALL_SITES_GRANTED);
     await chrome.storage.sync.set({ universalMode: true });
     // Colour the page the user is already looking at, rather than telling them
     // to go and reload their tabs and hoping that they do.
@@ -168,6 +175,7 @@ toggle.addEventListener('change', async () => {
   } else {
     // Order matters: revoke before broadcasting. A rejected sendMessage must
     // never be able to strand the all-hosts grant while the switch reads off.
+    count(M.SETTING_UNIVERSAL_OFF);
     await chrome.storage.sync.set({ universalMode: false });
     await chrome.runtime.sendMessage({ type: 'kaigi-universal-register', enabled: false }).catch(() => {});
     await chrome.permissions.remove({ origins: ORIGINS }).catch(() => {});
@@ -185,6 +193,8 @@ siteToggleBtn.addEventListener('click', async () => {
   const next = isPaused
     ? paused.filter(o => o !== info.origin)
     : [...paused, info.origin].slice(-200);   // sync has a per-item quota, so bound it
+  if (isPaused) count(M.SITE_RESUMED);
+  else count(M.SITE_PAUSED);
   await chrome.storage.sync.set({ pausedSites: next });
   await askTab(activeTab.id, isPaused ? 'resume' : 'pause');
   await renderHero();
@@ -229,9 +239,13 @@ document.getElementById('liveTranscribe').addEventListener('click', () => {
 document.getElementById('openWelcome').addEventListener('click', () => {
   chrome.tabs.create({ url: 'src/pages/welcome/welcome.html' });
 });
+document.getElementById('openInsights').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'src/pages/insights/insights.html' });
+});
 
 async function init() {
   initDisplayPreferences();
+  count(M.PAGE_OPENED, 1, R.POPUP);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   activeTab = tab || null;
 
@@ -242,5 +256,7 @@ async function init() {
 
   await renderHero();
 }
+
+window.addEventListener('blur', () => { flush(); });
 
 init();

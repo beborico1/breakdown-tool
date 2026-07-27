@@ -1,3 +1,5 @@
+import { count, markOnce } from '../../metrics/index.js';
+import { M, F } from '../../metrics/events.js';
 import { debugLog } from '../core/debug.js';
 import { getWordTypeClass } from '../utils/text.js';
 import { isPageLightMode } from '../utils/dom.js';
@@ -63,7 +65,20 @@ function el(tag, className, text) {
  * without clause data.
  * @param {HTMLElement} dotEl
  */
+// Hover fires constantly while reading, so it is sampled by time rather than
+// counted per event: one count per 500 ms of hovering is enough to size the
+// behaviour without turning a reading session into thousands of increments.
+let lastHoverCount = 0;
+function countHover() {
+  const now = Date.now();
+  if (now - lastHoverCount < 500) return;
+  lastHoverCount = now;
+  count(M.HOVER_SHOWN);
+  markOnce(F.FIRST_HOVER);
+}
+
 function showBoundaryTooltip(dotEl) {
+  countHover();
   const clause = dotEl.dataset.clause || '';
   const english = dotEl.dataset.english || '';
   if (!english && !(clause && clauseTranslator)) return;
@@ -113,6 +128,7 @@ function showBoundaryTooltip(dotEl) {
  * @param {HTMLElement} wordEl - The highlighted word span
  */
 function showTooltip(wordEl) {
+  countHover();
   // Clear any pending hide
   if (hideTimeout) {
     clearTimeout(hideTimeout);

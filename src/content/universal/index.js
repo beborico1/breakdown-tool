@@ -9,6 +9,8 @@ import { collectBlockTextNodes, paintBlockTokens } from '../shared/auto-lite-cor
 import { createAnalyzeQueue } from '../shared/analyze-queue.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
 import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
+import { count, markOnce } from '../../metrics/index.js';
+import { M, F, S } from '../../metrics/events.js';
 
 /**
  * Universal (all-sites) Japanese colorizer.
@@ -149,10 +151,16 @@ async function analyzeAndPaint(block) {
     // clearMarkedAncestor to clear, so no later rescan would ever revisit it.
     // The offscreen document closes when idle, so the first analyze after a quiet
     // spell failing is routine rather than exceptional.
+    count(M.COLORIZE_BLOCK_FAIL, 1, S.UNIVERSAL);
     if (!analyzeRetried.has(block)) {
       analyzeRetried.add(block);
       processed.delete(block);
       setTimeout(() => enqueueBlock(block), RESCAN_DEBOUNCE_MS);
+    } else {
+      // Out of retries and carrying no marker, so nothing will revisit it. This
+      // is the actionable signal: a raw failure count is mostly benign cold-start
+      // retries, but a stranded block is text the user never gets.
+      count(M.COLORIZE_BLOCK_STRANDED, 1, S.UNIVERSAL);
     }
     return;
   }
@@ -172,6 +180,18 @@ async function analyzeAndPaint(block) {
       decorateNativeRuby: true,
     });
   });
+
+  if (painted) {
+    // Counted here rather than at entry: paintBlockTokens returns false on
+    // assembled-text drift, and counting before checking would inflate the
+    // headline engagement numbers with blocks that were never coloured, then
+    // double-count them on the retry pass.
+    count(M.COLORIZE_BLOCK_OK, 1, S.UNIVERSAL);
+    count(M.COLORIZE_WORDS, words.length, S.UNIVERSAL);
+    markOnce(F.FIRST_COLORIZED_WORD);
+  } else {
+    count(M.PAINT_DRIFT, 1, S.UNIVERSAL);
+  }
 
   // If the DOM drifted between assemble and paint, paintBlockTokens marks but
   // doesn't wrap. Give the block one retry so transient drift still colorizes.

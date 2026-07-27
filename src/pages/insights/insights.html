@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Insights — Japanese in Color</title>
+  <link rel="stylesheet" href="insights.css">
+</head>
+<body>
+  <main class="page">
+    <header class="head">
+      <div>
+        <h1>Insights</h1>
+        <p class="sub">Everything this extension counts. All of it is stored on this computer
+          and none of it is sent anywhere.</p>
+      </div>
+      <div class="head-actions">
+        <button id="exportJson" class="btn">Export JSON</button>
+        <button id="exportCsv" class="btn">Export CSV</button>
+        <button id="reset" class="btn btn-danger">Delete all</button>
+      </div>
+    </header>
+
+    <p id="empty" class="empty" hidden>Nothing recorded yet. Turn on coloring and browse a
+      Japanese page, then come back.</p>
+
+    <div id="body" hidden>
+      <section class="card">
+        <h2>Getting started</h2>
+        <dl class="stats" id="activation"></dl>
+        <ol class="funnel" id="funnel"></ol>
+      </section>
+
+      <section class="card">
+        <h2>Use</h2>
+        <dl class="stats" id="engagement"></dl>
+        <h3>Where the words are</h3>
+        <div class="bars" id="surfaces"></div>
+      </section>
+
+      <section class="card">
+        <h2>Words kept</h2>
+        <dl class="stats" id="retention"></dl>
+      </section>
+
+      <section class="card">
+        <h2>Health</h2>
+        <dl class="stats" id="health"></dl>
+      </section>
+
+      <section class="card">
+        <h2>Everything counted</h2>
+        <table class="raw"><tbody id="raw"></tbody></table>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="insights.js"></script>
+</body>
+</html>

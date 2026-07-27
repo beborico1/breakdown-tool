@@ -205,3 +205,4 @@ body {
   cursor: pointer;
 }
 .link:hover { color: #632889; text-decoration: underline; }
+.foot-sep { color: #dadce0; font-size: 11px; margin: 0 4px; }

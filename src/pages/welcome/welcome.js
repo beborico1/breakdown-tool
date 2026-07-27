@@ -3,6 +3,8 @@ import { paintBlockTokens } from '../../content/shared/auto-lite-core.js';
 import { setupWordTooltip } from '../../content/chat/word-tooltip.js';
 import { translateClause, warmClauseTranslator } from '../../content/core/clause-translate.js';
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+import { count, markOnce } from '../../metrics/index.js';
+import { M, F, R } from '../../metrics/events.js';
 
 const ORIGINS = ['https://*/*', 'http://*/*'];
 
@@ -79,8 +81,10 @@ async function refreshEnableState() {
 }
 
 enableBtn.addEventListener('click', async () => {
+  count(M.PERM_REQUESTED, 1, R.ALLHOSTS);
   const granted = await chrome.permissions.request({ origins: ORIGINS });
   if (!granted) {
+    count(M.PERM_DENIED, 1, R.ALLHOSTS);
     enableHint.textContent =
       'Not enabled. Chrome needs all-sites access to find Japanese on the pages you visit — you can turn it on later from the toolbar popup.';
     return;
@@ -90,12 +94,17 @@ enableBtn.addEventListener('click', async () => {
     enableHint.textContent = 'Could not enable: ' + (reg?.error || 'unknown error');
     return;
   }
+  count(M.PERM_GRANTED, 1, R.ALLHOSTS);
+  count(M.SETTING_UNIVERSAL_ON);
+  markOnce(F.ALL_SITES_GRANTED);
   await chrome.storage.sync.set({ universalMode: true });
   enableHint.textContent = 'On. Open any Japanese page — tabs already open need a reload.';
   await refreshEnableState();
 });
 
 initDisplayPreferences();
+count(M.PAGE_OPENED, 1, R.WELCOME);
+markOnce(F.WELCOME_SEEN);
 renderLegend();
 setupWordTooltip({ translateClause, warmClauseTranslator });
 warmupNlp();
