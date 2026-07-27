@@ -93,8 +93,10 @@ export function wrapJapaneseTokensInTextNode(textNode, tokens, opts = {}) {
     consumed += wordLen;
 
     if (t.isBoundary) {
-      const span = createAutoBoundarySpan(t.english);
-      span.appendChild(document.createTextNode(t.surface));
+      const span = createAutoBoundarySpan(t.english, { clause: t.clause, synthetic: t.synthetic });
+      // A synthetic dot has no surface: it stands in for a closing mark the text
+      // never had, so it must contribute no text of its own.
+      if (t.surface) span.appendChild(document.createTextNode(t.surface));
       parent.replaceChild(span, currentNode);
       currentNode = afterNode;
       // Hard break: no thin space, restart the tone run for following words.

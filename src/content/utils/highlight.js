@@ -107,17 +107,25 @@ export function applyHighlightsToTextNode(textNode, matches) {
 }
 
 /**
- * Build a hoverable sentence-boundary span. Carries only the (whole-message)
- * English translation in data-english; the shared word tooltip renders it on
- * hover. Deliberately has no data-word, so the Anki / context-menu word
- * selectors never treat a boundary dot as a word.
- * @param {string} translation - English translation to reveal on hover
+ * Build a hoverable clause-boundary span. `data-clause` holds the clause this
+ * dot closes, which is what the tooltip translates on hover; `data-english`
+ * holds that translation once known, and starts empty unless the caller had an
+ * honest one to seed. Deliberately has no data-word, so the Anki / context-menu
+ * word selectors never treat a boundary dot as a word.
+ * @param {string} translation - English to reveal immediately, if already known
+ * @param {{clause?: string, synthetic?: boolean}} [options]
+ *   `clause` is the text the dot resolves on hover.
+ *   `synthetic` marks a dot standing in for a closing mark the text never had;
+ *   it renders its glyph from CSS and holds no text of its own.
  * @returns {HTMLSpanElement}
  */
-export function createAutoBoundarySpan(translation) {
+export function createAutoBoundarySpan(translation, options = {}) {
+  const { clause = '', synthetic = false } = options;
   const span = document.createElement('span');
   span.className = 'gcwb-auto-boundary';
   span.dataset.english = translation || '';
+  if (clause) span.dataset.clause = clause;
+  if (synthetic) span.dataset.gcwbSynth = '1';
   return span;
 }
 
@@ -154,9 +162,12 @@ export function applyAutoWordsToTextNode(textNode, matches) {
     consumedOffset += wordLength;
 
     if (match.kind === 'boundary') {
-      const span = createAutoBoundarySpan(match.data.english);
+      const span = createAutoBoundarySpan(match.data.english, {
+        clause: match.data.clause,
+        synthetic: match.data.synthetic,
+      });
       parent.replaceChild(span, currentNode);
-      span.appendChild(document.createTextNode(match.word));
+      if (match.word) span.appendChild(document.createTextNode(match.word));
       currentNode = afterNode;
       // A boundary is a hard break: don't carry the tone run across it, so the
       // next same-type word restarts its alternation (like plain punctuation).

@@ -18,5 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:nlp
-        # e2e (npm run test:e2e) needs a real Chromium with the unpacked extension
-        # loaded, so it stays a local/manual check rather than running in CI.
+      - run: npm run test:unit
+        # dom (npm run test:dom) and e2e (npm run test:e2e) both need a real
+        # Chromium, e2e with the unpacked extension loaded, so they stay
+        # local/manual checks rather than running in CI.

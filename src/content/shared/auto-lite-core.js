@@ -1,5 +1,5 @@
 import { debugLog } from '../core/debug.js';
-import { hasJapanese, findSentenceBoundaries } from '../utils/text.js';
+import { hasJapanese, segmentClauses, MIN_SYNTHETIC_CLAUSE_CHARS } from '../utils/text.js';
 import { wrapJapaneseTokensInTextNode } from '../utils/auto-token-mapper.js';
 import { isBlockLevel } from './block-walker.js';
 
@@ -101,9 +101,13 @@ export function collectBlockTextNodes(blockEl, excludeTags = DEFAULT_EXCLUDE_TAG
  * @param {HTMLElement} blockEl
  * @param {string} analyzerText - the exact text passed to the analyzer
  * @param {Array<{japanese:string,reading:string,romaji:string,english:string,type:string}>} words
- * @param {{marker?: string, excludeTags?: Set<string>, translation?: string, stopAtNestedBlocks?: boolean, decorateNativeRuby?: boolean}} [opts]
- *   `translation` (optional): when set, sentence-ending dots are wrapped as
- *   hoverable boundary spans revealing this whole-message translation.
+ * @param {{marker?: string, excludeTags?: Set<string>, translation?: string, boundaryDots?: boolean, marks?: 'ja'|'ja-ascii', stopAtNestedBlocks?: boolean, decorateNativeRuby?: boolean}} [opts]
+ *   `boundaryDots` wraps each Japanese clause's closing mark as a hoverable dot,
+ *   and hangs an empty dot off a clause that has no closing mark.
+ *   `marks` selects the clause-ending punctuation policy.
+ *   `translation` (optional) describes the whole block, so it is only used to
+ *   seed a dot when the block holds exactly one Japanese clause; otherwise dots
+ *   carry their clause text and resolve their own English on hover.
  *   `stopAtNestedBlocks` must match the collectBlockTextNodes call that built
  *   `analyzerText`, or the offset-safety check fails on every nested block.
  *   `decorateNativeRuby` copies painted base colors onto excluded <rt> readings.
@@ -114,6 +118,8 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
     marker = 'gcwbAuto',
     excludeTags = DEFAULT_EXCLUDE_TAGS,
     translation = '',
+    boundaryDots = true,
+    marks = 'ja',
     stopAtNestedBlocks = false,
     decorateNativeRuby = false,
   } = opts;
@@ -191,24 +197,61 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
       }
     }
 
-    // Sentence-ending dots → hoverable boundary spans showing the whole-message
-    // translation (mirrors the Meet hover-dot feature). Bucketed per node like
-    // words; only built when a translation is available to reveal on hover.
-    const trans = (translation || '').trim();
-    if (trans) {
+    // Clause-ending dots → hoverable boundary spans. Each dot carries its own
+    // clause in data-clause and resolves that clause's English on hover, so a
+    // dot never reveals a neighbouring clause. Bucketed per node like words.
+    if (boundaryDots) {
+      const clauses = segmentClauses(assembled, { marks }).filter(c => c.hasJapanese);
+
+      // A block translation describes the whole block, so it is only honestly
+      // this clause's English when the block holds exactly one clause. With more
+      // the dots start empty and resolve themselves.
+      const seed = clauses.length === 1 ? (translation || '').trim() : '';
+
       let bRangeIdx = 0;
-      for (const { start, end } of findSentenceBoundaries(assembled)) {
-        while (bRangeIdx < ranges.length && ranges[bRangeIdx].end <= start) bRangeIdx++;
-        const r = ranges[bRangeIdx];
-        if (!r) continue;
-        if (start < r.start || end > r.end) continue; // straddles a node boundary
+      const rangeContaining = (pos) => {
+        while (bRangeIdx < ranges.length && ranges[bRangeIdx].end <= pos) bRangeIdx++;
+        return ranges[bRangeIdx];
+      };
+
+      for (const c of clauses) {
+        if (c.terminated) {
+          const r = rangeContaining(c.markStart);
+          if (!r) continue;
+          if (c.markStart < r.start || c.markEnd > r.end) continue; // straddles nodes
+          // An earlier pass may already have wrapped this mark. Re-wrapping it
+          // would nest a dot inside a dot, so skip rather than reject the mark
+          // during assembly, which would leave `assembled` unstable.
+          if (r.node.parentElement?.closest('.gcwb-auto-boundary')) continue;
+          const bucket = buckets.get(r.node) || [];
+          bucket.push({
+            surface: assembled.slice(c.markStart, c.markEnd),
+            start: c.markStart - r.start,
+            end: c.markEnd - r.start,
+            isBoundary: true,
+            clause: c.text,
+            english: seed,
+          });
+          buckets.set(r.node, bucket);
+          continue;
+        }
+
+        // Unterminated: hang an empty dot off the end of the clause's text so a
+        // phrase with no closing mark is still hoverable. The span holds no text
+        // node, so the assembled text is byte-identical on the next pass.
+        if (c.text.length < MIN_SYNTHETIC_CLAUSE_CHARS) continue;
+        const r = rangeContaining(c.contentEnd - 1);
+        if (!r || r.end !== c.contentEnd) continue;
+        if (isFollowedBySyntheticDot(r.node)) continue;
         const bucket = buckets.get(r.node) || [];
         bucket.push({
-          surface: assembled.slice(start, end),
-          start: start - r.start,
-          end: end - r.start,
+          surface: '',
+          start: r.end - r.start,
+          end: r.end - r.start,
           isBoundary: true,
-          english: trans,
+          synthetic: true,
+          clause: c.text,
+          english: seed,
         });
         buckets.set(r.node, bucket);
       }
@@ -217,7 +260,9 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
     for (const [node, tokens] of buckets.entries()) {
       // Boundaries are appended after words, so re-sort each bucket by local
       // offset before wrapping (wrapJapaneseTokensInTextNode consumes in order).
-      tokens.sort((a, b) => a.start - b.start);
+      // The end tiebreak keeps a zero-length synthetic dot behind a real token
+      // that starts at the same offset.
+      tokens.sort((a, b) => (a.start - b.start) || (a.end - b.end));
       const hasWord = tokens.some(t => !t.isBoundary);
       try {
         wrapJapaneseTokensInTextNode(node, tokens, { decorateNativeRuby });
@@ -226,8 +271,46 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
         debugLog('AUTO-LITE-CORE', 'wrap failed:', e?.message);
       }
     }
+
+    if (boundaryDots) hoistSyntheticDots(blockEl);
   }
 
   if (marker) blockEl.dataset[marker] = '1';
   return painted;
+}
+
+/** Elements a bare dot must not sit inside, by tag. */
+const DOT_HOSTILE_TAGS = new Set(['A', 'BUTTON', 'LABEL', 'SUMMARY', 'RUBY', 'RB', 'RT', 'RP', 'RTC']);
+
+/**
+ * True when `node` is already followed by a synthetic dot, ignoring empty text
+ * nodes left behind by splitText. Keeps a repaint from stacking a second dot.
+ * @param {Text} node
+ * @returns {boolean}
+ */
+function isFollowedBySyntheticDot(node) {
+  let sib = node.nextSibling;
+  while (sib && sib.nodeType === Node.TEXT_NODE && !sib.nodeValue) sib = sib.nextSibling;
+  return !!(sib && sib.nodeType === Node.ELEMENT_NODE
+    && sib.classList?.contains('gcwb-auto-boundary')
+    && sib.dataset?.gcwbSynth != null);
+}
+
+/**
+ * Move synthetic dots out of elements that would mis-render or mis-handle them.
+ * Inside a <ruby> a bare span lays out as a second base and shifts the reading
+ * off its kanji; inside an <a> or <button> the dot inherits the click target.
+ * The dot is re-parented just after the outermost hostile ancestor still within
+ * the block, so it keeps its reading order.
+ * @param {HTMLElement} blockEl
+ */
+function hoistSyntheticDots(blockEl) {
+  const dots = blockEl.querySelectorAll('.gcwb-auto-boundary[data-gcwb-synth]');
+  for (const dot of dots) {
+    let outermost = null;
+    for (let el = dot.parentElement; el && el !== blockEl; el = el.parentElement) {
+      if (DOT_HOSTILE_TAGS.has(el.tagName)) outermost = el;
+    }
+    if (outermost?.parentNode) outermost.parentNode.insertBefore(dot, outermost.nextSibling);
+  }
 }

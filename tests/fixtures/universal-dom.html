@@ -67,5 +67,25 @@
 <!-- T19: native-ruby reading decoration is opt-in for the universal renderer. -->
 <div id="t19" class="host-ruby-color"><ruby id="t19sea">海<rt>うみ</rt></ruby></div>
 
+<!-- T21/T25: three clauses, the last one unterminated and long enough to earn a dot. -->
+<div id="t21">最初の文です。次の文です。最後のことばです</div>
+
+<!-- T22: a single clause, so a block translation is honestly that clause's. -->
+<div id="t22">最初の文です。</div>
+
+<!-- T23: one unterminated clause; the synthetic dot must add no text. -->
+<div id="t23">終わりのない長い文章</div>
+
+<!-- T24: a Latin clause between two Japanese ones earns no dot. The Latin is
+     closed by a Japanese mark so it forms its own clause; an ASCII stop would
+     not, and the run would merge into the following Japanese clause. -->
+<div id="t24">一つ目です。Version 2.5 released。三つ目です。</div>
+
+<!-- T26: clauses either side of a nested block, both long enough to earn a dot. -->
+<div id="t26">最初の長い文章です<p>中身の言葉</p>あとの長い部分です</div>
+
+<!-- T27: a synthetic dot must not stay inside an anchor. -->
+<div id="t27"><a href="#" id="t27a">見てリンクのことば</a></div>
+
 </body>
 </html>

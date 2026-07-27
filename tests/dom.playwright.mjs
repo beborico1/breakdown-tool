@@ -221,13 +221,21 @@ try {
       analyzerText,
       nestedPainted: inP ? inP.dataset.word : null,
       boundaryEnglish: boundary ? boundary.dataset.english : null,
+      boundaryClause: boundary ? boundary.dataset.clause : null,
+      dotCount: el.querySelectorAll('.gcwb-auto-boundary').length,
       marker: el.dataset.gcwbAutoLite,
     };
   });
   assertEq('default assembly spans nested p', t9.analyzerText, '最初の文です。中の言葉');
   assertEq('painted', t9.painted, true);
   assertEq('word inside nested p painted', t9.nestedPainted, '中');
-  assertEq('boundary dot carries the translation', t9.boundaryEnglish, 'First sentence.');
+  // The block holds two Japanese clauses, so the block translation is not
+  // honestly either one and the dot ships empty, carrying its own clause for the
+  // tooltip to resolve on hover.
+  assertEq('boundary dot carries its own clause', t9.boundaryClause, '最初の文です。');
+  assertEq('boundary dot is not seeded from the block translation', t9.boundaryEnglish, '');
+  // 中の言葉 is unterminated but under MIN_SYNTHETIC_CLAUSE_CHARS, so no second dot.
+  assertEq('short unterminated tail earns no synthetic dot', t9.dotCount, 1);
   assertEq('redmine marker set', t9.marker, '1');
 
   // ---- T10: drift safety
@@ -511,6 +519,137 @@ try {
   assertEq('nearestBlockRoot always lands on a block boundary', t20.rootNotBlock, 0);
   assertEq('scoped scans invent no blocks a full scan would not find', t20.notInFull, 0);
   assertEq('scoped scans collectively miss no block', t20.missed, []);
+
+  // A boundary dot translates one clause, so these pin that the painter never
+  // hands a dot text belonging to a neighbouring clause, and that the dot for a
+  // clause with no closing mark contributes nothing to the page's text.
+  await page.evaluate(() => {
+    const EX = new Set(['PRE', 'CODE', 'IMG', 'OBJECT']);
+    const W = (japanese, type) => ({ japanese, reading: '', romaji: '', english: 'x', type });
+    // Enough tokens to cover every fixture below; unlocatable ones are skipped.
+    window.paintClauseFixture = (id, opts = {}) => {
+      const el = document.getElementById(id);
+      const analyzerText = core.collectBlockTextNodes(el, EX).assembled;
+      const words = [...analyzerText.matchAll(/[぀-ゟ゠-ヿ一-龯]+/g)]
+        .map(m => W(m[0], 'noun'));
+      const painted = core.paintBlockTokens(el, analyzerText, words,
+        { marker: 'gcwbAutoLite', excludeTags: EX, ...opts });
+      return { painted, analyzerText };
+    };
+    window.dotsOf = (id) => [...document.getElementById(id)
+      .querySelectorAll('.gcwb-auto-boundary')]
+      .map(d => ({
+        clause: d.dataset.clause || '',
+        english: d.dataset.english || '',
+        synthetic: d.dataset.gcwbSynth != null,
+        text: d.textContent,
+        childCount: d.childNodes.length,
+        parentId: d.parentElement?.id || d.parentElement?.tagName,
+      }));
+  });
+
+  // ---- T21: each dot carries its own clause, never the block translation
+  console.log('\nT21: a dot reveals only its own clause');
+  const t21 = await page.evaluate(() => {
+    window.paintClauseFixture('t21', { translation: 'Whole block translation.' });
+    return window.dotsOf('t21');
+  });
+  assertEq('one dot per clause', t21.length, 3);
+  assertEq('each dot carries its own clause',
+    t21.map(d => d.clause), ['最初の文です。', '次の文です。', '最後のことばです']);
+  assertEq('no dot is seeded from the multi-clause block translation',
+    t21.map(d => d.english), ['', '', '']);
+  assertEq('the unterminated clause gets the synthetic dot',
+    t21.map(d => d.synthetic), [false, false, true]);
+
+  // ---- T22: a single-clause block can honestly seed its dot
+  console.log('\nT22: a single-clause block seeds its dot');
+  const t22 = await page.evaluate(() => {
+    window.paintClauseFixture('t22', { translation: 'First sentence.' });
+    return window.dotsOf('t22');
+  });
+  assertEq('one dot', t22.length, 1);
+  assertEq('seeded with the block translation', t22[0].english, 'First sentence.');
+  assertEq('and still carries its clause', t22[0].clause, '最初の文です。');
+
+  // ---- T23: a synthetic dot is invisible to the page's text
+  console.log('\nT23: a synthetic dot contributes no text');
+  const t23 = await page.evaluate(() => {
+    const before = document.getElementById('t23').textContent;
+    window.paintClauseFixture('t23');
+    const el = document.getElementById('t23');
+    // Thin spaces are the painter's own separators and are stripped the same way
+    // T6 does; nothing else may differ.
+    const after = el.textContent.replace(/ /g, '');
+    return { before, after, dots: window.dotsOf('t23') };
+  });
+  assertEq('textContent is byte-identical after painting', t23.after, t23.before);
+  assertEq('no dot glyph leaked into the text', t23.after.includes('\u00B7'), false);
+  assertEq('exactly one synthetic dot', t23.dots.length, 1);
+  assertEq('the dot holds no child nodes', t23.dots[0].childCount, 0);
+  assertEq('the dot renders no text of its own', t23.dots[0].text, '');
+
+  // ---- T24: a clause with no Japanese is skipped entirely
+  console.log('\nT24: non-Japanese clauses earn no dot');
+  const t24 = await page.evaluate(() => {
+    window.paintClauseFixture('t24');
+    return window.dotsOf('t24');
+  });
+  assertEq('two dots, not three', t24.length, 2);
+  assertEq('the Latin clause is absent from the dots',
+    t24.map(d => d.clause), ['一つ目です。', '三つ目です。']);
+  assertEq('no dot is anchored inside the Latin run',
+    t24.some(d => d.clause.includes('Version')), false);
+
+  // ---- T25: repainting a block does not stack dots
+  console.log('\nT25: repaint is idempotent');
+  const t25 = await page.evaluate(() => {
+    window.paintClauseFixture('t21', { translation: 'Whole block translation.' });
+    const el = document.getElementById('t21');
+    return {
+      dots: el.querySelectorAll('.gcwb-auto-boundary').length,
+      nested: el.querySelectorAll('.gcwb-auto-boundary .gcwb-auto-boundary').length,
+      synthetic: el.querySelectorAll('.gcwb-auto-boundary[data-gcwb-synth]').length,
+    };
+  });
+  assertEq('still one dot per clause after a second paint', t25.dots, 3);
+  assertEq('no dot nested inside another', t25.nested, 0);
+  assertEq('no duplicate synthetic dot', t25.synthetic, 1);
+
+  // ---- T26: a clause ends at a seam, so its dot lands before the nested block
+  console.log('\nT26: a clause never spans a seam');
+  const t26 = await page.evaluate(() => {
+    const el = document.getElementById('t26');
+    const EX = new Set(['PRE', 'CODE', 'IMG', 'OBJECT']);
+    const analyzerText = core.collectBlockTextNodes(el, EX, { stopAtNestedBlocks: true }).assembled;
+    const W = (japanese) => ({ japanese, reading: '', romaji: '', english: 'x', type: 'noun' });
+    const words = [...analyzerText.matchAll(/[぀-ゟ゠-ヿ一-龯]+/g)].map(m => W(m[0]));
+    core.paintBlockTokens(el, analyzerText, words,
+      { marker: 'gcwbAutoLite', excludeTags: EX, stopAtNestedBlocks: true });
+    const dot = el.querySelector(':scope > .gcwb-auto-boundary');
+    const nested = el.querySelector(':scope > p');
+    let order = null;
+    if (dot && nested) {
+      order = dot.compareDocumentPosition(nested) & Node.DOCUMENT_POSITION_FOLLOWING
+        ? 'dot-first' : 'nested-first';
+    }
+    return { hasSeam: analyzerText.includes('\n'), isChild: !!dot, order };
+  });
+  assertTrue('the fixture actually seams', t26.hasSeam);
+  assertEq('the dot is a direct child of the block', t26.isChild, true);
+  assertEq('the dot precedes the nested block', t26.order, 'dot-first');
+
+  // ---- T27: a synthetic dot is hoisted out of hostile ancestors
+  console.log('\nT27: synthetic dots are hoisted out of ruby and anchors');
+  const t27 = await page.evaluate(() => {
+    window.paintClauseFixture('t27');
+    const dots = window.dotsOf('t27');
+    const insideAnchor = document.querySelectorAll('#t27 a .gcwb-auto-boundary').length;
+    return { dots, insideAnchor };
+  });
+  assertEq('the anchor text earns a dot', t27.dots.length, 1);
+  assertEq('no dot remains inside the anchor', t27.insideAnchor, 0);
+  assertEq('the dot is re-parented to the block', t27.dots[0].parentId, 't27');
 } finally {
   await browser.close();
   server.close();

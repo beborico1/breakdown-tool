@@ -1,5 +1,5 @@
 import { debugLog } from '../core/debug.js';
-import { hasJapanese, findSentenceBoundaries } from '../utils/text.js';
+import { hasJapanese, segmentClauses, MIN_SYNTHETIC_CLAUSE_CHARS } from '../utils/text.js';
 import { buildTogglePanel } from '../core/auto-translate-panel.js';
 import { collectTextNodes, applyAutoWordsToTextNode } from '../utils/highlight.js';
 import { findQuotedBlockContainer } from './message-finder.js';
@@ -79,24 +79,31 @@ export function renderAutoLiteView(messageEl, breakdownData, bubbleEl) {
   const originalHTML = messageEl.innerHTML;
   const translation = (breakdownData.translation || '').trim();
 
-  // Sentence-ending dots become hoverable boundary spans that reveal the
-  // whole-message translation (mirrors the Meet hover-dot feature). Only built
-  // when there is a translation to show, and never overlapping a wrapped word.
-  let allMatches = globalMatches;
-  if (translation) {
-    const boundaries = findSentenceBoundaries(fullText)
-      .filter(b => !globalMatches.some(w => b.start < w.end && w.start < b.end))
-      .map(b => ({
-        kind: 'boundary',
-        word: fullText.slice(b.start, b.end),
-        start: b.start,
-        end: b.end,
-        data: { english: translation },
-      }));
-    if (boundaries.length) {
-      allMatches = [...globalMatches, ...boundaries].sort((a, b) => a.start - b.start);
-    }
+  // Clause-ending dots become hoverable boundary spans. Each carries its own
+  // clause and resolves that clause's English on hover, so a dot never reveals
+  // a neighbouring clause. A message translation describes the whole message,
+  // so it only seeds a dot when the message is a single clause. Dots never
+  // overlap a wrapped word.
+  const clauses = segmentClauses(fullText, { marks: 'ja' }).filter(c => c.hasJapanese);
+  const seed = clauses.length === 1 ? translation : '';
+  const boundaries = [];
+  for (const c of clauses) {
+    const isSynthetic = !c.terminated;
+    if (isSynthetic && c.text.length < MIN_SYNTHETIC_CLAUSE_CHARS) continue;
+    const start = isSynthetic ? c.contentEnd : c.markStart;
+    const end = isSynthetic ? c.contentEnd : c.markEnd;
+    if (globalMatches.some(w => start < w.end && w.start < end)) continue;
+    boundaries.push({
+      kind: 'boundary',
+      word: isSynthetic ? '' : fullText.slice(start, end),
+      start,
+      end,
+      data: { english: seed, clause: c.text, synthetic: isSynthetic },
+    });
   }
+  const allMatches = boundaries.length
+    ? [...globalMatches, ...boundaries].sort((a, b) => (a.start - b.start) || (a.end - b.end))
+    : globalMatches;
 
   // Distribute matches onto individual text nodes (skipping chip/link nodes),
   // then wrap in place. Iterate a snapshot since applying mutates the DOM live.
