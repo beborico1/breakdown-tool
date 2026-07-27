@@ -225,11 +225,12 @@ Google will email `luiscarlosricoalamda@gmail.com` with approval or rejection. R
 2. Share the link.
 3. Consider adding a "Install from Chrome Web Store" badge to your `README.md`.
 
-### 5.4 Future updates (when you ship v1.3.0)
-1. Bump both `manifest.json` and `package.json` version.
-2. `rm -rf dist/ && npm run build`
-3. `zip -r kaigi-meeting-v1.3.0.zip manifest.json dist/ src/ assets/icons/ LICENSE -x "*.DS_Store" "src/**/.DS_Store"`
-4. In the dashboard, click the existing item → **Package** → **Upload new package** → submit for re-review.
+### 5.4 Future updates
+1. Bump the version in **both** `manifest.json` and `package.json` (`npm run package` refuses to
+   run if they disagree).
+2. `npm run package`
+3. In the dashboard, click the existing item → **Package** → **Upload new package** → submit for
+   re-review.
 
 ---
 
@@ -238,17 +239,26 @@ Google will email `luiscarlosricoalamda@gmail.com` with approval or rejection. R
 ```bash
 # Rebuild after any code change
 cd /Users/luisrico/dev/google-meet-caption-copier
-rm -rf dist/ && npm run build
+npm run build
 
-# Rebuild and re-zip (run before re-submitting)
-rm -rf dist/ && npm run build
-rm -f kaigi-meeting-v1.2.0.zip
-zip -r kaigi-meeting-v1.2.0.zip manifest.json dist/ src/ assets/icons/ LICENSE \
-  -x "*.DS_Store" "src/**/.DS_Store"
-
-# Verify ZIP contents (should NOT contain node_modules, .git, todo.md, etc.)
-unzip -l kaigi-meeting-v1.2.0.zip | head -20
+# Build the submission package (this is the only supported way to produce a zip)
+npm run package
 ```
+
+`npm run package` builds, then assembles the zip from a *computed* file set: it starts at the
+manifest and the extension pages and follows every ES import and stylesheet reference, so a module
+nothing reaches cannot ship and a module something reaches cannot be forgotten. It refuses to
+produce a package if the two version numbers disagree, if any dictionary directory is empty, or if
+anything on the denylist (`.md`, `.txt`, `.zip`, `.DS_Store`, `sample.html`, tests, source maps)
+made it into the tree.
+
+Do **not** hand-roll a `zip -r ... src/` command. The previous one globbed all of `src/`, which
+shipped a captured chat fixture containing a colleague's email address, while passing only
+`assets/icons/` — so the 24 MB of dictionaries the on-device pipeline needs were missing and every
+install failed on its first analysis.
+
+Smoke-test the real artifact before uploading: `npm run package` leaves the exact staged tree at
+`build/`, so load **that** directory via **Load unpacked** rather than the repo root.
 
 ---
 
