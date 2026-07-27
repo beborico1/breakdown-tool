@@ -218,10 +218,18 @@ function scheduleRescan() {
   }, RESCAN_DEBOUNCE_MS);
 }
 
-/** ChildList mutation that only added our own tooltip/popover/panel UI. */
+/**
+ * ChildList mutation that only added or removed our own tooltip/popover/panel
+ * UI. Removals matter as much as additions: tearing down a tooltip appends a
+ * childList record to document.body carrying only removedNodes, and treating
+ * that as page activity queues document.body as a rescan root, which makes the
+ * scoped walk degrade to a full-document walk on every hover.
+ */
 function isOwnUiMutation(m) {
-  if (m.type !== 'childList' || m.addedNodes.length === 0) return false;
+  if (m.type !== 'childList') return false;
+  if (m.addedNodes.length === 0 && m.removedNodes.length === 0) return false;
   for (const n of m.addedNodes) if (!isOwnElement(n)) return false;
+  for (const n of m.removedNodes) if (!isOwnElement(n)) return false;
   return true;
 }
 
