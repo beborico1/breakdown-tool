@@ -39,7 +39,40 @@ const OFFSCREEN_PATH = 'src/offscreen/offscreen.html';
 // promise only dedupes concurrent createDocument calls.
 let offscreenCreating = null;
 
+// The offscreen document is a full renderer pinning every dictionary it has
+// loaded: ~96 MB of kuromoji ArrayBuffers, kuromoji's expanded target_map, and
+// the parsed JMdict map — on the order of 220 MB, held for the whole browser
+// session once a single word has been analyzed. Close it after a stretch with
+// no NLP traffic; the next request recreates it (ensureOffscreen already
+// re-checks existence rather than memoizing success).
+//
+// This must be a chrome.alarms alarm, not setTimeout: MV3 tears the worker
+// down after ~30 s idle, which is well before any useful timeout would fire.
+const OFFSCREEN_IDLE_ALARM = 'kaigi-offscreen-idle';
+const OFFSCREEN_IDLE_MINUTES = 15;
+
+function scheduleOffscreenIdleClose() {
+  // create() replaces an existing alarm of the same name, so each NLP request
+  // pushes the deadline out — the document only closes after a genuine lull.
+  try {
+    chrome.alarms.create(OFFSCREEN_IDLE_ALARM, { delayInMinutes: OFFSCREEN_IDLE_MINUTES });
+  } catch (e) {
+    console.warn('[Offscreen] could not schedule idle close:', e);
+  }
+}
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== OFFSCREEN_IDLE_ALARM) return;
+  try {
+    if (chrome.offscreen.hasDocument && !(await chrome.offscreen.hasDocument())) return;
+    await chrome.offscreen.closeDocument();
+  } catch (e) {
+    // Already gone, or closed underneath us — nothing to do.
+  }
+});
+
 async function ensureOffscreen() {
+  scheduleOffscreenIdleClose();
   if (chrome.offscreen.hasDocument && await chrome.offscreen.hasDocument()) return;
   if (offscreenCreating) return offscreenCreating;
   offscreenCreating = (async () => {

@@ -52,7 +52,27 @@ export function setFrequencySaveTimeout(value) {
   frequencySaveTimeout = value;
 }
 export const pendingFrequencyUpdates = new Map(); // Accumulate updates before saving
-export const countedContentKeys = new Set(); // Track which translations have been counted
+
+// Track which translations have been counted, so a re-render does not
+// double-count its words. Only ever added to, so it needs a ceiling: a
+// long meeting or a day-long chat session would otherwise grow it without
+// bound. Keys are only useful while their text is still on screen, so
+// evicting the oldest is safe — the worst case is re-counting a caption that
+// scrolled away hours ago.
+export const countedContentKeys = new Set();
+const COUNTED_CONTENT_KEYS_CAP = 5000;
+
+export function rememberCountedContentKey(key) {
+  countedContentKeys.add(key);
+  if (countedContentKeys.size <= COUNTED_CONTENT_KEYS_CAP) return;
+  // Sets iterate in insertion order, so this drops the oldest quarter.
+  const dropCount = countedContentKeys.size - Math.floor(COUNTED_CONTENT_KEYS_CAP * 0.75);
+  let dropped = 0;
+  for (const oldest of countedContentKeys) {
+    countedContentKeys.delete(oldest);
+    if (++dropped >= dropCount) break;
+  }
+}
 
 // Observer loop detection
 export let observerCallCount = 0;
@@ -120,9 +140,15 @@ export function setOverlayCreatedAt(value) {
   overlayCreatedAt = value;
 }
 
-// Track inline breakdown state per message element
-// Value: { originalHTML, breakdownData, isShowingBreakdown, loadingIndicator }
-export const inlineBreakdownState = new Map();
+// Track inline breakdown state per message element.
+// Value: { originalHTML, breakdownData, isShowingBreakdown, loadingIndicator, contentKey }
+//
+// WeakMap, not Map: entries are keyed by message elements, and nothing ever
+// deleted from here. In a Chat or Gmail tab left open for days every analyzed
+// message pinned its (long since detached) element plus its original markup.
+// Every consumer is a get/set against a live element — nothing iterates it or
+// reads .size — so weak keys are transparent here.
+export const inlineBreakdownState = new WeakMap();
 
 // Session-long transcript accumulator for auto-download on meeting end.
 // Entries live in insertion order (order captions first appeared).

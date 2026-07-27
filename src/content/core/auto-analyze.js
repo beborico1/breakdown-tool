@@ -15,6 +15,34 @@ const pendingText = new WeakMap();
 const pendingMode = new WeakMap(); // 'chat-lite' | 'redmine-lite'
 let observer = null;
 
+// An IntersectionObserver holds its targets strongly, and a target is only
+// unobserved when it scrolls into view. Messages removed before that (virtual
+// scrolling, conversation switches) stayed observed for the life of the tab,
+// keeping detached subtrees alive. Track what is observed so disconnected
+// targets can be released.
+const observed = new Set();
+
+function releaseObserved(el) {
+  observer?.unobserve(el);
+  observed.delete(el);
+}
+
+/**
+ * Drop targets that have left the DOM. Also clears their `processed` mark, so a
+ * recycled node that comes back gets re-analyzed exactly as it would have
+ * before — the observer is simply no longer the thing keeping it alive.
+ */
+function sweepDetachedTargets() {
+  if (observed.size === 0) return;
+  for (const el of observed) {
+    if (el.isConnected) continue;
+    releaseObserved(el);
+    processed.delete(el);
+    pendingText.delete(el);
+    pendingMode.delete(el);
+  }
+}
+
 function ensureObserver() {
   if (observer) return observer;
   if (typeof IntersectionObserver === 'undefined') return null;
@@ -22,7 +50,7 @@ function ensureObserver() {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue;
       const el = entry.target;
-      observer.unobserve(el);
+      releaseObserved(el);
       const text = pendingText.get(el);
       const mode = pendingMode.get(el);
       pendingText.delete(el);
@@ -69,11 +97,13 @@ function enqueue(el, text, mode) {
   processed.add(el);
   pendingText.set(el, text);
   pendingMode.set(el, mode);
+  observed.add(el);
   obs.observe(el);
 }
 
 export async function maybeAutoAnalyzeChat() {
   if (!(await isOfflineNlpEnabled())) return;
+  sweepDetachedTargets();
   const els = document.querySelectorAll('.Zc1Emd');
   for (const el of els) {
     if (processed.has(el)) continue;
@@ -85,6 +115,7 @@ export async function maybeAutoAnalyzeChat() {
 
 export async function maybeAutoAnalyzeRedmine() {
   if (!(await isOfflineNlpEnabled())) return;
+  sweepDetachedTargets();
   const blocks = getRedmineTextBlocks();
   for (const el of blocks) {
     if (processed.has(el)) continue;

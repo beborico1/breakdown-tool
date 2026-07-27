@@ -28,6 +28,11 @@ const IO_ROOT_MARGIN = '200px';               // analyze blocks just before they
 
 const processed = new WeakSet();               // blocks already observed/handled
 const retried = new WeakSet();                 // blocks given one post-drift retry
+// The IntersectionObserver holds observed blocks strongly and only releases
+// them when they scroll into view. On an infinite-scroll or virtualized page,
+// blocks recycled away before ever intersecting would be retained (with their
+// detached subtrees) for the life of the page. Tracked so scan() can drop them.
+const observedBlocks = new Set();
 const analyzeQueue = createAnalyzeQueue({ concurrency: 3 });
 
 let io = null;
@@ -89,7 +94,22 @@ function enqueueBlock(block) {
   if (block.dataset[UNIVERSAL_MARKER] === '1') return;
   if (!io) return;
   processed.add(block);
+  observedBlocks.add(block);
   io.observe(block);
+}
+
+/**
+ * Release blocks that have left the DOM. Their `processed` mark goes too, so a
+ * recycled node returning to the page is enqueued again exactly as before.
+ */
+function sweepDetachedBlocks() {
+  if (observedBlocks.size === 0) return;
+  for (const block of observedBlocks) {
+    if (block.isConnected) continue;
+    io?.unobserve(block);
+    observedBlocks.delete(block);
+    processed.delete(block);
+  }
 }
 
 /** Analyze a block's assembled text and paint per-word coloring in place. */
@@ -145,6 +165,7 @@ async function analyzeAndPaint(block) {
 /** Scan the document for Japanese blocks and enqueue any new ones. */
 function scan() {
   if (!document.body) return;
+  sweepDetachedBlocks();
   const blocks = findJapaneseBlocks(document.body, { maxBlocks: UNIVERSAL_MAX_BLOCKS });
   for (const block of blocks) enqueueBlock(block);
 }
@@ -197,6 +218,7 @@ function setupObservers() {
         if (!entry.isIntersecting) continue;
         const block = entry.target;
         io.unobserve(block);
+        observedBlocks.delete(block);
         analyzeAndPaint(block);
       }
     }, { rootMargin: IO_ROOT_MARGIN });

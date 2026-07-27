@@ -4,7 +4,8 @@ import {
   frequencySaveTimeout,
   setFrequencySaveTimeout,
   pendingFrequencyUpdates,
-  countedContentKeys
+  countedContentKeys,
+  rememberCountedContentKey
 } from '../core/state.js';
 
 /**
@@ -19,8 +20,8 @@ export function recordWordFrequencies(words, contentKey) {
     return;
   }
 
-  // Mark as counted
-  countedContentKeys.add(contentKey);
+  // Mark as counted (bounded — see rememberCountedContentKey)
+  rememberCountedContentKey(contentKey);
 
   // Accumulate updates for each word
   const now = Date.now();

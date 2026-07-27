@@ -114,10 +114,12 @@ export async function showInlineBreakdown(messageEl, text) {
       }
     }
 
-    // Update state with breakdown data
+    // Update state with breakdown data. contentKey is carried so
+    // restoreOriginalContent can release the translationCache pin it took.
     inlineBreakdownState.set(messageEl, {
       ...currentState,
-      breakdownData: breakdownData
+      breakdownData: breakdownData,
+      contentKey
     });
 
     // Remove the analyzing overlay before rendering the final breakdown
@@ -431,6 +433,11 @@ export function restoreOriginalContent(messageEl) {
     // Clean up any body-appended popover
     hideInlinePopoverImmediate();
     messageEl.innerHTML = state.originalHTML;
+    // Release the cache pin taken when the breakdown was rendered. Without
+    // this, pruneTranslationCache skips the entry forever (it never prunes an
+    // active key) and both the Set and the cached entry grow for the life of
+    // the tab. The breakdown itself stays in state, so re-opening is still free.
+    if (state.contentKey) activeContentKeys.delete(state.contentKey);
     inlineBreakdownState.set(messageEl, {
       ...state,
       isShowingBreakdown: false

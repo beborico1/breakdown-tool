@@ -8,7 +8,8 @@
     "activeTab",
     "storage",
     "scripting",
-    "offscreen"
+    "offscreen",
+    "alarms"
   ],
   "web_accessible_resources": [
     {

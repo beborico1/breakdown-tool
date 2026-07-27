@@ -11,6 +11,10 @@ import { getWordTypeClass } from '../utils/text.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
 import { analyzeJapaneseWithGemini } from '../core/api.js';
 
+// The overlay is a singleton, so one variable tracks which translationCache
+// entry the currently-open overlay is pinning. Released on hide.
+let overlayContentKey = null;
+
 /**
  * Show overlay with cached data (no loading state needed)
  * @param {HTMLElement} anchorEl - Element to position overlay near
@@ -108,6 +112,7 @@ export async function showBreakdownOverlay(anchorEl, text) {
       });
       cacheBreakdown(text, breakdownData);
       activeContentKeys.add(contentKey);
+      overlayContentKey = contentKey;
       debugLog('GCWB', `Cached breakdown: ${contentKey.slice(0, 40)}`);
     }
 
@@ -278,6 +283,13 @@ export function hideBreakdownOverlay() {
     setTimeout(() => {
       overlay.remove();
     }, 200);
+
+    // Stop pinning this breakdown's cache entry — pruneTranslationCache never
+    // evicts an active key, so leaving it set leaked one entry per lookup.
+    if (overlayContentKey) {
+      activeContentKeys.delete(overlayContentKey);
+      overlayContentKey = null;
+    }
 
     setActiveGcwbOverlay(null);
     document.removeEventListener('keydown', handleOverlayEscape);
