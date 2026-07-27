@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Japanese in Color",
   "version": "2.0.0",
+  "minimum_chrome_version": "116",
   "description": "Color every Japanese word by its part of speech, with readings and meanings. Free, private, works offline.",
   "permissions": [
     "activeTab",
@@ -10,18 +11,6 @@
     "offscreen",
     "alarms",
     "unlimitedStorage"
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "assets/kuromoji-dict/*",
-        "assets/jmdict/*",
-        "assets/kanjidic/*",
-        "src/offscreen/offscreen.html",
-        "dist/offscreen.js"
-      ],
-      "matches": ["<all_urls>"]
-    }
   ],
   "optional_host_permissions": [
     "http://localhost:8765/*",

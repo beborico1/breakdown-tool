@@ -19,6 +19,27 @@ jobs:
       - run: npm run build
       - run: npm run test:nlp
       - run: npm run test:unit
-        # dom (npm run test:dom) and e2e (npm run test:e2e) both need a real
-        # Chromium, e2e with the unpacked extension loaded, so they stay
-        # local/manual checks rather than running in CI.
+
+      # Package on every run, not just releases: the packaging script is what
+      # enforces the version match, the dictionary presence, and the denylist
+      # that keeps scratch and confidential files out of a published zip. A
+      # failure here is a release blocker, so it should surface on the PR.
+      - run: npm run package
+
+      - name: Packaged zip contains the dictionaries and nothing it should not
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          zip="japanese-in-color-v${version}.zip"
+          test -f "$zip" || { echo "expected $zip"; exit 1; }
+          list=$(unzip -Z1 "$zip")
+          for dir in assets/jmdict assets/kuromoji-dict assets/kanjidic; do
+            echo "$list" | grep -q "^$dir/" || { echo "missing $dir"; exit 1; }
+          done
+          if echo "$list" | grep -Ei '\.(md|txt|zip)$|\.DS_Store|(^|/)tests?/|sample\.html'; then
+            echo "denylisted file in package"; exit 1
+          fi
+          echo "package contents OK ($(echo "$list" | wc -l) files)"
+
+      # The Playwright suites (test:dom, test:pages, test:e2e) need a real
+      # Chromium with the extension loaded, so they stay a local check.

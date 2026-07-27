@@ -206,10 +206,14 @@ async function main() {
     await cp(path.join(ROOT, f), dst);
   }
 
-  // 7. Zip.
+  // 7. Zip. Older versions are removed first so the directory never holds two
+  //    candidates — an ambiguous `*.zip` is exactly how the wrong artifact gets
+  //    uploaded, or a verification glob silently checks the wrong file.
   const zipName = `japanese-in-color-v${version}.zip`;
   const zipPath = path.join(ROOT, zipName);
-  await rm(zipPath, { force: true });
+  for (const f of await readdir(ROOT)) {
+    if (/^japanese-in-color-v.*\.zip$/.test(f)) await rm(path.join(ROOT, f), { force: true });
+  }
   await exec('zip', ['-r', '-q', '-X', zipPath, '.'], { cwd: STAGE });
 
   // 8. Report, so the contents are eyeballed rather than trusted.
