@@ -161,6 +161,40 @@ try {
   });
   ok('hovering a word still opens the word tooltip', !!wordTip, String(wordTip));
 
+  // Before the copy-safety block on purpose: a live island would change what
+  // that block is measuring.
+  console.log('\nword island');
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(250);
+  const p2words = page.locator('#p2 .gcwb-auto-word');
+  await p2words.nth(0).click();
+  await p2words.nth(1).click();
+  const joined = await page.evaluate(() => {
+    const lit = [...document.querySelectorAll('#p2 .gcwb-island')];
+    return { count: lit.length, text: lit.map(s => s.textContent).join('') };
+  });
+  ok('clicking two touching words joins them', joined.count >= 2, JSON.stringify(joined));
+
+  await p2words.nth(0).hover();
+  await page.waitForTimeout(1200);
+  const islandTip = await page.evaluate(() => {
+    const t = document.querySelector('.gcwb-word-tooltip.gcwb-island-tooltip');
+    return t ? t.querySelector('.gcwb-tooltip-japanese')?.textContent : null;
+  });
+  ok('hovering the island shows the joined phrase', islandTip === joined.text,
+    `tooltip=${JSON.stringify(islandTip)} island=${JSON.stringify(joined.text)}`);
+
+  const afterIsland = await page.evaluate(() =>
+    document.getElementById('p2').textContent.replace(/[  ]/g, ''));
+  ok('an island leaves the paragraph text untouched', afterIsland === beforeP2,
+    `before=${JSON.stringify(beforeP2)} after=${JSON.stringify(afterIsland)}`);
+
+  await page.keyboard.press('Escape');
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(250);
+  const cleared = await page.evaluate(() => document.querySelectorAll('.gcwb-island').length);
+  ok('escape clears the island', cleared === 0, `still lit: ${cleared}`);
+
   console.log('\ncopy safety');
   const selected = await page.evaluate(() => {
     const sel = window.getSelection();

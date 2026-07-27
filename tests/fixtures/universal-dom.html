@@ -90,6 +90,28 @@
 <!-- T29: a bare text node for the zero-length boundary token. -->
 <div id="t29">ことば</div>
 
+<!-- T34-T44: word islands. A plain sentence with a comma to join across. -->
+<div id="t34">今日は、いい天気ですね</div>
+
+<!-- Two clauses either side of a terminating mark, so a dot sits between them. -->
+<div id="t35">最初の文です。次の文です。</div>
+
+<!-- A literal newline that renders as a line break, with no <br> and no block. -->
+<div id="t36" style="white-space: pre-wrap">最初の行
+二行目です</div>
+
+<!-- Japanese inside a link: a plain click belongs to the page. -->
+<div id="t37"><a href="#t37" id="t37a">言葉の練習</a></div>
+
+<!-- A word straddling a wruby boundary next to plain words, for unit grouping. -->
+<div id="t38">よく<span class="wruby">合<sup>あ</sup></span>う人</div>
+
+<!-- A hard line break between two words, with words painted either side. -->
+<div id="t39br">一行目のことば<br>二行目のことば</div>
+
+<!-- A parent block's own text plus a nested block: two units, never one island. -->
+<div id="t39n">そとのことば<p id="t39np">なかのことば</p></div>
+
 <!-- T30-T32: Meet caption targets, repainted wholesale by paintWordColoring. -->
 <div id="t30"></div>
 <div id="t31"></div>

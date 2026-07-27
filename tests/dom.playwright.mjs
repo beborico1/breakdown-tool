@@ -55,6 +55,9 @@ async function loadFixture() {
     // Chrome-free: debug.js guards its chrome.storage access, so the tooltip's
     // target test can be exercised on a plain page.
     window.tip = await import('/src/content/chat/word-tooltip.js');
+    // Click-to-join. Chrome-free like the tooltip; metrics/index.js guards its
+    // own chrome access, so importing it here is safe.
+    window.isl = await import('/src/content/shared/word-island.js');
     // Meet's renderer is a separate innerHTML path, so it needs its own coverage.
     // Its only non-text import guards its chrome access.
     window.wr = await import('/src/content/shared/word-render.js');
@@ -792,6 +795,243 @@ try {
   assertEq('caption text is byte-identical', t32.textContent, 'まだ終わっていない文章');
   assertEq('the dot holds no text node', t32.dotChildren, 0);
   assertEq('the dot trails the caption', t32.dotIsLast, true);
+
+  // ---------------------------------------------------------------------------
+  // T34-T40: word islands (word-island.js).
+  //
+  // These run before T33 on purpose: T33 navigates and then overwrites
+  // documentElement.innerHTML, which throws away the fixture and every module
+  // loadFixture() put on window.
+  //
+  // Paint every island fixture once up front. paintBlockTokens excludes existing
+  // word spans from its assembly, so a second paint of the same block sees only
+  // the leftover punctuation and drifts.
+  // ---------------------------------------------------------------------------
+  await page.evaluate(() => {
+    const W = (japanese, type) => ({ japanese, reading: '', romaji: '', english: 'x', type });
+    const paint = (id, text, words) => core.paintBlockTokens(
+      document.getElementById(id), text, words,
+      { marker: 'gcwbUniv', excludeTags: bw.SKIP_SUBTREE_TAGS, stopAtNestedBlocks: true });
+
+    paint('t34', '今日は、いい天気ですね', [
+      W('今日', 'noun'), W('は', 'particle'), W('いい', 'adjective'),
+      W('天気', 'noun'), W('です', 'copula'), W('ね', 'particle')]);
+    paint('t35', '最初の文です。次の文です。', [
+      W('最初', 'noun'), W('の', 'particle'), W('文', 'noun'), W('です', 'copula'),
+      W('次', 'noun'), W('の', 'particle'), W('文', 'noun'), W('です', 'copula')]);
+    paint('t36', '最初の行\n二行目です', [
+      W('最初', 'noun'), W('の', 'particle'), W('行', 'counter'),
+      W('二行目', 'counter'), W('です', 'copula')]);
+    paint('t37', '言葉の練習', [W('言葉', 'noun'), W('の', 'particle'), W('練習', 'noun')]);
+    paint('t38', 'よく合う人', [W('よく', 'adverb'), W('合う', 'verb'), W('人', 'noun')]);
+    paint('t39br', '一行目のことば\n二行目のことば', [
+      W('一行目', 'counter'), W('の', 'particle'), W('ことば', 'noun'),
+      W('二行目', 'counter'), W('の', 'particle'), W('ことば', 'noun')]);
+    // A parent block and its nested block are separate paint units, and the
+    // parent's assembly stops at the child, so each is painted on its own.
+    paint('t39n', 'そとのことば', [W('そと', 'noun'), W('の', 'particle'), W('ことば', 'noun')]);
+    paint('t39np', 'なかのことば', [W('なか', 'noun'), W('の', 'particle'), W('ことば', 'noun')]);
+
+    // Bind the real click policy so the link cases below can be driven with real
+    // pointer events rather than by calling the reducer.
+    isl.setupWordIsland({});
+
+    window.words = (id) => [...document.querySelectorAll(`#${id} .gcwb-auto-word`)];
+    window.tap = (id, i) => isl.toggleWordSelection(window.words(id)[i]);
+    window.lit = (id) => window.words(id).filter(s => s.classList.contains('gcwb-island'))
+      .map(s => s.textContent);
+    window.island = () => ({
+      phrase: isl.getIslandPhrase(),
+      lit: [...document.querySelectorAll('.gcwb-island')].map(s => s.textContent),
+      ends: [
+        document.querySelectorAll('.gcwb-island-start').length,
+        document.querySelectorAll('.gcwb-island-end').length,
+      ],
+    });
+  });
+
+  // ---- T34: one click selects exactly one word
+  //
+  // The negative half matters most: single-segment words carry no seg id, so a
+  // grouping test that compares the raw attribute would match undefined against
+  // undefined and light the whole abutting run.
+  console.log('\nT34: a click selects one word');
+  const t34 = await page.evaluate(() => { isl.clearIsland(); tap('t34', 0); return island(); });
+  assertEq('only the clicked word lights up', t34.lit, ['今日']);
+  assertEq('the phrase is that word', t34.phrase, '今日');
+  assertEq('a lone word is both ends of the ribbon', t34.ends, [1, 1]);
+
+  // ---- T35: joining rightwards, including across a comma
+  console.log('\nT35: clicking the next word joins it');
+  const t35 = await page.evaluate(() => {
+    isl.clearIsland();
+    tap('t34', 0); tap('t34', 1);
+    const two = island();
+    tap('t34', 2);
+    // The ribbon has to close the abut hairline and the comma, or the run reads
+    // as a row of chips rather than one object.
+    const reach = words('t34').slice(0, 3)
+      .map(s => parseFloat(s.style.getPropertyValue('--gcwb-island-bridge')) || 0);
+    return { two, three: island(), reach };
+  });
+  assertEq('two words join', t35.two.lit, ['今日', 'は']);
+  assertEq('the phrase is the run', t35.two.phrase, '今日は');
+  assertEq('the ribbon still has one of each end', t35.two.ends, [1, 1]);
+  assertEq('a comma between words is a separator, not a stop', t35.three.phrase, '今日は、いい');
+  assertTrue('the ribbon reaches across the abut hairline', t35.reach[0] > 0);
+  assertTrue('and across the comma', t35.reach[1] > t35.reach[0]);
+  assertEq('but not past the last word', t35.reach[2], 0);
+
+  // ---- T36: joining leftwards
+  //
+  // The only case that catches a left hop walking from the clicked word instead
+  // of from the island's head, which can never reach a head on its right.
+  console.log('\nT36: clicking the previous word joins it');
+  const t36 = await page.evaluate(() => {
+    isl.clearIsland();
+    tap('t34', 2); tap('t34', 1);
+    const back = island();
+    tap('t34', 0);
+    return { back, further: island() };
+  });
+  assertEq('the earlier word joins the front', t36.back.phrase, 'は、いい');
+  assertEq('and keeps joining leftwards', t36.further.phrase, '今日は、いい');
+  assertEq('the run is in reading order', t36.further.lit, ['今日', 'は', 'いい']);
+
+  // ---- T37: growing, shrinking, collapsing, clearing
+  console.log('\nT37: the island only ever stays contiguous');
+  const t37 = await page.evaluate(() => {
+    isl.clearIsland();
+    tap('t34', 0); tap('t34', 1); tap('t34', 2);      // 今日 は いい
+    const grown = island().phrase;
+    tap('t34', 0);                                     // head: shrink
+    const head = island().phrase;
+    tap('t34', 2);                                     // tail: shrink
+    const tail = island().phrase;
+    tap('t34', 1);                                     // the last one: clear
+    const cleared = island();
+
+    tap('t34', 0); tap('t34', 1); tap('t34', 2);
+    tap('t34', 1);                                     // interior: collapse
+    const interior = island().phrase;
+
+    isl.clearIsland();
+    tap('t34', 0);
+    tap('t34', 3);                                     // not touching: restart
+    const apart = island().phrase;
+    return { grown, head, tail, cleared, interior, apart };
+  });
+  assertEq('three words join', t37.grown, '今日は、いい');
+  assertEq('clicking the head drops it', t37.head, 'は、いい');
+  assertEq('clicking the tail drops it', t37.tail, 'は');
+  assertEq('clicking the last word clears', t37.cleared.lit, []);
+  assertEq('and the phrase goes with it', t37.cleared.phrase, '');
+  assertEq('clicking the middle collapses to it', t37.interior, 'は');
+  assertEq('clicking a word that touches nothing restarts there', t37.apart, '天気');
+
+  // ---- T38: a word split across text nodes is one unit
+  //
+  // 合う paints as 合 (inside the wruby) plus う (outside it). Selecting a third
+  // of a word reads as broken, and the reading in between must not reach the
+  // translator.
+  console.log('\nT38: a straddled word selects whole');
+  const t38 = await page.evaluate(() => {
+    isl.clearIsland();
+    const spans = words('t38');
+    const au = spans.filter(s => s.dataset.word === '合う');
+    tap('t38', spans.indexOf(au[0]));
+    const one = island();
+    const right = spans.find(s => s.dataset.word === '人');
+    isl.toggleWordSelection(right);
+    const withRight = island().phrase;
+    const left = spans.find(s => s.dataset.word === 'よく');
+    isl.toggleWordSelection(left);
+    return {
+      segs: au.map(s => s.textContent),
+      segIds: new Set(au.map(s => s.dataset.gcwbSeg)).size,
+      plainHasSeg: spans.find(s => s.dataset.word === '人').dataset.gcwbSeg,
+      one, withRight, whole: island().phrase,
+    };
+  });
+  assertEq('the word painted as two segments', t38.segs, ['合', 'う']);
+  assertEq('both segments share one id', t38.segIds, 1);
+  assertEq('a whole word carries no id at all', t38.plainHasSeg, undefined);
+  assertEq('clicking one segment lights the word', t38.one.lit, ['合', 'う']);
+  assertEq('the reading between them is not in the phrase', t38.one.phrase, '合う');
+  assertEq('the ribbon caps the word once, not once per segment', t38.one.ends, [1, 1]);
+  assertEq('a straddled word joins rightwards', t38.withRight, '合う人');
+  assertEq('and leftwards', t38.whole, 'よく合う人');
+
+  // ---- T39: what an island refuses to cross
+  console.log('\nT39: islands stop where the analyzer stops');
+  const t39 = await page.evaluate(() => {
+    const across = (id, a, b) => { isl.clearIsland(); tap(id, a); tap(id, b); return island().phrase; };
+    isl.clearIsland();
+    tap('t34', 0); tap('t34', 1); tap('t34', 2);
+    tap('t34', 3); tap('t34', 4); tap('t34', 5);
+    const whole = island().phrase;
+    return {
+      whole,
+      dot: across('t35', 3, 4),      // です | 。 | 次
+      br: across('t39br', 2, 3),     // either side of a <br>
+      pre: across('t36', 2, 3),      // either side of a preserved newline
+      nested: (() => {               // parent block text and a nested <p>
+        isl.clearIsland();
+        const outer = [...document.querySelectorAll('#t39n > .gcwb-auto-word')];
+        const inner = [...document.querySelectorAll('#t39np .gcwb-auto-word')];
+        if (!outer.length || !inner.length) return 'no fixture';
+        isl.toggleWordSelection(outer[outer.length - 1]);
+        isl.toggleWordSelection(inner[0]);
+        return island().lit;
+      })(),
+    };
+  });
+  assertEq('a whole clause joins, and no synthetic dot glyph rides along',
+    t39.whole, '今日は、いい天気ですね');
+  assertEq('a clause dot stops the run', t39.dot, '次');
+  assertEq('a <br> stops the run', t39.br, '二行目');
+  assertEq('a preserved newline stops the run', t39.pre, '二行目');
+  assertEq('a nested block is a different island', t39.nested, ['なか']);
+
+  // ---- T40: the page keeps its own text, and its own clicks
+  console.log('\nT40: selecting changes nothing the page owns');
+  const beforeIsland = await page.evaluate(() => document.getElementById('t34').textContent);
+  await page.evaluate(() => { isl.clearIsland(); tap('t34', 0); tap('t34', 1); });
+  const duringIsland = await page.evaluate(() => document.getElementById('t34').textContent);
+
+  await page.evaluate(() => { location.hash = ''; });
+  await page.locator('#t37a .gcwb-auto-word').first().click();
+  const plainInLink = await page.evaluate(() => ({
+    hash: location.hash,
+    lit: [...document.querySelectorAll('#t37 .gcwb-island')].length,
+  }));
+
+  await page.evaluate(() => { location.hash = 'reset'; });
+  await page.locator('#t37a .gcwb-auto-word').first().click({ modifiers: ['Alt'] });
+  const altInLink = await page.evaluate(() => ({
+    hash: location.hash,
+    phrase: isl.getIslandPhrase(),
+  }));
+
+  await page.keyboard.press('Escape');
+  const afterEscape = await page.evaluate(() => ({
+    phrase: isl.getIslandPhrase(),
+    lit: document.querySelectorAll('.gcwb-island').length,
+    text: document.getElementById('t34').textContent,
+    // Clearing has to take the ribbon's measurements with it, style attribute
+    // and all, or the page keeps an attribute it never had.
+    styled: words('t34').filter(s => s.hasAttribute('style')).length,
+  }));
+
+  assertEq('an island adds no text', duringIsland, beforeIsland);
+  assertEq('a plain click inside a link belongs to the page', plainInLink.hash, '#t37');
+  assertEq('and selects nothing', plainInLink.lit, 0);
+  assertEq('alt+click inside a link does not navigate', altInLink.hash, '#reset');
+  assertEq('and selects the word', altInLink.phrase, '言葉');
+  assertEq('escape clears the island', afterEscape.phrase, '');
+  assertEq('and removes every band', afterEscape.lit, 0);
+  assertEq('and leaves no inline style behind', afterEscape.styled, 0);
+  assertEq('and the text is still the page own', afterEscape.text, beforeIsland);
 
   // ---------------------------------------------------------------------------
   // T33: isRedmine() must not fire on a stock Rails page.
