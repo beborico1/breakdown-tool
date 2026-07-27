@@ -20,3 +20,18 @@ the DOM in an inconsistent state.
 
 Surface: `src/content/gmail/`, and the `gcwb-content-restored` restore path.
 Impact: the message has to be re-opened to recover.
+
+## 3. Joining a word swallows the click from the page
+
+When a plain click on a coloured word is taken as a join, the handler stops it: the page sees no
+click at all, so a document-level delegated handler ("close the open menu", a framework root's
+synthetic click) does not run for it.
+
+`isInsideInteractive` (`src/content/shared/word-island.js`) hands the click back for links,
+buttons, form controls, and anything under an ancestor with a pointer cursor, which covers the
+cases where the site clearly owns the click. Delegation at the document has no such signal to read.
+The alternative, letting the click through, is not obviously better: on a site that puts a handler
+on the article body, every word joined would also fire whatever that handler does.
+
+Surface: `onClick` in `src/content/shared/word-island.js`.
+Impact: while joining words, a menu or popover the site opened may need a second click to dismiss.

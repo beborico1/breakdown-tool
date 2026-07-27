@@ -1753,8 +1753,18 @@ html.kaigi-hide-translation .gcwb-inline-translation { display: none; }
      zero, the default, draws the shadow exactly behind the word and is
      invisible. A zero-blur, zero-spread shadow paints outside the border box
      without occupying any, which padding or a negative margin would, and the
-     page's own line breaking must not shift. */
-  box-shadow: var(--gcwb-island-bridge, 0px) 0 0 0 rgba(99, 40, 137, 0.95);
+     page's own line breaking must not shift.
+
+     Three stacked copies at thirds, because one copy offset by the full gap
+     covers [left + gap, right + gap] and the strip that needs covering is
+     [right, right + gap]. A single copy therefore only closes the gap while the
+     word is at least as wide as it, and a one-kana particle followed by two
+     punctuation characters (私 | は | 、「 | これ) is narrower than the gap it
+     has to reach across. At thirds the word only has to be a third as wide. */
+  box-shadow:
+    var(--gcwb-island-bridge, 0px) 0 0 0 rgba(99, 40, 137, 0.95),
+    calc(var(--gcwb-island-bridge, 0px) * 0.66) 0 0 0 rgba(99, 40, 137, 0.95),
+    calc(var(--gcwb-island-bridge, 0px) * 0.33) 0 0 0 rgba(99, 40, 137, 0.95);
 }
 
 /* Rounded caps on the two ends only, so the middle reads as continuous. */
@@ -1781,8 +1791,17 @@ html.kaigi-hide-translation .gcwb-inline-translation { display: none; }
 
 /* A native reading sits above its base word rather than inside it, so an
    untouched one leaves a coloured annotation floating over the band on exactly
-   the furigana sites this feature is most useful on. */
-ruby:has(> .gcwb-auto-word.gcwb-island) > rt.gcwb-ruby-reading {
+   the furigana sites this feature is most useful on.
+
+   Matched on any islanded descendant rather than a direct child: the token
+   mapper replaces the text node where it found it, so inside
+   <ruby><rb>漢字</rb> the word span's parent is the <rb>, not the <ruby>, and a
+   child combinator would never fire. Readings grouped under an <rtc> are
+   reached the same way. A <ruby> holding several bases whitens all of its
+   readings when any one base is joined, which is the price of not pairing base
+   to reading in CSS. */
+ruby:has(.gcwb-auto-word.gcwb-island) > rt.gcwb-ruby-reading,
+ruby:has(.gcwb-auto-word.gcwb-island) > rtc > rt.gcwb-ruby-reading {
   color: #fff;
 }
 

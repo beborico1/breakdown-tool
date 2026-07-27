@@ -8,7 +8,7 @@ import { findJapaneseBlocks, nearestBlockRoot, SKIP_SUBTREE_TAGS } from '../shar
 import { collectBlockTextNodes, paintBlockTokens } from '../shared/auto-lite-core.js';
 import { createAnalyzeQueue } from '../shared/analyze-queue.js';
 import { setupWordTooltip, onIslandChange } from '../chat/word-tooltip.js';
-import { setupWordIsland, clearIsland } from '../shared/word-island.js';
+import { setupWordIsland, teardownWordIsland } from '../shared/word-island.js';
 import { translateClause, warmClauseTranslator, peekClauseTranslation } from '../core/clause-translate.js';
 import { count, markOnce } from '../../metrics/index.js';
 import { M, F, S } from '../../metrics/events.js';
@@ -390,10 +390,10 @@ function stopUniversal() {
   window.removeEventListener('hashchange', onSoftNav);
   for (const block of observedBlocks) processed.delete(block);
   observedBlocks.clear();
-  // The words themselves stay as painted until the page reloads, but a live
-  // island is a control surface, and leaving one lit on a site the user just
-  // paused would advertise an interaction that no longer answers.
-  clearIsland();
+  // The words themselves stay as painted until the page reloads, but the join
+  // gesture is a control surface. Clearing the band without unbinding would
+  // leave a paused site still answering clicks, so the listeners go too.
+  teardownWordIsland();
   started = false;
 }
 

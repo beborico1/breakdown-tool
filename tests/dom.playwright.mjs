@@ -869,10 +869,20 @@ try {
     const two = island();
     tap('t34', 2);
     // The ribbon has to close the abut hairline and the comma, or the run reads
-    // as a row of chips rather than one object.
-    const reach = words('t34').slice(0, 3)
-      .map(s => parseFloat(s.style.getPropertyValue('--gcwb-island-bridge')) || 0);
-    return { two, three: island(), reach };
+    // as a row of chips rather than one object. The reach is only right if it
+    // is the measured distance to the next word, so compare it against that
+    // rather than merely asserting a number was written.
+    const lit = words('t34').slice(0, 3);
+    const rects = lit.map(s => s.getBoundingClientRect());
+    const reach = lit.map(s => parseFloat(s.style.getPropertyValue('--gcwb-island-bridge')) || 0);
+    const gaps = [rects[1].left - rects[0].right, rects[2].left - rects[1].right, 0];
+    return {
+      two, three: island(), reach,
+      closes: reach.slice(0, 2).map((r, i) => Math.abs(r - gaps[i]) < 0.5),
+      // Three stacked copies at thirds, so the band closes while the word is at
+      // least a third as wide as the gap it reaches across.
+      coverable: gaps.slice(0, 2).map((g, i) => g <= rects[i].width * 3),
+    };
   });
   assertEq('two words join', t35.two.lit, ['今日', 'は']);
   assertEq('the phrase is the run', t35.two.phrase, '今日は');
@@ -881,6 +891,8 @@ try {
   assertTrue('the ribbon reaches across the abut hairline', t35.reach[0] > 0);
   assertTrue('and across the comma', t35.reach[1] > t35.reach[0]);
   assertEq('but not past the last word', t35.reach[2], 0);
+  assertEq('each reach is the real distance to the next word', t35.closes, [true, true]);
+  assertEq('and short enough for the stacked band to close it', t35.coverable, [true, true]);
 
   // ---- T36: joining leftwards
   //
@@ -1067,11 +1079,78 @@ try {
   const settled = await page.evaluate(() => ({
     asked: window.asked.slice(),
     shown: document.querySelector('.gcwb-island-tooltip .gcwb-tooltip-japanese')?.textContent ?? null,
+    english: document.querySelector('.gcwb-island-tooltip .gcwb-boundary-meaning')?.textContent ?? null,
   }));
 
   assertEq('no prefix of the phrase is ever translated', midBuild, []);
   assertEq('the settled island is translated once', settled.asked, ['今日は、いい']);
   assertEq('and the box was showing that phrase all along', settled.shown, '今日は、いい');
+  // Without this the whole tooltipGeneration guard is untested in the direction
+  // that matters: a future change that bumped the generation between showing
+  // the box and the reply landing would drop every translation silently.
+  assertEq('and the English lands in it', settled.english, 'EN');
+
+  // ---- T42: an island that stops being an island stops being shown as one
+  console.log('\nT42: a broken island gives the word back');
+  const t42 = await page.evaluate(() => {
+    const fire = (el, type) => el.dispatchEvent(new MouseEvent(type, { bubbles: true }));
+
+    // A member the site pulled out of the page.
+    isl.clearIsland();
+    tap('t34', 0); tap('t34', 1); tap('t34', 2);
+    const built = isl.getIslandPhrase();
+    const victim = words('t34')[1];
+    const parent = victim.parentNode;
+    const next = victim.nextSibling;
+    victim.remove();
+    tip.forceHideTooltip();
+    fire(words('t34')[0], 'mouseover');
+    const broken = {
+      phrase: isl.getIslandPhrase(),
+      lit: document.querySelectorAll('.gcwb-island').length,
+      island: !!document.querySelector('.gcwb-island-tooltip'),
+      word: document.querySelector('.gcwb-word-tooltip:not(.gcwb-island-tooltip) .gcwb-tooltip-japanese')?.textContent ?? null,
+    };
+    parent.insertBefore(victim, next); // leave the fixture as we found it
+
+    // A single word is not a phrase, so it keeps the ordinary card.
+    tip.forceHideTooltip();
+    isl.clearIsland();
+    tap('t34', 0);
+    fire(words('t34')[0], 'mouseover');
+    const alone = {
+      island: !!document.querySelector('.gcwb-island-tooltip'),
+      word: document.querySelector('.gcwb-word-tooltip:not(.gcwb-island-tooltip) .gcwb-tooltip-japanese')?.textContent ?? null,
+    };
+
+    tip.forceHideTooltip();
+    return { built, broken, alone };
+  });
+  assertEq('three words joined first', t42.built, '今日は、いい');
+  assertEq('losing a member drops the island', t42.broken.phrase, '');
+  assertEq('and takes every band with it', t42.broken.lit, 0);
+  assertEq('the survivor is not offered as a phrase', t42.broken.island, false);
+  assertEq('it is offered as the word it is', t42.broken.word, '今日');
+  assertEq('a one-word island is not a phrase either', t42.alone.island, false);
+  assertEq('so it keeps the word card', t42.alone.word, '今日');
+
+  // ---- T43: what a click outside the island does, and does not, throw away
+  console.log('\nT43: our own affordances do not clear the island');
+  await page.evaluate(() => { isl.clearIsland(); tip.forceHideTooltip(); tap('t34', 0); tap('t34', 1); });
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(200);
+  await page.locator('#t21 .gcwb-auto-boundary').first().click();
+  const afterDot = await page.evaluate(() => isl.getIslandPhrase());
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(200);
+  await page.locator('#t4a').click();
+  const afterOutside = await page.evaluate(() => ({
+    phrase: isl.getIslandPhrase(),
+    lit: document.querySelectorAll('.gcwb-island').length,
+  }));
+  assertEq('clicking a clause dot keeps the island', afterDot, '今日は');
+  assertEq('clicking plain page text clears it', afterOutside.phrase, '');
+  assertEq('and removes every band', afterOutside.lit, 0);
 
   await page.evaluate(() => { isl.clearIsland(); tip.forceHideTooltip(); });
 

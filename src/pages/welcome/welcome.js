@@ -1,7 +1,8 @@
 import { analyzeJapaneseTokens, warmupNlp } from '../../content/core/api.js';
 import { paintBlockTokens } from '../../content/shared/auto-lite-core.js';
-import { setupWordTooltip } from '../../content/chat/word-tooltip.js';
-import { translateClause, warmClauseTranslator } from '../../content/core/clause-translate.js';
+import { setupWordTooltip, onIslandChange } from '../../content/chat/word-tooltip.js';
+import { setupWordIsland } from '../../content/shared/word-island.js';
+import { translateClause, warmClauseTranslator, peekClauseTranslation } from '../../content/core/clause-translate.js';
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
 import { count, markOnce } from '../../metrics/index.js';
 import { M, F, R } from '../../metrics/events.js';
@@ -106,7 +107,11 @@ initDisplayPreferences();
 count(M.PAGE_OPENED, 1, R.WELCOME);
 markOnce(F.WELCOME_SEEN);
 renderLegend();
-setupWordTooltip({ translateClause, warmClauseTranslator });
+setupWordTooltip({ translateClause, warmClauseTranslator, peekClauseTranslation });
+// The sample above is painted with the real spans, and the section below it
+// tells the reader to click two of them together. Without this it is inert,
+// and the first thing they try does nothing.
+setupWordIsland({ onChange: onIslandChange });
 warmupNlp();
 paintSample();
 refreshEnableState();

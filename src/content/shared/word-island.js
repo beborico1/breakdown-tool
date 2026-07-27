@@ -41,8 +41,17 @@ const INTERACTIVE_SELECTOR =
   'a[href], button, [role="button"], [role="link"], input, select, textarea, ' +
   'label, summary, [contenteditable=""], [contenteditable="true"]';
 
-/** Our own text affordances: clicking one must not wipe a live island. */
-const EXEMPT_SELECTOR = '.gcwb-ruby-reading, .gcwb-auto-boundary, .gcwb-word-tooltip';
+/**
+ * This extension's own in-page surfaces. Clicking one is a question about the
+ * text, not a request to throw the island away: reading the machine translation
+ * of the paragraph you just built a phrase in must not cost you the phrase.
+ */
+const EXEMPT_SELECTOR = [
+  '.gcwb-ruby-reading', '.gcwb-auto-boundary', '.gcwb-word-tooltip',
+  '.gcwb-word-popover', '.gcwb-auto-translate-toggle', '.gcwb-auto-translate-panel',
+  '.gcwb-auto-translation', '.gcwb-anki-popover', '.gcwb-anki-toast',
+  '.gcwb-context-menu', '.gcwb-inline-container',
+].join(', ');
 
 /** How far up to look for a container the site made clickable without semantics. */
 const POINTER_ANCESTOR_DEPTH = 8;
@@ -109,7 +118,6 @@ let listenersBound = false;
  * @returns {{acceptNode: (node: Node) => number}}
  */
 function makeFilter(permissive) {
-  const styleCache = new Map();
   return {
     acceptNode(node) {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -138,7 +146,9 @@ function makeFilter(permissive) {
       let display = '';
       try { display = getComputedStyle(node).display || ''; } catch { /* keep '' */ }
       if (display === 'none') return NodeFilter.FILTER_REJECT; // hidden: no break
-      if (isBlockLevel(node, styleCache, display)) return NodeFilter.FILTER_ACCEPT;
+      // No cache: a walker visits each node once, and display is already
+      // resolved here and handed over, so there is nothing left to memoize.
+      if (isBlockLevel(node, null, display)) return NodeFilter.FILTER_ACCEPT;
       return NodeFilter.FILTER_SKIP; // an inline wrapper: descend, emit nothing
     }
   };
@@ -266,8 +276,11 @@ function ensureLive() {
  *
  * What sits in those gaps is the abut margin and any punctuation the island
  * joined across, both of which are page layout rather than anything this module
- * chose, so the distance has to be measured. One layout read per commit, and
- * commits only happen on a click.
+ * chose, so the distance has to be measured.
+ *
+ * Every rect is read before any property is written. Interleaving them would
+ * make each write dirty style and each following read force a fresh layout, so
+ * a long island would pay one recalc per word.
  *
  * Skipped in vertical writing, where the run advances down the page and a
  * horizontal shadow would reach sideways into the neighbouring column.
@@ -280,17 +293,15 @@ function paintBridges(flat) {
     if (/vertical|sideways/.test(getComputedStyle(flat[0]).writingMode || '')) return;
   } catch { /* assume horizontal */ }
 
-  let prev = flat[0].getBoundingClientRect();
+  const rects = flat.map(span => span.getBoundingClientRect());
   for (let i = 1; i < flat.length; i++) {
-    const rect = flat[i].getBoundingClientRect();
-    const gap = rect.left - prev.right;
+    const gap = rects[i].left - rects[i - 1].right;
     // A wrapped run has the next word back at the start of the following line,
     // where a reach would strike out across whatever the page put there.
-    const sameLine = Math.abs(rect.top - prev.top) < 1;
+    const sameLine = Math.abs(rects[i].top - rects[i - 1].top) < 1;
     if (sameLine && gap > 0 && gap <= MAX_BRIDGE_PX) {
       flat[i - 1].style.setProperty(BRIDGE_PROPERTY, `${gap}px`);
     }
-    prev = rect;
   }
 }
 
@@ -336,16 +347,37 @@ function commit(next, scope, anchor) {
   notify?.(anchor);
 }
 
+let remeasureFrame = 0;
+
 /**
  * Re-measure the ribbon after a reflow. A resize can rewrap the line the island
  * sits on, which turns a reach across a comma into one striking out across the
- * end of a line. Only ever runs while an island is live.
+ * end of a line.
+ *
+ * Coalesced into a frame: a window drag delivers resize continuously, and
+ * measuring on every one of them would run a layout pass per event for the
+ * whole drag. Only ever runs while an island is live.
  */
 function onResize() {
-  if (units.length < 2) return;
-  const flat = spans();
-  for (const span of flat) clearBridge(span);
-  paintBridges(flat);
+  if (units.length < 2 || remeasureFrame) return;
+  remeasureFrame = requestAnimationFrame(() => {
+    remeasureFrame = 0;
+    if (units.length < 2) return;
+    const flat = spans();
+    for (const span of flat) clearBridge(span);
+    paintBridges(flat);
+  });
+}
+
+/**
+ * Drop an island whose page has been navigated out from under it.
+ *
+ * Without this, an SPA route change leaves the member spans, their detached
+ * block, and the scope element reachable from this module for the life of the
+ * page, since nothing else reads the island until the next click or hover.
+ */
+function onSoftNav() {
+  ensureLive();
 }
 
 /** Which unit holds `span`, or -1. */
@@ -437,9 +469,21 @@ export function getIslandPhrase() {
   if (phraseGeneration === generation && phraseCache !== null) return phraseCache;
 
   const flat = spans();
+  // Which hops are inside one word. A word's own segments may sit either side of
+  // something the analyzer skipped, so those hops have to be permissive; the
+  // hops between two words must not be, or an image or a code block dropped
+  // between two members after the fact would be walked straight past and the
+  // phrase assembled as though nothing had come between them.
+  const withinWord = new Set();
+  let seen = 0;
+  for (const unit of units) {
+    for (let i = 1; i < unit.length; i++) withinWord.add(seen + i);
+    seen += unit.length;
+  }
+
   let text = flat[0].textContent || '';
   for (let i = 1; i < flat.length; i++) {
-    const step = hop(flat[i - 1], islandScope, 1, true);
+    const step = hop(flat[i - 1], islandScope, 1, withinWord.has(i));
     if (!step || step.span !== flat[i]) { commit([], null, null); return ''; }
     text += step.gap + (flat[i].textContent || '');
   }
@@ -528,10 +572,11 @@ function onClick(event) {
 
 function onKeyDown(event) {
   if (event.key !== 'Escape' || !units.length) return;
+  // The event is not consumed. Escape is the page's key as much as ours, and a
+  // capture-phase stopPropagation here reaches every listener on the site: a
+  // reader with an island open would press it to dismiss a search overlay, lose
+  // the island, and still be looking at the overlay.
   clearIsland();
-  // Consumed only while an island exists, so a site's own modal still closes.
-  event.preventDefault();
-  event.stopPropagation();
 }
 
 /**
@@ -552,4 +597,26 @@ export function setupWordIsland(options = {}) {
   document.addEventListener('click', onClick, true);
   document.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('resize', onResize, { passive: true });
+  window.addEventListener('popstate', onSoftNav);
+  window.addEventListener('hashchange', onSoftNav);
+}
+
+/**
+ * Unbind and forget, leaving the page with no trace of the gesture.
+ *
+ * Clearing the island alone would not be a teardown: the listeners stay, the
+ * words stay painted, and the very next click rebuilds a band on a surface the
+ * user has just paused.
+ */
+export function teardownWordIsland() {
+  clearIsland();
+  if (remeasureFrame) { cancelAnimationFrame(remeasureFrame); remeasureFrame = 0; }
+  if (!listenersBound) return;
+  listenersBound = false;
+  notify = null;
+  document.removeEventListener('click', onClick, true);
+  document.removeEventListener('keydown', onKeyDown, true);
+  window.removeEventListener('resize', onResize, { passive: true });
+  window.removeEventListener('popstate', onSoftNav);
+  window.removeEventListener('hashchange', onSoftNav);
 }

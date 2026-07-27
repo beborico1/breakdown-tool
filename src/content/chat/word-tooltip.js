@@ -41,11 +41,16 @@ const CLAUSE_HOVER_DWELL_MS = 150;
  * Every click changes the phrase, so every intermediate island is a distinct
  * cache key that neither the LRU nor the in-flight dedupe in clause-translate
  * can collapse, and they all serialize onto the one translator session the
- * boundary dots share. Someone joining words clicks every few hundred
- * milliseconds, comfortably longer than the hover dwell, so translating on the
- * hover dwell alone would spend a request on every prefix of the phrase and
- * queue the one they wanted last. Measured from the last island change, so
- * building a six-word island costs one request.
+ * boundary dots share. Translating on the hover dwell alone would spend a
+ * request on every prefix of the phrase and queue the one they wanted last.
+ *
+ * This is a debounce, not a per-island budget: it is measured from the last
+ * island change, so a run built at any pace quicker than this costs a single
+ * request, and one built more slowly than this pays for the prefixes it pauses
+ * on. Cancelling an issued request is not possible, so the slower case is
+ * accepted rather than engineered around. It is bounded and self-limiting: each
+ * one is a short on-device call, each result is cached, and the reader is by
+ * definition not waiting on the box while they are still clicking.
  */
 const ISLAND_SETTLE_MS = 450;
 
@@ -116,11 +121,9 @@ function translationsHidden() {
  * to cache the result on, so a second hover reads it back out of the clause
  * translator's own cache instead.
  * @param {HTMLElement} anchorEl - the member under the pointer
+ * @param {string} phrase - the joined text, already resolved by the caller
  */
-function showIslandTooltip(anchorEl) {
-  const phrase = getIslandPhrase();
-  if (!phrase) return;
-
+function showIslandTooltip(anchorEl, phrase) {
   const tooltip = el('div', 'gcwb-word-tooltip gcwb-boundary-tooltip gcwb-island-tooltip');
   if (isPageLightMode(anchorEl)) tooltip.classList.add('gcwb-light');
   const content = el('div', 'gcwb-tooltip-content');
@@ -231,8 +234,14 @@ function showTooltip(wordEl) {
   // A joined run answers with the phrase rather than with whichever word the
   // pointer happens to be on. A one-word island is not asked about as a phrase,
   // so it keeps the ordinary word card.
-  if (isIslandMember(wordEl) && islandSize() > 1) {
-    showIslandTooltip(wordEl);
+  //
+  // The phrase is resolved before branching because resolving it is also what
+  // revalidates the island: if the site pulled a member out of the page, it
+  // comes back empty and the island is dropped, and this word is owed the
+  // ordinary card rather than nothing at all.
+  const islandPhrase = isIslandMember(wordEl) && islandSize() > 1 ? getIslandPhrase() : '';
+  if (islandPhrase) {
+    showIslandTooltip(wordEl, islandPhrase);
     return;
   }
 
