@@ -11,6 +11,7 @@
     "test:nlp": "node tests/nlp.node.test.mjs",
     "test:unit": "node tests/word-cache.node.test.mjs && node tests/frequency-store.node.test.mjs && node tests/jmdict-index.node.test.mjs && node tests/clauses.node.test.mjs",
     "test:dom": "node tests/dom.playwright.mjs",
+    "test:universal": "node tests/universal.playwright.mjs",
     "test:e2e": "node tests/e2e.playwright.mjs"
   },
   "devDependencies": {
