@@ -466,6 +466,51 @@ try {
   assertEq('default path still paints the base', t19.baseColor, 'rgb(66, 133, 244)');
   assertEq('default path preserves the host reading color', t19.readingColor, 'rgb(51, 51, 51)');
   assertEq('default path does not mark the reading', t19.readingMarked, false);
+
+  // ---- T20: a scoped rescan agrees with a whole-document scan
+  // The universal colorizer no longer walks the whole document after every page
+  // mutation; it walks up from the mutated node to its block and scans only
+  // that. This is only safe if the blocks it finds are the same ones a full
+  // scan would have produced for that subtree — otherwise a mutation would
+  // silently re-segment a paragraph.
+  console.log('\nT20: scoped rescan finds the same blocks as a full scan');
+  const t20 = await page.evaluate(() => {
+    const fullSet = new Set(bw.findJapaneseBlocks(document.body));
+
+    // Every element that directly holds Japanese text is a plausible mutation
+    // target, which is exactly what onMutations feeds to nearestBlockRoot.
+    const hasJa = (s) => /[぀-ゟ゠-ヿ一-龯]/.test(s || '');
+    const targets = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (hasJa(walker.currentNode.nodeValue) && walker.currentNode.parentElement) {
+        targets.push(walker.currentNode.parentElement);
+      }
+    }
+
+    let notInFull = 0;
+    let rootNotBlock = 0;
+    const covered = new Set();
+
+    for (const target of targets) {
+      const root = bw.nearestBlockRoot(target, new Map());
+      if (root !== document.body && !bw.isBlockLevel(root, new Map())) rootNotBlock++;
+      for (const block of bw.findJapaneseBlocks(root)) {
+        covered.add(block);
+        if (!fullSet.has(block)) notInFull++;
+      }
+    }
+
+    // Scoping must not lose blocks either: scanning from every Japanese text
+    // node's block root should reach everything the full scan reaches.
+    const missed = [...fullSet].filter(b => !covered.has(b)).map(b => b.id || b.tagName);
+
+    return { fullCount: fullSet.size, targets: targets.length, notInFull, rootNotBlock, missed };
+  });
+  assertTrue('fixture actually exercises many blocks', t20.fullCount > 5 && t20.targets > 5);
+  assertEq('nearestBlockRoot always lands on a block boundary', t20.rootNotBlock, 0);
+  assertEq('scoped scans invent no blocks a full scan would not find', t20.notInFull, 0);
+  assertEq('scoped scans collectively miss no block', t20.missed, []);
 } finally {
   await browser.close();
   server.close();

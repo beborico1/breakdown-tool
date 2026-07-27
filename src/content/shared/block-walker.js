@@ -51,9 +51,13 @@ const BLOCK_DEFAULT_TAGS = new Set([
  * @param {Element} el
  * @param {Map<Element, boolean>|null} [cache] - per-call cache; computed
  *   display can change between scans, so never persist this across calls.
+ * @param {string} [knownDisplay] - the element's computed display, when the
+ *   caller has already resolved it. Resolving style is the expensive part of
+ *   this function, so callers that just read it should pass it rather than
+ *   forcing a second lookup.
  * @returns {boolean}
  */
-export function isBlockLevel(el, cache) {
+export function isBlockLevel(el, cache, knownDisplay) {
   const hit = cache?.get(el);
   if (hit !== undefined) return hit;
 
@@ -61,8 +65,10 @@ export function isBlockLevel(el, cache) {
   if (SEMANTIC_BLOCK_TAGS.has(el.tagName)) {
     block = true;
   } else {
-    let d = '';
-    try { d = getComputedStyle(el).display || ''; } catch { d = ''; }
+    let d = knownDisplay;
+    if (d === undefined) {
+      try { d = getComputedStyle(el).display || ''; } catch { d = ''; }
+    }
     if (d === 'none') {
       block = true;
     } else if (d === '') {
@@ -108,6 +114,29 @@ function resolveBlock(textNode, root, cache) {
     el = el.parentElement;
   }
   return block || textNode.parentElement;
+}
+
+/**
+ * Walk up from `el` to the nearest block-level ancestor (inclusive).
+ *
+ * A scoped scan must start at a block boundary. findJapaneseBlocks resolves a
+ * text node's owning block by walking up only as far as the scan root, so a
+ * root partway inside a block would report an inner element as the owner and
+ * split a unit that a whole-document scan keeps together. Expanding the root
+ * outward to its block first makes a scoped scan agree with a full one.
+ *
+ * @param {Element} el
+ * @param {Map<Element, boolean>|null} [cache] - per-call isBlockLevel cache
+ * @param {Element} [limit=document.body] - stop here and return it
+ * @returns {Element}
+ */
+export function nearestBlockRoot(el, cache, limit = document.body) {
+  let cur = el;
+  while (cur && cur !== limit) {
+    if (isBlockLevel(cur, cache)) return cur;
+    cur = cur.parentElement;
+  }
+  return limit;
 }
 
 /**

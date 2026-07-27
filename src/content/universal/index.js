@@ -4,7 +4,7 @@ import { isOfflineNlpEnabled, analyzeJapaneseTokensOnly } from '../core/api.js';
 import { isGoogleChat } from '../chat/message-finder.js';
 import { isGmail } from '../gmail/message-finder.js';
 import { isRedmine } from '../redmine/message-finder.js';
-import { findJapaneseBlocks, SKIP_SUBTREE_TAGS } from '../shared/block-walker.js';
+import { findJapaneseBlocks, nearestBlockRoot, SKIP_SUBTREE_TAGS } from '../shared/block-walker.js';
 import { collectBlockTextNodes, paintBlockTokens } from '../shared/auto-lite-core.js';
 import { createAnalyzeQueue } from '../shared/analyze-queue.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
@@ -162,17 +162,60 @@ async function analyzeAndPaint(block) {
   }
 }
 
-/** Scan the document for Japanese blocks and enqueue any new ones. */
-function scan() {
+/**
+ * Find Japanese blocks and enqueue any new ones.
+ *
+ * @param {Element[]|null} [roots] - restrict the walk to these subtrees. A
+ *   whole-document walk visits every text node and resolves computed styles, so
+ *   doing it 150 ms after every page mutation was a permanent background cost
+ *   on any site that animates or polls. Pass null for the initial pass and
+ *   after SPA navigation, where the whole document really is new.
+ */
+function scan(roots = null) {
   if (!document.body) return;
   sweepDetachedBlocks();
-  const blocks = findJapaneseBlocks(document.body, { maxBlocks: UNIVERSAL_MAX_BLOCKS });
-  for (const block of blocks) enqueueBlock(block);
+
+  const styleCache = new Map();
+  let scanRoots;
+
+  if (!roots || roots.length === 0) {
+    scanRoots = [document.body];
+  } else {
+    scanRoots = [];
+    for (const el of roots) {
+      if (el.isConnected) scanRoots.push(nearestBlockRoot(el, styleCache));
+    }
+    // Drop any root already covered by another, so nested mutations in the
+    // same container are walked once.
+    scanRoots = scanRoots.filter((r, i) =>
+      !scanRoots.some((other, j) => j !== i && other !== r && other.contains(r)));
+  }
+
+  const walked = new Set();
+  for (const root of scanRoots) {
+    if (walked.has(root)) continue;
+    walked.add(root);
+    const blocks = findJapaneseBlocks(root, { maxBlocks: UNIVERSAL_MAX_BLOCKS });
+    for (const block of blocks) enqueueBlock(block);
+  }
 }
+
+// Mutation targets awaiting a scoped rescan. Past MAX_SCOPED_ROOTS distinct
+// roots a single document walk is cheaper than many subtree walks, so the batch
+// degrades to a full scan rather than growing without bound.
+const pendingRoots = new Set();
+const MAX_SCOPED_ROOTS = 20;
+let fullRescanQueued = false;
 
 function scheduleRescan() {
   if (rescanTimer) return;
-  rescanTimer = setTimeout(() => { rescanTimer = null; scan(); }, RESCAN_DEBOUNCE_MS);
+  rescanTimer = setTimeout(() => {
+    rescanTimer = null;
+    const roots = fullRescanQueued ? null : [...pendingRoots];
+    pendingRoots.clear();
+    fullRescanQueued = false;
+    scan(roots);
+  }, RESCAN_DEBOUNCE_MS);
 }
 
 /** ChildList mutation that only added our own tooltip/popover/panel UI. */
@@ -202,6 +245,16 @@ function onMutations(records) {
     if (isOwnUiMutation(m)) continue;
     clearMarkedAncestor(m.target);
     relevant = true;
+
+    if (fullRescanQueued) continue;
+    const el = m.target?.nodeType === Node.ELEMENT_NODE ? m.target : m.target?.parentElement;
+    if (!el) continue;
+    if (pendingRoots.size >= MAX_SCOPED_ROOTS) {
+      fullRescanQueued = true;
+      pendingRoots.clear();
+      continue;
+    }
+    pendingRoots.add(el);
   }
   if (relevant) scheduleRescan();
 }
@@ -232,9 +285,12 @@ function setupObservers() {
   window.addEventListener('popstate', onSoftNav);
   window.addEventListener('hashchange', onSoftNav);
 
-  let lastHref = location.href;
+  // Compare pathname, not href: sites that write scroll position or filter
+  // state into the query string or hash via replaceState would otherwise
+  // trigger a full document rescan every poll.
+  let lastPath = location.pathname;
   setInterval(() => {
-    if (location.href !== lastHref) { lastHref = location.href; onSoftNav(); }
+    if (location.pathname !== lastPath) { lastPath = location.pathname; onSoftNav(); }
   }, URL_POLL_MS);
 }
 

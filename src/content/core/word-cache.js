@@ -35,9 +35,21 @@ const WORD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // Must contain at least one Japanese character (hiragana, katakana, or kanji)
 const JAPANESE_CHAR_RE = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
 
-// Debounce timer for saving
+// Debounce timers for saving. Two tiers, because the two reasons to save are
+// not equally urgent:
+//
+//   content  — a new word, or a better gloss/reading for a known one. Worth
+//              persisting promptly so a reload does not re-analyze it.
+//   touch    — only lastUsed moved. This fires on every getCachedWord(), so
+//              merely *reading* the cache used to trigger a full serialization
+//              of every entry. It still has to be persisted (the 30-day TTL
+//              prunes on lastUsed, so a word seen daily whose touches never
+//              reached disk would eventually expire), but a minute of lag is
+//              irrelevant against a 30-day window.
 let saveTimeout = null;
 const SAVE_DEBOUNCE_MS = 1000;
+const TOUCH_SAVE_DEBOUNCE_MS = 60000;
+let pendingSaveIsContent = false;
 
 // Every site subsystem calls initWordCache() during startup, so a single frame
 // asks for the cache up to four times. They all populate the same module-level
@@ -77,13 +89,23 @@ async function loadWordCache() {
 }
 
 /**
- * Save word cache to chrome.storage.local (debounced)
+ * Save word cache to chrome.storage.local (debounced).
+ * @param {{content?: boolean}} [opts] - content:true when entries were added or
+ *   improved, rather than only touched. Content saves win: a pending slow touch
+ *   save is pulled forward, never the other way round.
  */
-function saveWordCache() {
+function saveWordCache({ content = false } = {}) {
+  if (content) pendingSaveIsContent = true;
+  // A slow touch timer must not hold back a content save, but a content timer
+  // already covers any touches that arrive before it fires.
   if (saveTimeout) {
+    if (!content) return;
     clearTimeout(saveTimeout);
   }
+  const delay = pendingSaveIsContent ? SAVE_DEBOUNCE_MS : TOUCH_SAVE_DEBOUNCE_MS;
   saveTimeout = setTimeout(async () => {
+    saveTimeout = null;
+    pendingSaveIsContent = false;
     try {
       const cacheObj = Object.fromEntries(wordCache);
       await chrome.storage.local.set({ wordCache: cacheObj });
@@ -91,7 +113,7 @@ function saveWordCache() {
     } catch (error) {
       debugLog('WORD-CACHE', 'Error saving word cache:', error.message);
     }
-  }, SAVE_DEBOUNCE_MS);
+  }, delay);
 }
 
 /**
@@ -133,7 +155,9 @@ export function cacheWords(words) {
   if (addedCount > 0) {
     debugLog('WORD-CACHE', `Cached ${addedCount} new words, total: ${wordCache.size}`);
   }
-  saveWordCache();
+  // Nothing new here means every word in this batch was already known and only
+  // had its lastUsed bumped — that can wait for the slow tier.
+  saveWordCache({ content: addedCount > 0 });
 }
 
 /**
@@ -144,7 +168,9 @@ export function cacheWords(words) {
 export function getCachedWord(japanese) {
   const entry = wordCache.get(japanese);
   if (entry) {
-    // Update lastUsed on access
+    // Update lastUsed on access so the 30-day TTL keeps words still in use.
+    // Not persisted here on purpose: the bump rides along with the next
+    // content save rather than scheduling a write of its own.
     entry.lastUsed = Date.now();
     wordCache.set(japanese, entry);
     return entry;

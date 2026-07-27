@@ -57,7 +57,9 @@ export function collectBlockTextNodes(blockEl, excludeTags = DEFAULT_EXCLUDE_TAG
           let d = '';
           try { d = getComputedStyle(node).display || ''; } catch { /* keep '' */ }
           if (d === 'none') return NodeFilter.FILTER_REJECT; // hidden: no seam
-          if (isBlockLevel(node, styleCache)) {
+          // Hand the resolved display to isBlockLevel so it does not resolve
+          // style a second time for the same node on its first visit.
+          if (isBlockLevel(node, styleCache, d)) {
             pendingSeam = true;
             return NodeFilter.FILTER_REJECT;
           }
