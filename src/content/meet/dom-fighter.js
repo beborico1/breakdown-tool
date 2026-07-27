@@ -546,7 +546,7 @@ function fightMeetReinsertions() {
     }
 
     // (E) Re-paint minimalistic word coloring if Meet stripped our spans.
-    // Falls back to the persistent word cache while Gemini is still in-flight,
+    // Falls back to the persistent word cache while the analyzer is still in-flight,
     // so pre-painted captions don't fade to white on the first Meet rebuild.
     if (state.minimalisticState && state.shadowOriginalEl && state.originalText) {
       const el = state.shadowOriginalEl;

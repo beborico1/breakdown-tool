@@ -37,10 +37,7 @@ const CODE_OPENED_PAGES = [
  * Files loaded by a mechanism no static analysis can see. Each needs a reason;
  * an entry without one is how unused weight creeps back in.
  */
-const DYNAMIC_EXTRAS = [
-  // AudioWorklet.addModule() takes a URL string, so nothing imports this.
-  { file: 'src/pages/transcribe/pcm-worklet.js', why: 'loaded via audioWorklet.addModule()' },
-];
+const DYNAMIC_EXTRAS = [];
 
 /** Asset directories shipped wholesale. */
 const ASSET_DIRS = ['assets/icons', 'assets/kuromoji-dict', 'assets/jmdict', 'assets/kanjidic'];

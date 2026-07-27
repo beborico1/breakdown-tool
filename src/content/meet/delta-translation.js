@@ -1,6 +1,6 @@
 import { debugLog } from '../core/debug.js';
 import { translationState, pendingDeltas, translationCache, DELTA_DEBOUNCE_MS } from '../core/state.js';
-import { translateWithGemini } from '../core/api.js';
+import { translateToEnglish } from '../core/api.js';
 
 /**
  * Classify text change to determine translation strategy
@@ -77,10 +77,9 @@ async function executeDeltaTranslation(container, delta, fullNewText) {
   debugLog('DELTA-EXEC', `Translating delta: "${delta.slice(0, 40)}..."`);
 
   try {
-    const translatedDelta = await translateWithGemini(delta, {
-      isDelta: true,
-      previousTranslation: state.translatedText
-    });
+    // The on-device translator has no conversation context, so the delta is
+    // translated on its own; the previous translation is only used to append to.
+    const translatedDelta = await translateToEnglish(delta);
 
     // Check if state still exists (user may have toggled off)
     if (!translationState.has(container)) {
@@ -128,7 +127,7 @@ export async function executeFullRetranslation(container, text) {
   state.translatedEl?.setAttribute('data-updating', 'true');
 
   try {
-    const translated = await translateWithGemini(text);
+    const translated = await translateToEnglish(text);
 
     if (!translationState.has(container)) return;
 

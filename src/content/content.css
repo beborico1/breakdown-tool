@@ -333,7 +333,7 @@
    MINIMALISTIC MODE STYLES
    ============================================ */
 
-/* Pending/unprocessed text in minimalistic mode — gray until Gemini returns.
+/* Pending/unprocessed text in minimalistic mode — gray until the analyzer returns.
    Analyzed words override via .mm-word.mm-type-* (higher specificity + !important). */
 [data-mm-colored] {
   color: #9CA3AF !important;

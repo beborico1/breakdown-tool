@@ -1,5 +1,5 @@
 import { debugLog } from './debug.js';
-import { isOfflineNlpEnabled, analyzeJapaneseWithGemini } from './api.js';
+import { analyzeJapanese } from './api.js';
 import { inlineBreakdownState } from './state.js';
 import { hasJapanese } from '../utils/text.js';
 import { showInlineBreakdown } from '../chat/inline-breakdown.js';
@@ -63,7 +63,7 @@ function ensureObserver() {
       if (inlineBreakdownState.get(el)?.isShowingBreakdown) continue;
       if (mode === 'chat-lite') {
         const bubbleEl = el.closest('.nF6pT');
-        analyzeJapaneseWithGemini(text)
+        analyzeJapanese(text)
           .then((breakdown) => {
             if (!breakdown?.words?.length) return;
             if (inlineBreakdownState.get(el)?.isShowingBreakdown) return;
@@ -74,7 +74,7 @@ function ensureObserver() {
         // Re-assemble at analyze-time to match what the renderer will see.
         const assembled = assembleRedmineText(el);
         if (!assembled || !hasJapanese(assembled)) continue;
-        analyzeJapaneseWithGemini(assembled)
+        analyzeJapanese(assembled)
           .then((breakdown) => {
             if (!breakdown?.words?.length) return;
             renderRedmineAutoLite(el, assembled, breakdown);
@@ -83,7 +83,7 @@ function ensureObserver() {
       } else if (mode === 'gmail-lite') {
         const assembled = assembleGmailText(el);
         if (!assembled || !hasJapanese(assembled)) continue;
-        analyzeJapaneseWithGemini(assembled)
+        analyzeJapanese(assembled)
           .then((breakdown) => {
             if (!breakdown?.words?.length) return;
             renderGmailAutoLite(el, assembled, breakdown);
@@ -114,7 +114,6 @@ function enqueue(el, text, mode) {
 }
 
 export async function maybeAutoAnalyzeChat() {
-  if (!(await isOfflineNlpEnabled())) return;
   sweepDetachedTargets();
   const els = document.querySelectorAll('.Zc1Emd');
   for (const el of els) {
@@ -126,7 +125,6 @@ export async function maybeAutoAnalyzeChat() {
 }
 
 export async function maybeAutoAnalyzeRedmine() {
-  if (!(await isOfflineNlpEnabled())) return;
   sweepDetachedTargets();
   const blocks = getRedmineTextBlocks();
   for (const el of blocks) {
@@ -144,7 +142,6 @@ export async function maybeAutoAnalyzeRedmine() {
  * hover tooltip appeared broken.
  */
 export async function maybeAutoAnalyzeGmail() {
-  if (!(await isOfflineNlpEnabled())) return;
   sweepDetachedTargets();
   for (const el of getGmailMessageBodies()) {
     if (processed.has(el)) continue;
@@ -155,19 +152,3 @@ export async function maybeAutoAnalyzeGmail() {
   }
 }
 
-/**
- * Listen for the offline NLP toggle so flipping it ON in an already-open tab
- * starts auto-analysis without requiring a reload.
- */
-export function watchOfflineToggle(onEnable) {
-  try {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') return;
-      if (!changes.useOfflineNlp) return;
-      const newVal = changes.useOfflineNlp.newValue;
-      if (newVal !== false) onEnable();
-    });
-  } catch (e) {
-    debugLog('AUTO-ANALYZE', 'storage.onChanged unavailable:', e?.message);
-  }
-}

@@ -1,6 +1,6 @@
 import { debugLog } from '../core/debug.js';
 import { hasJapanese, splitJapaneseText } from '../utils/text.js';
-import { isOfflineNlpEnabled, analyzeJapaneseTokensOnly } from '../core/api.js';
+import { analyzeJapaneseTokens } from '../core/api.js';
 import { isGoogleChat } from '../chat/message-finder.js';
 import { isGmail } from '../gmail/message-finder.js';
 import { isRedmine } from '../redmine/message-finder.js';
@@ -133,7 +133,7 @@ async function analyzeAndPaint(block) {
   let words = [];
   try {
     for (const chunk of chunks) {
-      const res = await analyzeQueue.enqueue(() => analyzeJapaneseTokensOnly(chunk));
+      const res = await analyzeQueue.enqueue(() => analyzeJapaneseTokens(chunk));
       if (res?.words?.length) words = words.concat(res.words);
     }
   } catch (e) {
@@ -354,15 +354,6 @@ export async function initializeUniversal() {
     if (!trial) return;
   }
   if (!universalMode && !trial) return;
-
-  try {
-    if (!(await isOfflineNlpEnabled())) {
-      debugLog('UNIVERSAL', 'offline NLP disabled; universal colorizing needs it');
-      return;
-    }
-  } catch {
-    return;
-  }
 
   debugLog('UNIVERSAL', 'initializing universal colorizer');
   if (document.readyState === 'loading') {

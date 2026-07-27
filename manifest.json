@@ -4,7 +4,6 @@
   "version": "1.2.0",
   "description": "Extract and copy captions from Google Meet with translation support",
   "permissions": [
-    "clipboardWrite",
     "activeTab",
     "storage",
     "scripting",
@@ -19,15 +18,10 @@
         "assets/jmdict/*",
         "assets/kanjidic/*",
         "src/offscreen/offscreen.html",
-        "dist/offscreen.js",
-        "src/pages/transcribe/pcm-worklet.js"
+        "dist/offscreen.js"
       ],
       "matches": ["<all_urls>"]
     }
-  ],
-  "host_permissions": [
-    "https://generativelanguage.googleapis.com/*",
-    "wss://generativelanguage.googleapis.com/*"
   ],
   "optional_host_permissions": [
     "http://localhost:8765/*",
@@ -51,16 +45,6 @@
       "32": "assets/icons/icon32.png",
       "48": "assets/icons/icon48.png",
       "128": "assets/icons/icon128.png"
-    }
-  },
-  "commands": {
-    "translate-to-japanese": {
-      "suggested_key": { "default": "Alt+J", "mac": "Alt+J" },
-      "description": "Translate selected text to Japanese (append to input)"
-    },
-    "translate-to-japanese-replace": {
-      "suggested_key": { "default": "Alt+R", "mac": "Alt+R" },
-      "description": "Replace selected text with its Japanese translation"
     }
   },
   "content_scripts": [

@@ -8,7 +8,7 @@ import {
   sentenceChunkSize
 } from '../core/state.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
-import { analyzeJapaneseWithGemini } from '../core/api.js';
+import { analyzeJapanese } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
 import { getWordTypeClass } from '../utils/text.js';
@@ -267,7 +267,7 @@ async function processSentenceQueue(container) {
         debugLog('SENTENCE-CACHE', `Cache hit for: "${sentence.text.slice(0, 30)}"`);
         breakdownData = cached.breakdownData;
       } else {
-        breakdownData = await analyzeJapaneseWithGemini(sentence.text);
+        breakdownData = await analyzeJapanese(sentence.text);
       }
 
       // Verify state still exists after async call

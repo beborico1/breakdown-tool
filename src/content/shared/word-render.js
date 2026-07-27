@@ -17,7 +17,7 @@ function escapeHtml(str) {
 /**
  * Build word boundaries from breakdown data by scanning for each word's
  * Japanese form in the original text. Words that don't match (rare, e.g.
- * Gemini returned a normalized form) are skipped.
+ * the analyzer returned a normalized form) are skipped.
  */
 const ASCII_ONLY_RE = /^[\x20-\x7e]+$/;
 

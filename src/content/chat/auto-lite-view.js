@@ -3,7 +3,6 @@ import { hasJapanese, segmentClauses, MIN_SYNTHETIC_CLAUSE_CHARS } from '../util
 import { buildTogglePanel } from '../core/auto-translate-panel.js';
 import { collectTextNodes, applyAutoWordsToTextNode } from '../utils/highlight.js';
 import { findQuotedBlockContainer } from './message-finder.js';
-import { getPreHighlightHTML } from './word-highlight.js';
 
 const liteState = new WeakMap();
 
@@ -54,14 +53,6 @@ export function renderAutoLiteView(messageEl, breakdownData, bubbleEl) {
   if (!messageEl || !breakdownData?.words?.length) return;
   if (liteState.has(messageEl)) return;
   if (bubbleEl?.querySelector('.gcwb-auto-translate-toggle')) return;
-
-  // If the cached-word highlighter already fragmented this message (e.g. offline NLP
-  // was toggled on after the highlighter ran), restore the clean pre-highlight HTML
-  // first, so a token straddling a `.gcwb-cached-word` boundary isn't dropped by the
-  // node-containment check below. On the common path the highlighter is gated off and
-  // this is null (no-op).
-  const preHighlight = getPreHighlightHTML(messageEl);
-  if (preHighlight) messageEl.innerHTML = preHighlight;
 
   // Collect text nodes the same way the analyzed text was extracted, so token
   // surfaces line up with the live DOM (quoted blocks excluded, highlights included).

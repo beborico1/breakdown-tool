@@ -37,43 +37,22 @@
       </div>
     </header>
 
-    <div id="warningNoKey" class="warning" style="display: none;">
-      No Gemini API key set. Live transcription still works, but the word-by-word
-      breakdown needs a key (or offline NLP enabled in the popup).
-    </div>
     <div id="warningNoMic" class="warning" style="display: none;">
       Microphone access is required. Please allow mic access and reload.
     </div>
 
+    <p class="disclosure">
+      Chrome turns your speech into text using Google's speech service, so your microphone
+      audio is sent to Google while you are listening. The word breakdown then runs entirely
+      on your computer &mdash; nothing you say is stored or sent anywhere else.
+    </p>
+
     <div class="silence-controls collapsed" id="silenceControls">
       <div class="silence-controls-inner">
-        <div class="mode-toggle" id="modeToggle" role="radiogroup" aria-label="Transcription mode">
-          <button type="button" class="mode-option active" data-mode="dictation" role="radio" aria-checked="true">
-            <span class="mode-label">Dictation</span>
-            <span class="mode-desc">Instant &middot; close mic &middot; free</span>
-          </button>
-          <button type="button" class="mode-option" data-mode="meeting" role="radio" aria-checked="false">
-            <span class="mode-label">Meeting</span>
-            <span class="mode-desc">High recall &middot; far mic &middot; uses API</span>
-          </button>
-          <button type="button" class="mode-option" data-mode="hybrid" role="radio" aria-checked="false">
-            <span class="mode-label">Hybrid</span>
-            <span class="mode-desc">Instant preview + accurate</span>
-          </button>
-        </div>
-        <p class="settings-note" id="modeNote">
-          Dictation streams in real time via Chrome's speech engine (free), best for a
-          single close microphone. Use "Analyze Now" to re-run the word breakdown on
-          everything captured so far.
+        <p class="settings-note">
+          Speak Japanese and it appears here, broken down word by word. Use
+          &ldquo;Analyze Now&rdquo; to re-run the breakdown on everything captured so far.
         </p>
-        <div class="setting-row" id="liveModelRow">
-          <div class="setting-header">
-            <label for="liveModelInput">Gemini Live model (Meeting mode)</label>
-          </div>
-          <input type="text" id="liveModelInput" class="text-input" list="liveModelOptions"
-                 placeholder="gemini-2.0-flash-live-001" spellcheck="false" autocomplete="off">
-          <datalist id="liveModelOptions"></datalist>
-        </div>
         <button id="analyzeNow" class="btn btn-accent" disabled>Analyze Now</button>
       </div>
     </div>

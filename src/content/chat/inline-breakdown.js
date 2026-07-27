@@ -6,11 +6,10 @@ import {
 } from '../core/state.js';
 import { getWordTypeClass } from '../utils/text.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
-import { analyzeJapaneseWithGemini } from '../core/api.js';
+import { analyzeJapanese } from '../core/api.js';
 import { cacheWords } from '../core/word-cache.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { forceHideTooltip } from './word-tooltip.js';
-import { getPreHighlightHTML as getChatPreHighlightHTML } from './word-highlight.js';
 import { getPreHighlightHTML as getRedminePreHighlightHTML } from '../redmine/word-highlight.js';
 import { getPreHighlightHTML as getGmailPreHighlightHTML } from '../gmail/word-highlight.js';
 import { isPageLightMode } from '../utils/dom.js';
@@ -57,8 +56,7 @@ export async function showInlineBreakdown(messageEl, text) {
 
   // Save original HTML if not already saved (prefer pre-highlight version)
   if (!existingState?.originalHTML) {
-    const trueOriginal = getChatPreHighlightHTML(messageEl)
-      || getRedminePreHighlightHTML(messageEl)
+    const trueOriginal = getRedminePreHighlightHTML(messageEl)
       || getGmailPreHighlightHTML(messageEl)
       || messageEl.innerHTML;
     inlineBreakdownState.set(messageEl, {
@@ -83,7 +81,7 @@ export async function showInlineBreakdown(messageEl, text) {
 
   // Analyze the text
   try {
-    const breakdownData = await analyzeJapaneseWithGemini(text);
+    const breakdownData = await analyzeJapanese(text);
 
     // Check if message was restored during analysis
     const currentState = inlineBreakdownState.get(messageEl);
@@ -165,8 +163,7 @@ function showCachedInline(messageEl, breakdownData) {
   // Save original HTML if not already saved (prefer pre-highlight version)
   const existingState = inlineBreakdownState.get(messageEl);
   if (!existingState?.originalHTML) {
-    const trueOriginal = getChatPreHighlightHTML(messageEl)
-      || getRedminePreHighlightHTML(messageEl)
+    const trueOriginal = getRedminePreHighlightHTML(messageEl)
       || getGmailPreHighlightHTML(messageEl)
       || messageEl.innerHTML;
     inlineBreakdownState.set(messageEl, {

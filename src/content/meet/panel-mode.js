@@ -2,7 +2,7 @@ import { debugLog } from '../core/debug.js';
 import { translationState, translationCache, activeContentKeys, wordBlockFontSize } from '../core/state.js';
 import { getWordTypeClass } from '../utils/text.js';
 import { generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
-import { analyzeJapaneseWithGemini } from '../core/api.js';
+import { analyzeJapanese } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 
 /**
@@ -100,7 +100,7 @@ export async function reprocessBreakdown(container, text, speakerName) {
   if (!state) return;
 
   try {
-    const breakdownData = await analyzeJapaneseWithGemini(text);
+    const breakdownData = await analyzeJapanese(text);
 
     // Check if user toggled off while analysis was in flight
     if (!translationState.has(container)) {

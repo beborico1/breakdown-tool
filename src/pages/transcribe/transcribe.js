@@ -1,8 +1,11 @@
 // ============================================
 // Live Japanese Transcription Page
-// Uses MediaRecorder + Gemini audio API for transcription + analysis
+// Chrome's Web Speech API turns speech into text; the on-device pipeline
+// (kuromoji + JMdict) breaks each utterance into words.
 // ============================================
 
+import { analyzeJapanese } from '../../content/core/api.js';
+import { getWordTypeClass } from '../../content/utils/text.js';
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
 import { mergeWordCounts } from '../../content/core/frequency-store.js';
 import { paintWordColoring } from '../../content/shared/word-render.js';
@@ -18,7 +21,6 @@ const micBtn = document.getElementById('micBtn');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const statusRow = document.getElementById('statusRow');
-const warningNoKey = document.getElementById('warningNoKey');
 const warningNoMic = document.getElementById('warningNoMic');
 const analyzeNowBtn = document.getElementById('analyzeNow');
 const audioLevelBar = document.getElementById('audioLevelBar');
@@ -29,9 +31,7 @@ const historyEmpty = document.getElementById('historyEmpty');
 const historyActions = document.getElementById('historyActions');
 const settingsBtn = document.getElementById('settingsBtn');
 const silenceControls = document.getElementById('silenceControls');
-const modeToggle = document.getElementById('modeToggle');
 const modeNote = document.getElementById('modeNote');
-const liveModelInput = document.getElementById('liveModelInput');
 if (settingsBtn && silenceControls) {
   settingsBtn.addEventListener('click', () => {
     const collapsed = silenceControls.classList.toggle('collapsed');
@@ -40,29 +40,11 @@ if (settingsBtn && silenceControls) {
   });
 }
 
-// --- API base ---
-const CLOUD_API_BASE = 'https://generativelanguage.googleapis.com';
-
-async function resolveAuth() {
-  const key = await getApiKey();
-  if (!key) throw new Error('No API key. Set it in the extension popup.');
-  return { apiBase: CLOUD_API_BASE, apiKey: key };
-}
-
 // --- State ---
-let apiKey = null;
-let modelId = 'gemini-2.5-flash-lite';
 let isListening = false;
 let segmentCount = 0;
 let wordCount = 0;
 let accumulatedTranscript = ''; // transcribed text for "Analyze Now" re-analysis
-
-// --- Transcription mode ---
-// 'dictation' = Web Speech API (instant, free, close mic).
-// 'meeting'   = Gemini Live API (high recall, far-field, streams audio).
-let transcribeMode = 'dictation';
-let liveModelId = 'gemini-2.0-flash-live-001';
-let liveModelUserSet = false; // true once the user manually edits the model field
 
 // --- Speech recognition state ---
 // We stream live captions via the Web Speech API (the same engine Chrome/Meet
@@ -84,190 +66,6 @@ let audioContext = null;
 let analyser = null;
 let meterInterval = null;
 let currentRMS = 0;
-
-// --- Meeting mode (Gemini Live) state ---
-const LIVE_WS_URL = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-let liveSocket = null;       // active WebSocket
-let liveWorkletNode = null;  // AudioWorkletNode producing PCM
-let liveSetupDone = false;   // server acknowledged setup for the current socket
-let liveHadSession = false;  // setup succeeded at least once this listening session
-let liveBuffer = '';         // accumulated input-transcription for the current turn
-let liveReconnecting = false;
-let liveResponseModality = 'TEXT'; // 'TEXT' for half-cascade models; falls back to 'AUDIO' for native-audio
-
-// ============================================
-// Duplicated utilities (from api.js, text.js, frequency-tracker.js)
-// ============================================
-
-async function getApiKey() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['geminiApiKey'], (result) => {
-      resolve(result.geminiApiKey || null);
-    });
-  });
-}
-
-function updateTokenUsage(tokens) {
-  if (!tokens || tokens <= 0) return;
-  chrome.storage.local.get(['tokenUsage'], (result) => {
-    const currentUsage = result.tokenUsage || 0;
-    chrome.storage.local.set({ tokenUsage: currentUsage + tokens });
-  });
-}
-
-function splitJapaneseText(text, maxChars = 30) {
-  const chunks = [];
-  const separators = /([。、！？\n])/g;
-  let current = '';
-  const parts = text.split(separators);
-
-  for (const part of parts) {
-    if ((current + part).length > maxChars && current.length > 0) {
-      chunks.push(current.trim());
-      current = part;
-    } else {
-      current += part;
-    }
-  }
-  if (current.trim()) chunks.push(current.trim());
-
-  if (chunks.length === 0 && text.length > 0) {
-    for (let i = 0; i < text.length; i += maxChars) {
-      chunks.push(text.slice(i, i + maxChars).trim());
-    }
-  }
-  return chunks.filter(c => c.length > 0);
-}
-
-function getWordTypeClass(type) {
-  const typeMap = {
-    'noun': 'noun', 'verb': 'verb', 'particle': 'particle',
-    'adjective': 'adjective', 'adverb': 'adverb', 'counter': 'counter',
-    'expression': 'expression', 'auxiliary': 'auxiliary', 'copula': 'copula'
-  };
-  return typeMap[type?.toLowerCase()] || 'other';
-}
-
-async function analyzeJapaneseChunked(text) {
-  const chunks = splitJapaneseText(text, 30);
-  const allWords = [];
-  let fullTranslation = '';
-
-  for (const chunk of chunks) {
-    try {
-      const result = await analyzeJapaneseWithGemini(chunk, { noRetry: true });
-      if (!result.truncated) {
-        allWords.push(...result.words);
-        fullTranslation += result.translation + ' ';
-      } else {
-        allWords.push({ japanese: chunk, reading: '', romaji: chunk, english: '[truncated]', type: 'expression' });
-      }
-    } catch (error) {
-      allWords.push({ japanese: chunk, reading: '', romaji: chunk, english: '[error]', type: 'expression' });
-    }
-  }
-
-  return { original: text, translation: fullTranslation.trim(), words: allWords };
-}
-
-async function analyzeJapaneseWithGemini(text, options = {}) {
-  // Offline NLP beta: route through service worker -> offscreen pipeline.
-  const offlineEnabled = await new Promise((r) => {
-    try { chrome.storage.sync.get(['useOfflineNlp'], (s) => r(s?.useOfflineNlp !== false)); } catch { r(true); }
-  });
-  if (offlineEnabled) {
-    const response = await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'kaigi-nlp-proxy', op: 'analyze', text }, (resp) => {
-        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-        resolve(resp || { ok: false, error: 'no response' });
-      });
-    });
-    if (!response.ok) throw new Error(response.error || 'offline NLP failed');
-    return response.result;
-  }
-
-  const { apiBase, apiKey: resolvedKey } = await resolveAuth();
-
-  const prompt = `Analyze this Japanese text and return ONLY valid JSON (no markdown, no code blocks, no explanation):
-{
-  "original": "the original Japanese text exactly as provided",
-  "translation": "natural English translation of the full sentence",
-  "words": [
-    {
-      "japanese": "word in kanji/kana as it appears",
-      "reading": "hiragana reading (only for words with kanji, empty string for hiragana/katakana-only words)",
-      "romaji": "romanized pronunciation",
-      "english": "English meaning or grammatical function",
-      "type": "noun|verb|particle|adjective|adverb|counter|expression|auxiliary|copula"
-    }
-  ]
-}
-
-Important:
-- Break down ALL words including particles (は, が, を, に, etc.)
-- For particles, use their grammatical function as english (e.g., "topic marker", "subject marker", "object marker")
-- Keep word order matching the original sentence
-- Use lowercase for romaji except for proper nouns
-- For verbs, include the conjugated form as it appears
-
-Text: ${text}`;
-
-  const response = await fetch(
-    `${apiBase}/v1beta/models/${modelId}:generateContent?key=${resolvedKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 65536,
-          responseMimeType: 'application/json',
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Analysis failed');
-  }
-
-  const data = await response.json();
-  const finishReason = data.candidates?.[0]?.finishReason;
-  let responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  const usageMetadata = data.usageMetadata;
-  if (usageMetadata?.totalTokenCount) {
-    updateTokenUsage(usageMetadata.totalTokenCount);
-  }
-
-  if (!responseText) throw new Error('No analysis returned');
-
-  if (finishReason === 'MAX_TOKENS') {
-    if (!options?.noRetry) return analyzeJapaneseChunked(text);
-    return { truncated: true, original: text };
-  }
-
-  responseText = responseText.trim();
-  if (responseText.startsWith('```json')) responseText = responseText.slice(7);
-  else if (responseText.startsWith('```')) responseText = responseText.slice(3);
-  if (responseText.endsWith('```')) responseText = responseText.slice(0, -3);
-  responseText = responseText.trim();
-
-  try {
-    const breakdown = JSON.parse(responseText);
-    if (!breakdown.original || !breakdown.translation || !Array.isArray(breakdown.words)) {
-      throw new Error('Invalid breakdown structure');
-    }
-    return breakdown;
-  } catch (parseError) {
-    if (!options?.noRetry && parseError instanceof SyntaxError) {
-      return analyzeJapaneseChunked(text);
-    }
-    throw new Error('Failed to parse breakdown response');
-  }
-}
 
 function recordWordFrequencies(words) {
   const now = Date.now();
@@ -593,8 +391,7 @@ function updateLiveCaption(text) {
 // in chronological order, and queue the word breakdown.
 function finalizeUtterance(text) {
   historyEmpty.style.display = 'none';
-  // In hybrid, Web Speech keeps driving the live line, so don't wipe it.
-  if (transcribeMode !== 'hybrid' && liveCaptionEl) liveCaptionEl.textContent = '';
+  if (liveCaptionEl) liveCaptionEl.textContent = '';
 
   const grayCard = createGrayTranscriptCard(text);
   // Insert just below the (pinned) live line so newest cards stay on top.
@@ -633,7 +430,7 @@ function pumpBreakdownQueue() {
 
 async function runBreakdownForCard(card, text) {
   try {
-    const breakdown = await analyzeJapaneseWithGemini(text);
+    const breakdown = await analyzeJapanese(text);
     if (!card.isConnected) return;
 
     // Ensure breakdown.original matches what we display so word boundaries align.
@@ -665,7 +462,7 @@ async function sendForAnalysis(text) {
   historyContainer.insertBefore(pendingCard, historyContainer.firstChild);
 
   try {
-    const breakdown = await analyzeJapaneseWithGemini(text);
+    const breakdown = await analyzeJapanese(text);
     pendingCard.remove();
 
     const breakdownCard = createBreakdownCard(breakdown, text);
@@ -716,39 +513,10 @@ async function startDictationMeter() {
   }
 }
 
-// Meeting mode: WE own the audio. Far-field tuning (EC/NS off so distant speech
-// isn't stripped, AGC on to lift it), mono, 16kHz so the worklet emits exactly
-// the PCM the Live API wants. Throws on permission failure (caller handles).
-async function startMeetingAudio() {
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true, channelCount: 1 }
-  });
-  audioContext = new AudioContext({ sampleRate: 16000 });
-  const source = audioContext.createMediaStreamSource(mediaStream);
-  buildAnalyser(source);
-
-  await audioContext.audioWorklet.addModule(
-    chrome.runtime.getURL('src/pages/transcribe/pcm-worklet.js')
-  );
-  liveWorkletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
-  source.connect(liveWorkletNode);
-  // Route through a muted gain to keep the worklet processing without audible
-  // playback (which would feed back into the mic).
-  const mute = audioContext.createGain();
-  mute.gain.value = 0;
-  liveWorkletNode.connect(mute).connect(audioContext.destination);
-  liveWorkletNode.port.onmessage = (e) => sendAudioChunk(e.data);
-
-  startMeter();
-}
 
 // Tear down whatever audio graph is active (used by both modes on stop).
 function teardownAudio() {
   stopMeter();
-  if (liveWorkletNode) {
-    try { liveWorkletNode.port.onmessage = null; liveWorkletNode.disconnect(); } catch { /* already gone */ }
-    liveWorkletNode = null;
-  }
   if (mediaStream) {
     mediaStream.getTracks().forEach((t) => t.stop());
     mediaStream = null;
@@ -820,10 +588,7 @@ function handleSpeechResult(event) {
     if (result.isFinal) {
       const text = transcript.trim();
       if (!text) continue;
-      // Hybrid: Web Speech is a preview only — Gemini owns the cards. Keep the
-      // final text in the live line (it'll be replaced by the next utterance).
-      if (transcribeMode === 'hybrid') interim += transcript;
-      else finalizeUtterance(text);
+      finalizeUtterance(text);
     } else {
       interim += transcript;
     }
@@ -876,130 +641,7 @@ function handleSpeechError(event) {
 }
 
 // ============================================
-// Meeting mode (Gemini Live API streaming)
-// ============================================
-
-function openLiveSocket(key) {
-  liveSetupDone = false;
-  liveSocket = new WebSocket(`${LIVE_WS_URL}?key=${encodeURIComponent(key)}`);
-  liveSocket.binaryType = 'arraybuffer';
-
-  liveSocket.onopen = () => {
-    // Half-cascade models accept TEXT (cheaper, no audio generated); native-audio
-    // models only accept AUDIO. We try TEXT first and fall back to AUDIO on a
-    // modality-mismatch error (see onclose). Either way we read only the input
-    // transcription and ignore the model's reply.
-    liveSocket.send(JSON.stringify({
-      setup: {
-        model: `models/${liveModelId}`,
-        generationConfig: { responseModalities: [liveResponseModality] },
-        // The Live API auto-detects the spoken language from the audio; it has no
-        // setup field to pin a language, so we bias toward Japanese via the system
-        // instruction below instead.
-        inputAudioTranscription: {},
-        systemInstruction: { parts: [{ text: 'You are a silent transcription engine for Japanese speech. Do not reply.' }] },
-      }
-    }));
-  };
-
-  liveSocket.onmessage = (ev) => { handleLiveMessage(ev.data); };
-
-  liveSocket.onclose = (ev) => {
-    // Ignore the close we triggered ourselves (liveSocket nulled in stop).
-    if (!liveSocket || !isListening || (transcribeMode !== 'meeting' && transcribeMode !== 'hybrid')) return;
-    flushLiveBuffer();
-    if (!liveHadSession) {
-      const reason = (ev && ev.reason) || '';
-      // Native-audio models reject TEXT — retry once with AUDIO modality.
-      if (liveResponseModality === 'TEXT' && /modalit/i.test(reason)) {
-        liveResponseModality = 'AUDIO';
-        reconnectLiveSocket();
-        return;
-      }
-      // Otherwise closed before setup completed → fatal (bad key, model, quota).
-      meetingFatal(reason);
-      return;
-    }
-    reconnectLiveSocket();
-  };
-
-  liveSocket.onerror = () => { /* onclose follows and handles recovery */ };
-}
-
-function meetingFatal(reason) {
-  warningNoMic.textContent =
-    'Meeting mode could not connect' + (reason ? ` (${reason})` : '') +
-    '. Check your API key and the Live model name.';
-  warningNoMic.style.display = 'block';
-  stopListening();
-}
-
-// Audio-only Live sessions cap at ~15 min; reconnect to keep going.
-function reconnectLiveSocket() {
-  if (liveReconnecting) return;
-  liveReconnecting = true;
-  setStatus('processing', 'Reconnecting...');
-  setTimeout(async () => {
-    liveReconnecting = false;
-    if (!isListening || (transcribeMode !== 'meeting' && transcribeMode !== 'hybrid')) return;
-    const key = await getApiKey();
-    if (key) openLiveSocket(key);
-  }, 600);
-}
-
-async function handleLiveMessage(data) {
-  let text;
-  if (typeof data === 'string') text = data;
-  else if (data instanceof ArrayBuffer) text = new TextDecoder().decode(data);
-  else if (data && typeof data.text === 'function') text = await data.text(); // Blob
-  else return;
-
-  let msg;
-  try { msg = JSON.parse(text); } catch { return; }
-
-  if (msg.setupComplete) {
-    liveSetupDone = true;
-    liveHadSession = true;
-    setStatus('listening', 'Listening...');
-    return;
-  }
-
-  const sc = msg.serverContent;
-  if (!sc) return;
-
-  // We only want the ASR of the room audio — ignore any model reply (modelTurn).
-  const itext = sc.inputTranscription?.text;
-  if (itext) {
-    liveBuffer += itext;
-    // In hybrid, Web Speech drives the live line; don't fight it. Gemini still
-    // finalizes the accurate card on turnComplete.
-    if (transcribeMode !== 'hybrid') updateLiveCaption(liveBuffer);
-  }
-
-  if (sc.turnComplete) flushLiveBuffer();
-}
-
-// Turn finished (or session ending): cut the buffered text into a card.
-function flushLiveBuffer() {
-  const text = liveBuffer.trim();
-  liveBuffer = '';
-  if (text) finalizeUtterance(text);
-  else if (transcribeMode !== 'hybrid' && liveCaptionEl) liveCaptionEl.textContent = '';
-}
-
-function sendAudioChunk(int16) {
-  if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN || !liveSetupDone) return;
-  const bytes = new Uint8Array(int16.buffer);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  const b64 = btoa(bin);
-  liveSocket.send(JSON.stringify({
-    realtimeInput: { audio: { data: b64, mimeType: 'audio/pcm;rate=16000' } }
-  }));
-}
-
-// ============================================
-// Start / Stop (dispatch on mode)
+// Start / Stop
 // ============================================
 
 async function startDictationMode() {
@@ -1011,40 +653,7 @@ async function startDictationMode() {
   return true;
 }
 
-async function startMeetingMode() {
-  const key = await getApiKey();
-  if (!key) {
-    warningNoKey.style.display = 'block';
-    return false;
-  }
-  setStatus('processing', 'Connecting...');
-  liveHadSession = false;
-  liveBuffer = '';
-  liveResponseModality = 'TEXT'; // start cheap; onclose falls back to AUDIO if rejected
-  try {
-    await startMeetingAudio();
-  } catch (err) {
-    teardownAudio();
-    warningNoMic.textContent = err && err.name === 'NotAllowedError'
-      ? 'Microphone access denied. Please allow mic access and reload.'
-      : 'Failed to start meeting capture: ' + (err?.message || err);
-    warningNoMic.style.display = 'block';
-    return false;
-  }
-  openLiveSocket(key);
-  return true;
-}
 
-// Hybrid = Gemini (accurate cards) + Web Speech (instant ja-JP preview line).
-async function startHybridMode() {
-  const ok = await startMeetingMode();
-  if (!ok) return false;
-  if (recognition || initSpeechRecognition()) {
-    shouldRestart = true;
-    try { recognition.start(); } catch { /* already started */ }
-  }
-  return true;
-}
 
 async function startListening() {
   if (isListening) return;
@@ -1053,11 +662,7 @@ async function startListening() {
   accumulatedTranscript = '';
   micBtn.classList.add('listening');
 
-  const ok = transcribeMode === 'meeting'
-    ? await startMeetingMode()
-    : transcribeMode === 'hybrid'
-    ? await startHybridMode()
-    : await startDictationMode();
+  const ok = await startDictationMode();
 
   if (!ok) {
     isListening = false;
@@ -1073,14 +678,6 @@ function stopListening() {
   if (recognition) {
     try { recognition.stop(); } catch { /* not started */ }
   }
-
-  if (liveSocket) {
-    const sock = liveSocket;
-    liveSocket = null; // signals onclose not to reconnect
-    try { sock.close(); } catch { /* already closing */ }
-  }
-  liveSetupDone = false;
-  flushLiveBuffer();
 
   teardownAudio();
 
@@ -1174,154 +771,12 @@ analyzeNowBtn.addEventListener('click', () => {
 // Mode toggle (Dictation / Meeting)
 // ============================================
 
-const MODE_NOTES = {
-  dictation: 'Dictation streams in real time via Chrome\'s speech engine (free), best for a single close microphone. Use "Analyze Now" to re-run the word breakdown on everything captured so far.',
-  meeting: 'Meeting mode streams mic audio to Gemini for high-recall transcription of far-field, multi-speaker conversations. Uses your API key — audio is billed while listening.',
-  hybrid: 'Hybrid shows an instant live preview (Chrome speech engine) while accurate Gemini cards finalize a beat behind. Best of both — far-field accuracy with real-time feedback. Uses your API key.',
-};
-
-const VALID_MODES = ['dictation', 'meeting', 'hybrid'];
-
-function applyMode(mode, persist) {
-  transcribeMode = VALID_MODES.includes(mode) ? mode : 'dictation';
-  if (modeToggle) {
-    modeToggle.querySelectorAll('.mode-option').forEach((btn) => {
-      const active = btn.dataset.mode === transcribeMode;
-      btn.classList.toggle('active', active);
-      btn.setAttribute('aria-checked', active ? 'true' : 'false');
-    });
-  }
-  if (modeNote) modeNote.textContent = MODE_NOTES[transcribeMode];
-  if (persist) chrome.storage.sync.set({ transcribeMode });
-}
-
-if (modeToggle) {
-  modeToggle.addEventListener('click', (e) => {
-    const btn = e.target.closest('.mode-option');
-    if (!btn) return;
-    const target = VALID_MODES.includes(btn.dataset.mode) ? btn.dataset.mode : 'dictation';
-    if (target === transcribeMode) return;
-    // Switch instantly: tear down the current session and restart in the new
-    // mode (a switch is always between different modes, so we never stop/start
-    // the same Web Speech recognizer).
-    const wasListening = isListening;
-    if (wasListening) stopListening();
-    applyMode(target, true);
-    if (wasListening) startListening();
-  });
-}
-
-if (liveModelInput) {
-  liveModelInput.addEventListener('change', () => {
-    const val = liveModelInput.value.trim();
-    liveModelId = val || liveModelId;
-    liveModelInput.value = liveModelId;
-    liveModelUserSet = true; // a manual choice — discovery must not override it
-    chrome.storage.sync.set({ geminiLiveModel: liveModelId, geminiLiveModelUserSet: true });
-  });
-}
-
-// Listen for storage changes (user sets API key while page is open)
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === 'sync') {
-    if (changes.geminiApiKey) {
-      apiKey = changes.geminiApiKey.newValue || null;
-      warningNoKey.style.display = apiKey ? 'none' : 'block';
-    }
-    if (changes.geminiModel) {
-      modelId = changes.geminiModel.newValue || 'gemini-2.5-flash-lite';
-    }
-    if (changes.geminiLiveModel) {
-      liveModelId = changes.geminiLiveModel.newValue || liveModelId;
-    }
-  }
-});
-
-// ============================================
-// Live model discovery
-// ============================================
-
-// Prefer a half-cascade flash-live model: it honors the Japanese language lock
-// and supports cheap TEXT output. Native-audio models (e.g. 3.x flash-live,
-// *native-audio*) auto-detect language and ignore the lock, so they're last.
-function pickPreferredLiveModel(models) {
-  const halfCascade = (m) => !m.includes('native-audio') && !/gemini-3\./.test(m);
-  return (
-    models.find((m) => m === 'gemini-2.0-flash-live-001') ||
-    models.find((m) => /^gemini-2\.0-flash-live/.test(m)) ||
-    models.find((m) => m.includes('flash') && m.includes('live') && halfCascade(m)) ||
-    models.find((m) => halfCascade(m)) ||
-    models[0]
-  );
-}
-
-// Ask the user's own key which models support bidiGenerateContent (Live API),
-// so the field offers valid options instead of a guessed name that may 404.
-// Populates the datalist and steers toward the Japanese-honoring default.
-async function discoverLiveModels(key) {
-  if (!key) return;
-  let models;
-  try {
-    const res = await fetch(`${CLOUD_API_BASE}/v1beta/models?key=${key}&pageSize=1000`);
-    if (!res.ok) return;
-    const data = await res.json();
-    models = (data.models || [])
-      .filter((m) => (m.supportedGenerationMethods || []).includes('bidiGenerateContent'))
-      .map((m) => (m.name || '').replace(/^models\//, ''))
-      .filter(Boolean);
-  } catch {
-    return; // keep the editable field + default
-  }
-  if (!models || models.length === 0) return;
-
-  // Populate the datalist suggestions.
-  const list = document.getElementById('liveModelOptions');
-  if (list) {
-    list.innerHTML = '';
-    models.forEach((id) => {
-      const opt = document.createElement('option');
-      opt.value = id;
-      list.appendChild(opt);
-    });
-  }
-
-  // Switch to the preferred model when the current one is invalid, or when the
-  // user hasn't manually chosen and a better (Japanese-honoring) one exists.
-  const preferred = pickPreferredLiveModel(models);
-  const invalid = !models.includes(liveModelId);
-  if (preferred && (invalid || (!liveModelUserSet && preferred !== liveModelId))) {
-    liveModelId = preferred;
-    if (liveModelInput) liveModelInput.value = liveModelId;
-    chrome.storage.sync.set({ geminiLiveModel: liveModelId });
-  }
-}
-
 // ============================================
 // Initialization
 // ============================================
 
-async function init() {
-  const stored = await new Promise((resolve) => {
-    chrome.storage.sync.get(
-      ['geminiApiKey', 'geminiModel', 'geminiLiveModel', 'geminiLiveModelUserSet', 'transcribeMode'],
-      (s) => resolve(s || {})
-    );
-  });
-  apiKey = stored.geminiApiKey || null;
-  modelId = stored.geminiModel || 'gemini-2.5-flash-lite';
-  if (stored.geminiLiveModel) liveModelId = stored.geminiLiveModel;
-  liveModelUserSet = stored.geminiLiveModelUserSet === true;
-  if (liveModelInput) liveModelInput.value = liveModelId;
-
-  // Live transcription needs no key in Dictation mode; only the breakdown (and
-  // Meeting mode) do. So this banner is informational and never blocks Dictation.
-  if (!apiKey) {
-    warningNoKey.style.display = 'block';
-  }
-
-  applyMode(stored.transcribeMode || 'dictation', false);
+function init() {
   initSpeechRecognition();
-  discoverLiveModels(apiKey); // async; populates datalist + heals stale model
 }
 
 init();

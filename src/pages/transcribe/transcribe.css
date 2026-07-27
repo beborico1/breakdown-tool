@@ -920,3 +920,17 @@ html.kaigi-hide-meaning .gcwb-popover-meaning { display: none; }
 
 html.kaigi-hide-translation .breakdown-translation,
 html.kaigi-hide-translation .gcwb-inline-translation { display: none; }
+
+/* Mic disclosure. Chrome's Web Speech API sends audio to Google for recognition,
+   which the user cannot infer from a mic button — so it is stated in the page,
+   not only in the privacy policy. */
+.disclosure {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-left: 3px solid #d0bcf0;
+  background: #faf7fc;
+  border-radius: 0 6px 6px 0;
+  color: #5f6368;
+  font-size: 12px;
+  line-height: 1.5;
+}

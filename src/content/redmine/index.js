@@ -5,7 +5,7 @@ import { showCustomContextMenu } from '../chat/context-menu.js';
 import { highlightRedmineBlock, highlightAllRedmineBlocks, clearRedmineHighlightState } from './word-highlight.js';
 import { setupWordTooltip } from '../chat/word-tooltip.js';
 import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
-import { maybeAutoAnalyzeRedmine, watchOfflineToggle } from '../core/auto-analyze.js';
+import { maybeAutoAnalyzeRedmine } from '../core/auto-analyze.js';
 
 const REDMINE_TARGET_MATCH = '.subject h3, .description .wiki, .journal .wiki, .wiki-page .wiki, .news .wiki, #activity dd';
 
@@ -99,7 +99,6 @@ export async function initializeRedmine() {
     setupWordTooltip({ translateClause, warmClauseTranslator });
     maybeAutoAnalyzeRedmine();
     setupRedmineAutoObserver();
-    watchOfflineToggle(() => maybeAutoAnalyzeRedmine());
 
     // Listen for content-restored events to re-highlight after breakdown dismiss
     document.addEventListener('gcwb-content-restored', (event) => {

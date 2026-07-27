@@ -250,7 +250,7 @@ export function getCachedWords(text) {
 /**
  * Return cached words in the shape paintWordColoring / buildWordBoundaries expect
  * ({japanese, reading, romaji, english, type}), ordered by appearance in `text`.
- * Lets Meet's minimalistic mode pre-paint known words before the Gemini call.
+ * Lets Meet's minimalistic mode pre-paint known words before the analyzer returns.
  * @param {string} text
  * @returns {Array<{japanese: string, reading: string, romaji: string, english: string, type: string}>}
  */

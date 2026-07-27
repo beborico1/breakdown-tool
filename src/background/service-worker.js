@@ -10,7 +10,6 @@
 // extension's privileges, reachable from a script injected into every page.
 const ALLOWED_FETCH_ORIGINS = new Set([
   'http://localhost:8765',   // AnkiConnect, on the user's own machine
-  'https://generativelanguage.googleapis.com',
 ]);
 
 function isAllowedFetchTarget(url) {
@@ -132,21 +131,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
   })();
   return true;
-});
-
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== 'translate-to-japanese' && command !== 'translate-to-japanese-replace') return;
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const isChatPage = tab?.url?.includes('chat.google.com') ||
-    (tab?.url?.includes('mail.google.com') && tab?.url?.includes('#chat'));
-  if (!isChatPage) return;
-
-  try {
-    await chrome.tabs.sendMessage(tab.id, { action: command });
-  } catch (e) {
-    // Content script not loaded; nothing to do
-  }
 });
 
 async function registerCustomSitesFromStorage() {

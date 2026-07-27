@@ -10,7 +10,7 @@ import {
   sentenceStabilityBuffer
 } from '../core/state.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
-import { analyzeJapaneseWithGemini } from '../core/api.js';
+import { analyzeJapanese } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { cacheWords, getCachedWordBreakdown } from '../core/word-cache.js';
 import { attachHoverListeners, detachHoverListeners } from './hover-card.js';
@@ -45,7 +45,7 @@ export async function initializeMinimalisticContainer(container, messageEl, text
 
   container.setAttribute('data-mm-active', 'true');
   // Mark upfront so the fight-back loop in dom-fighter doesn't remove the
-  // element while we're waiting on Gemini. The marker stays across paint.
+  // element while we're waiting on the analyzer. The marker stays across paint.
   messageEl.setAttribute('data-mm-colored', 'true');
 
   const contentKey = generateContentKey(speaker, text, getTimeBucket());
@@ -76,7 +76,7 @@ export async function initializeMinimalisticContainer(container, messageEl, text
     return;
   }
 
-  // Pre-paint known words from the persistent word cache before Gemini returns.
+  // Pre-paint known words from the persistent word cache before the analyzer returns.
   // Cached words were sourced from the same pipeline, so the full-breakdown
   // repaint below renders identical spans for them — no flicker, just early color.
   const preWords = getCachedWordBreakdown(text);
@@ -87,7 +87,7 @@ export async function initializeMinimalisticContainer(container, messageEl, text
   }
 
   try {
-    const breakdownData = await analyzeJapaneseWithGemini(text);
+    const breakdownData = await analyzeJapanese(text);
 
     // Container may have been removed or toggled off while analysis was in flight.
     if (!translationState.has(container)) {
@@ -431,7 +431,7 @@ async function processIncrementalQueue(container) {
       const cached = findCachedTranslation(state.speakerName, sentence.text);
       const breakdownData = cached?.breakdownData
         ? cached.breakdownData
-        : await analyzeJapaneseWithGemini(sentence.text);
+        : await analyzeJapanese(sentence.text);
 
       if (!translationState.has(container)) { ms.isProcessing = false; return; }
 

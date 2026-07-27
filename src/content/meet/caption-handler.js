@@ -7,7 +7,7 @@ import {
   pendingDeltas
 } from '../core/state.js';
 import { findCachedTranslation, generateContentKey, getTimeBucket, cacheBreakdown } from '../core/cache.js';
-import { analyzeJapaneseWithGemini } from '../core/api.js';
+import { analyzeJapanese } from '../core/api.js';
 import { recordWordFrequencies } from '../services/frequency-tracker.js';
 import { hideOriginalElement } from '../utils/dom.js';
 import { renderBreakdownPanel, reprocessBreakdown } from './panel-mode.js';
@@ -230,7 +230,7 @@ export async function handleCaptionClick(event) {
   debugLog('TRANSLATE', 'Starting Japanese analysis');
 
   try {
-    const breakdownData = await analyzeJapaneseWithGemini(originalText);
+    const breakdownData = await analyzeJapanese(originalText);
 
     // Check if user toggled off while analysis was in flight
     if (!translationState.has(container)) {
