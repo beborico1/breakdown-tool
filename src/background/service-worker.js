@@ -3,9 +3,31 @@
 // extension-origin privileges + host_permissions, so it can fetch any allowed URL.
 // Content scripts send {type:'kaigi-fetch', url, init} and get back a serialised
 // response with {ok, status, text}.
+//
+// The origin allowlist is load-bearing, not defence in depth. The content bundle
+// is registered on https://*/* once the all-sites colorizer is on, so without it
+// this handler is a general-purpose request forwarder running with the
+// extension's privileges, reachable from a script injected into every page.
+const ALLOWED_FETCH_ORIGINS = new Set([
+  'http://localhost:8765',   // AnkiConnect, on the user's own machine
+  'https://generativelanguage.googleapis.com',
+]);
+
+function isAllowedFetchTarget(url) {
+  try {
+    return ALLOWED_FETCH_ORIGINS.has(new URL(url).origin);
+  } catch {
+    return false; // unparseable URL
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== 'kaigi-fetch') return false;
   (async () => {
+    if (!isAllowedFetchTarget(msg.url)) {
+      sendResponse({ ok: false, status: 0, text: '', error: 'blocked: origin not allowed' });
+      return;
+    }
     try {
       const r = await fetch(msg.url, msg.init || {});
       const text = await r.text();
