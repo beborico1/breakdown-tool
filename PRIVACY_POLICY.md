@@ -124,4 +124,4 @@ and the "Last updated" date will change.
 
 ## Contact
 
-For privacy questions, contact: luiscarlosricoalamda@gmail.com
+For privacy questions, contact: luiscarlosricoalmada@gmail.com

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Japanese in Color</title>
+<meta name="description" content="What Japanese in Color does with your data. The text on your pages is analyzed on your computer and is never uploaded.">
+<link rel="icon" href="icon.png">
+<style>
+  :root { --ink:#1f2328; --muted:#5f6368; --brand:#632889; --line:#e8e8ea; }
+  * { box-sizing:border-box }
+  body {
+    margin:0; background:#fff; color:var(--ink); line-height:1.65;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  }
+  .wrap { max-width:720px; margin:0 auto; padding:40px 24px 80px }
+  .site-head { border-bottom:1px solid var(--line); background:#fff }
+  .site-head .wrap { display:flex; align-items:center; gap:10px; padding:14px 24px }
+  .site-head img { width:26px; height:26px }
+  .site-head a { color:var(--ink); text-decoration:none; font-weight:600; font-size:15px }
+  h1 { font-size:30px; line-height:1.25; letter-spacing:-.02em; margin:0 0 10px }
+  h2 { font-size:19px; margin:34px 0 10px; letter-spacing:-.01em }
+  h3 { font-size:15px; margin:24px 0 8px; color:var(--ink) }
+  p, li { font-size:15px }
+  a { color:var(--brand) }
+  code {
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em;
+    background:#f5f4f7; padding:.12em .34em; border-radius:4px;
+  }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; display:block; overflow-x:auto }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top }
+  th { font-weight:600; background:#faf9fb }
+  .lede { font-size:17px; color:var(--muted); margin:0 0 26px }
+  .foot { margin-top:52px; padding-top:18px; border-top:1px solid var(--line); font-size:13px; color:var(--muted) }
+  .hero { text-align:center; padding:26px 0 8px }
+  .hero img { width:88px; height:88px }
+  .shot { width:100%; border:1px solid var(--line); border-radius:10px; margin:22px 0 }
+  .cta {
+    display:inline-block; background:var(--brand); color:#fff; text-decoration:none;
+    padding:10px 20px; border-radius:8px; font-weight:500; font-size:15px;
+  }
+  .points { padding-left:20px }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#e8eaed; --muted:#9aa0a6; --line:#33363a }
+    body, .site-head, th { background:#1b1c1e }
+    code { background:#2a2c2f }
+    .site-head a { color:var(--ink) }
+  }
+</style>
+</head>
+<body>
+<header class="site-head"><div class="wrap">
+  <img src="icon.png" alt=""><a href="./">Japanese in Color</a>
+</div></header>
+<main class="wrap">
+<h1>Privacy Policy for Japanese in Color</h1>
+<p><strong>Last updated</strong>: July 27, 2026</p>
+<p>Japanese in Color colors Japanese words on the pages you read and tells you how they are read and what they mean. This policy describes what the extension does with data, and what leaves your computer.</p>
+<h2>Summary</h2>
+<ul>
+<li><strong>The text on the pages you visit is analyzed on your computer and is never uploaded.</strong></li>
+<li>There is no account, no sign-in, and no API key.</li>
+<li>Usage statistics are stored locally so you can see them; they are not transmitted anywhere.</li>
+<li>Two features do involve other services, and both are described below: the <strong>Speak &amp; check</strong> page uses Chrome's speech recognition (which sends microphone audio to Google), and Chrome may download an on-device translation model from Google the first time you hover a sentence.</li>
+<li>Nothing is sold, shared, or used for advertising.</li>
+</ul>
+<h2>How the analysis works</h2>
+<p>The word analysis runs entirely inside the extension, using dictionaries bundled in the download: a kuromoji tokenizer, JMdict English glosses, and KANJIDIC kanji readings. Page text is read into the extension's own hidden document, analyzed there, and the colors and tooltips are drawn back onto the page. No page text is sent over the network at any point.</p>
+<h2>What the extension reads</h2>
+<h3>Pages you visit</h3>
+<p>When you turn on "Color Japanese on every website", Chrome asks for permission to read data on all sites, and the extension looks for Japanese text on the pages you open. This is what the feature does — it cannot find Japanese on a page it cannot read.</p>
+<p>The extension ships with this switched <strong>off</strong>. You can turn it off again at any time, which also releases the permission, and you can pause it on individual sites.</p>
+<p>Without that permission, the extension reads only Google Meet, Google Chat, and Gmail, which are listed in its manifest.</p>
+<h3>What is stored on your computer</h3>
+<p>All of this lives in Chrome's extension storage on your machine, and none of it is sent to us or to anyone else:</p>
+<ul>
+<li>The words you have encountered, with readings, meanings, and how often you have seen them.</li>
+<li>A cache of recently analyzed words, to avoid re-analyzing the same text.</li>
+<li>Your settings: whether coloring is on, which sites you have paused, and display preferences.</li>
+<li>Anki settings, if you use the Anki export.</li>
+<li>Usage statistics (see below).</li>
+</ul>
+<h2>Usage statistics</h2>
+<p>The extension counts how it is used — things like how many words were colored, how often tooltips were opened, how long analysis took, and how often it failed. This exists so the extension can be improved.</p>
+<p><strong>These statistics never leave your computer.</strong> There is no analytics service, no endpoint, and no code in the extension that can transmit them. You can see everything that is recorded on the <strong>Insights</strong> page (toolbar icon → Insights), export it, and delete all of it with one button.</p>
+<p>By design, the statistics cannot contain any page content: the internal interface that records them accepts only a fixed list of predefined event names, so a web address, a site name, a page title, or analyzed text cannot become a statistic even by mistake.</p>
+<p>If this ever changes it will require a new permission that Chrome will show you, an updated version of this policy, and your explicit consent first.</p>
+<h2>Features that use other services</h2>
+<h3>Speak &amp; check (microphone transcription)</h3>
+<p>The Speak &amp; check page uses <strong>Chrome's built-in speech recognition</strong> to turn what you say into text. On desktop Chrome this sends your microphone audio to Google's speech service. That is Chrome's behavior rather than something the extension controls, and it happens only while you are actively listening on that page. It is stated on the page itself.</p>
+<p>Once the text comes back, the word breakdown runs on your computer like everywhere else. The transcript is not stored anywhere except in that page, until you close it.</p>
+<p>Google's handling of speech data is governed by Google's own privacy policy.</p>
+<h3>On-device translation</h3>
+<p>Hovering a sentence-ending dot shows an English translation produced by Chrome's built-in translator, which runs on your device. The first time it is used, Chrome may download a translation model from Google. The text being translated is not uploaded — the model comes to your machine, not the other way around.</p>
+<p>If the translator is unavailable, word colors and meanings still work; only sentence translation is missing.</p>
+<h3>Anki (optional, on your own machine)</h3>
+<p>If you use the Anki export on the <strong>Your words</strong> page, the extension asks for permission to reach <code>http://localhost:8765</code> and sends the vocabulary you selected to the AnkiConnect add-on running on your own computer. This data never leaves your device. You can revoke the permission at any time from Chrome's extension settings.</p>
+<h2>What is never collected</h2>
+<ul>
+<li>No personal identifiers (name, email, address).</li>
+<li>No browsing history, and no record of which sites you visited.</li>
+<li>No page content, page titles, or web addresses — not remotely, and not in the local statistics.</li>
+<li>No advertising identifiers.</li>
+<li>Nothing is transmitted to the developer.</li>
+</ul>
+<h2>Permissions and why they exist</h2>
+<table><thead><tr><th>Permission</th><th>Why</th></tr></thead><tbody>
+<tr><td><code>activeTab</code></td><td>Lets the toolbar popup act on the tab you are looking at, only when you open it.</td></tr>
+<tr><td><code>storage</code></td><td>Stores your words, settings, and local statistics.</td></tr>
+<tr><td><code>scripting</code></td><td>Registers the coloring script when you turn all-sites coloring on, and removes it when you turn it off.</td></tr>
+<tr><td><code>offscreen</code></td><td>Runs the dictionaries and the tokenizer in a hidden document, off the page's thread.</td></tr>
+<tr><td><code>alarms</code></td><td>Frees dictionary memory after a period of inactivity, and prunes old local statistics.</td></tr>
+<tr><td><code>unlimitedStorage</code></td><td>The bundled dictionaries and your saved vocabulary can exceed Chrome's default 10 MB.</td></tr>
+<tr><td><code>https://*/*</code>, <code>http://*/*</code> (optional)</td><td>All-sites coloring. Requested only when you switch it on, released when you switch it off.</td></tr>
+<tr><td><code>http://localhost:8765/*</code> (optional)</td><td>Anki export. Requested only when you use it.</td></tr>
+</tbody></table>
+<h2>Changes to this policy</h2>
+<p>If this policy changes, the updated version will be posted at the URL this policy is hosted at, and the "Last updated" date will change.</p>
+<h2>Contact</h2>
+<p>For privacy questions, contact: luiscarlosricoalmada@gmail.com</p>
+<div class="foot">
+  <a href="./">Home</a> &middot; <a href="privacy.html">Privacy</a> &middot;
+  <a href="https://github.com/beborico1/japanese-in-color">Source</a>
+</div>
+</main>
+</body>
+</html>

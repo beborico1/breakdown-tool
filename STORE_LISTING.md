@@ -1,7 +1,7 @@
 # Chrome Web Store Listing — Japanese in Color
 
 Paste these into the developer dashboard at https://chrome.google.com/webstore/devconsole/
-(signed in as `luiscarlosricoalamda@gmail.com`).
+(signed in as `luiscarlosricoalmada@gmail.com`).
 
 ## Name
 
@@ -62,9 +62,12 @@ English (primary), Japanese
 
 ## Privacy policy URL
 
-**TODO before submitting.** The policy text lives in `PRIVACY_POLICY.md` and must be published at
-a stable public URL (GitHub Pages on the project repo is fine). The store requires a live link;
-the previously listed URL never existed.
+https://beborico1.github.io/japanese-in-color/privacy
+
+Generated from `PRIVACY_POLICY.md` by `npm run site` and published by the `Pages` workflow, so the
+hosted copy cannot drift from the one in the repo. Requires the repository to be renamed to
+`japanese-in-color` and Pages set to the **GitHub Actions** source — see `SUBMISSION_GUIDE.md`
+Step 2. Confirm it returns 200 before filing.
 
 ---
 

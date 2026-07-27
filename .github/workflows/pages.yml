@@ -1,0 +1,63 @@
+name: Pages
+
+# Publishes ONLY the generated site/ directory.
+#
+# Not a branch source: GitHub Pages branch sources can publish just "/" or "/docs", and
+# publishing the repo root would put SUBMISSION_GUIDE.md, CLAUDE.md and docs/ on the
+# same public host as the privacy policy. The Actions source lets the artifact contain
+# exactly what belongs on the web, and runs no Jekyll, so no .nojekyll is needed.
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild when something the site is derived from changes.
+    paths:
+      - 'PRIVACY_POLICY.md'
+      - 'scripts/build-site.mjs'
+      - 'assets/icons/**'
+      - 'assets/store-screenshots/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; do not cancel a run that is mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/build-site.mjs
+
+      - name: The published policy must match PRIVACY_POLICY.md
+        run: |
+          set -euo pipefail
+          # The store form links to the hosted copy while a reviewer reads the repo one.
+          # If they can disagree, the listing is wrong and nobody notices.
+          grep -q "Privacy Policy for Japanese in Color" site/privacy.html
+          grep -q "analyzed on your computer and is never uploaded" site/privacy.html
+          # Nothing repo-only may be in the artifact.
+          if find site -type f \( -name '*.md' -o -name 'CLAUDE*' \) | grep .; then
+            echo "repo-only files leaked into site/"; exit 1
+          fi
+          echo "site/ contents:"; find site -type f | sort
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -140,11 +140,39 @@ try {
   if (painted < 40) throw new Error(`only ${painted} words painted; the shot would look empty`);
 
   // A word tooltip is the single most persuasive frame: it shows colour AND meaning.
-  const word = article.locator('main p .gcwb-auto-word').nth(6);
-  await word.hover();
-  await article.waitForSelector('.gcwb-word-tooltip', { timeout: 10000 });
-  await article.waitForTimeout(700);
-  await capture('1-article-word-tooltip', article);
+  //
+  // Self-verifying on purpose. An earlier run captured this frame with the tooltip
+  // already dismissed and nothing complained — the shot just quietly stopped making
+  // its point. The tooltip has its own hide timer, so waiting a fixed interval after
+  // hovering is not enough; it has to be confirmed present at the moment of capture.
+  async function captureWordTooltip(attempt = 1) {
+    const word = article.locator('main p .gcwb-auto-word').nth(6);
+    await word.hover();
+    await article.waitForSelector('.gcwb-word-tooltip', { state: 'visible', timeout: 10000 });
+    await article.waitForTimeout(500);
+    // Re-hover immediately before the shot: hovering again resets the hide timer, so
+    // the tooltip cannot expire between the wait above and the capture below.
+    await word.hover();
+    await article.waitForTimeout(150);
+    const visible = await article.isVisible('.gcwb-word-tooltip');
+    if (!visible) {
+      if (attempt >= 3) throw new Error('word tooltip would not stay open for the shot');
+      console.log(`  ! tooltip closed before capture, retrying (${attempt})`);
+      return captureWordTooltip(attempt + 1);
+    }
+    await capture('1-article-word-tooltip', article);
+    // Prove it landed in the PNG rather than trusting the DOM check: the tooltip is a
+    // near-white card over a cream page, so its interior differs from the background.
+    const shown = await article.evaluate(() => {
+      const t = document.querySelector('.gcwb-word-tooltip');
+      if (!t) return null;
+      const r = t.getBoundingClientRect();
+      return r.width > 80 && r.height > 60;
+    });
+    if (!shown) throw new Error('tooltip present but not laid out; shot would be empty');
+    console.log('  tooltip confirmed in frame');
+  }
+  await captureWordTooltip();
 
   // Shot 2 is the density shot: several paragraphs of colour with nothing on top of
   // it. Deliberately does NOT rely on the clause tooltip — that needs Chrome's

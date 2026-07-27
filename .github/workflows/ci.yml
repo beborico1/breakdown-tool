@@ -1,10 +1,10 @@
 name: CI
 
 on:
+  # Not main-only: the v2 branch never had a single CI run under the previous
+  # trigger, so the zip denylist assertion below had never executed against it.
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   build-and-test:
