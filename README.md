@@ -12,6 +12,9 @@ and Chrome's built-in on-device translator. No account, no API key, no server.
   part of speech. Pause it per site whenever you want.
 - **Hover for meaning** — reading, romaji, and English for any word; hover a clause-ending dot for
   the whole clause.
+- **Click words together** — click a colored word, then click the one next to it, and the run joins
+  into a band you can hover for the whole phrase. Escape clears it. Where the site owns the click
+  (a headline that is also a link) hold <kbd>Alt</kbd> and click instead.
 - **Your words** — every word you meet is tracked, searchable, and exportable to Anki via
   AnkiConnect (on your own machine).
 - **Google Meet, Chat, Gmail and Redmine** get purpose-built handling: live caption breakdowns,

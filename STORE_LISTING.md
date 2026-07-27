@@ -28,6 +28,8 @@ Key features:
   or switch it off entirely, whenever you want.
 • Hover for meaning — reading, romaji, and English for any word. Hover a sentence-ending dot for
   the whole clause in English.
+• Click words together — click a colored word, then the one beside it, and the run joins into a
+  band. Hover the band for the whole phrase in English. Alt+click where the page owns the click.
 • Your words — every word you meet is collected into a searchable dashboard, with how often you
   have seen it, so you can watch your own vocabulary grow.
 • Send to Anki — push a selection of your vocabulary into Anki through the AnkiConnect add-on
