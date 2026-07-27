@@ -1720,6 +1720,72 @@ html.kaigi-hide-translation .gcwb-inline-translation { display: none; }
   border-radius: 2px;
 }
 
+/* Word island: a run of words clicked together, painted as one ribbon so the
+   joined phrase reads as a single object rather than N highlighted words.
+
+   Everything here is paint-only. Nothing may take layout: the page's own line
+   breaking must be identical whether or not something is selected, which rules
+   out padding and margin and is why the abut gap is bridged with a shadow.
+
+   Ordered after the :hover rule above on purpose. `.gcwb-auto-word:hover` and
+   `.gcwb-auto-word.gcwb-island` have the same specificity, so source order is
+   what decides which background wins. */
+.gcwb-auto-word.gcwb-island {
+  color: #fff;
+  background-color: rgba(99, 40, 137, 0.95);
+  border-bottom-color: transparent;
+  border-radius: 0;
+  /* No transition. The base rule eases background-color over 120ms, so on a
+     white page the glyphs would turn white a frame before the band arrived and
+     the word the reader just clicked would blink out of existence. */
+  transition: none;
+  /* The halo inverts with the text: a dark edge is what keeps white glyphs
+     crisp where the band meets a light background. */
+  text-shadow:
+    -1px  0   0 rgba(0, 0, 0, 0.85),
+     1px  0   0 rgba(0, 0, 0, 0.85),
+     0   -1px 0 rgba(0, 0, 0, 0.85),
+     0    1px 0 rgba(0, 0, 0, 0.85);
+  /* Reach across to the next word so the run paints as one ribbon instead of a
+     row of chips. Two different things sit in that gap: the hairline the abut
+     margin adds between touching words, and any punctuation the island joined
+     across. Both are page layout, so the distance is measured and handed in;
+     zero, the default, draws the shadow exactly behind the word and is
+     invisible. A zero-blur, zero-spread shadow paints outside the border box
+     without occupying any, which padding or a negative margin would, and the
+     page's own line breaking must not shift. */
+  box-shadow: var(--gcwb-island-bridge, 0px) 0 0 0 rgba(99, 40, 137, 0.95);
+}
+
+/* Rounded caps on the two ends only, so the middle reads as continuous. */
+.gcwb-auto-word.gcwb-island-start {
+  border-start-start-radius: 3px;
+  border-end-start-radius: 3px;
+}
+
+.gcwb-auto-word.gcwb-island-end {
+  border-start-end-radius: 3px;
+  border-end-end-radius: 3px;
+}
+
+/* A member answers a hover with the phrase tooltip, so it needs no tint of its
+   own, and taking one would show as a seam: the base :hover rule repaints the
+   word but not the reach it lends to its neighbour. The rule exists only to
+   undo that rule's `border-radius: 2px`, which would otherwise notch the band
+   open around whichever word the pointer is on, which is every word the reader
+   looks at. */
+.gcwb-auto-word.gcwb-island:hover {
+  background-color: rgba(99, 40, 137, 0.95);
+  border-radius: 0;
+}
+
+/* A native reading sits above its base word rather than inside it, so an
+   untouched one leaves a coloured annotation floating over the band on exactly
+   the furigana sites this feature is most useful on. */
+ruby:has(> .gcwb-auto-word.gcwb-island) > rt.gcwb-ruby-reading {
+  color: #fff;
+}
+
 /* Sentence-ending dot: hover reveals the whole-message translation. */
 .gcwb-auto-boundary {
   cursor: help;

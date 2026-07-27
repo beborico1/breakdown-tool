@@ -82,6 +82,7 @@ export const M = Object.freeze({
 
   HOVER_SHOWN: 'hover.shown',
   BREAKDOWN_OPENED: 'breakdown.opened',
+  ISLAND_JOINED: 'island.joined',
 
   VOCAB_NEW_WORDS: 'vocab.new_words',
   VOCAB_COUNTED: 'vocab.counted',
@@ -128,6 +129,7 @@ export const F = Object.freeze({
   FIRST_COLORIZED_WORD: 'first_colorized_word',
   ALL_SITES_GRANTED: 'all_sites_granted',
   FIRST_HOVER: 'first_hover',
+  FIRST_ISLAND: 'first_island',
   FIRST_WORD_SAVED: 'first_word_saved',
   FIRST_ANKI_CARD: 'first_anki_card',
 });
@@ -138,7 +140,7 @@ export const F = Object.freeze({
  */
 export const LIFETIME_KEYS = Object.freeze([
   M.COLORIZE_WORDS, M.COLORIZE_BLOCK_OK, M.COLORIZE_BLOCK_FAIL,
-  M.ANALYZE_OK, M.ANALYZE_FAIL, M.HOVER_SHOWN, M.BREAKDOWN_OPENED,
+  M.ANALYZE_OK, M.ANALYZE_FAIL, M.HOVER_SHOWN, M.BREAKDOWN_OPENED, M.ISLAND_JOINED,
   M.VOCAB_NEW_WORDS, M.VOCAB_COUNTED, M.ANKI_CARD_ADDED, M.SESSION_START,
 ]);
 
@@ -152,7 +154,8 @@ export const LIFETIME_KEYS = Object.freeze([
  * ENGAGEMENT  active days; sessions/day; blocks and words coloured per day, split
  *             by surface — the single most decision-relevant number, because it
  *             says whether the value is in the all-sites colorizer or still in Meet;
- *             hovers and breakdowns opened.
+ *             hovers and breakdowns opened; phrases joined into an island, which
+ *             separates reading the colours from actively asking about a chunk.
  * RETENTION   new vocabulary per day; Anki cards added; dashboard opens; return
  *             days (derived from the day index, needing no event at all).
  * HEALTH      analyze failure rate; stranded blocks (the actionable one — a plain
