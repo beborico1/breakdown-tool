@@ -9,6 +9,12 @@ import { debugLog } from './debug.js';
 // In-memory cache loaded from storage
 let wordCache = new Map();
 
+// Cache staleness threshold (30 days)
+const WORD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Must contain at least one Japanese character (hiragana, katakana, or kanji)
+const JAPANESE_CHAR_RE = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
+
 // Length of the longest matchable key. getCachedWords probes substrings of the
 // input text against the cache rather than scanning the cache against the text,
 // so it needs an upper bound on how far to look ahead from each position.
@@ -28,12 +34,6 @@ function recomputeMaxKeyLen() {
   maxKeyLen = 0;
   for (const word of wordCache.keys()) noteKey(word);
 }
-
-// Cache staleness threshold (30 days)
-const WORD_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-
-// Must contain at least one Japanese character (hiragana, katakana, or kanji)
-const JAPANESE_CHAR_RE = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
 
 // Debounce timers for saving. Two tiers, because the two reasons to save are
 // not equally urgent:
