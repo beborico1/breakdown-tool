@@ -14,9 +14,6 @@ const keyStatusEl = document.getElementById('keyStatus');
 const viewAllWordsBtn = document.getElementById('viewAllWords');
 const liveTranscribeBtn = document.getElementById('liveTranscribe');
 const translateToJapaneseBtn = document.getElementById('translateToJapanese');
-const customSiteUrlInput = document.getElementById('customSiteUrl');
-const addCustomSiteBtn = document.getElementById('addCustomSite');
-const customSitesListEl = document.getElementById('customSitesList');
 const tokenCountEl = document.getElementById('tokenCount');
 const tokenCostEl = document.getElementById('tokenCost');
 const resetUsageBtn = document.getElementById('resetUsage');
@@ -411,195 +408,10 @@ liveTranscribeBtn.addEventListener('click', () => {
   chrome.tabs.create({ url: 'src/pages/transcribe/transcribe.html' });
 });
 
-function customSiteId(origin) {
-  let hash = 0;
-  for (let i = 0; i < origin.length; i++) {
-    hash = ((hash << 5) - hash + origin.charCodeAt(i)) | 0;
-  }
-  return `custom-${Math.abs(hash).toString(36)}`;
-}
-
-async function renderCustomSites() {
-  const { customSites = [] } = await chrome.storage.sync.get('customSites');
-  customSitesListEl.innerHTML = '';
-  if (customSites.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'custom-sites-empty';
-    empty.textContent = 'No custom sites yet';
-    customSitesListEl.appendChild(empty);
-    return;
-  }
-  for (const site of customSites) {
-    const row = document.createElement('div');
-    row.className = 'custom-site-row';
-
-    const label = document.createElement('span');
-    label.className = 'custom-site-url';
-    label.textContent = site.origin;
-    label.title = site.origin;
-
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'custom-site-remove';
-    removeBtn.textContent = '×';
-    removeBtn.title = 'Remove';
-    removeBtn.addEventListener('click', () => removeCustomSite(site));
-
-    row.appendChild(label);
-    row.appendChild(removeBtn);
-    customSitesListEl.appendChild(row);
-  }
-}
-
-async function addCustomSite() {
-  const raw = customSiteUrlInput.value.trim();
-  if (!raw) return;
-
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    showStatus('Enter a valid URL (e.g. https://redmine.example.com/)', false);
-    return;
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    showStatus('URL must start with http:// or https://', false);
-    return;
-  }
-
-  const origin = `${parsed.protocol}//${parsed.host}/*`;
-  const { customSites = [] } = await chrome.storage.sync.get('customSites');
-  if (customSites.some(s => s.origin === origin)) {
-    showStatus('Site already added', false);
-    return;
-  }
-
-  const granted = await chrome.permissions.request({ origins: [origin] });
-  if (!granted) {
-    showStatus('Permission denied', false);
-    return;
-  }
-
-  const id = customSiteId(origin);
-  try {
-    await chrome.scripting.registerContentScripts([{
-      id,
-      matches: [origin],
-      js: ['dist/content.js'],
-      css: ['src/content/content.css'],
-      runAt: 'document_end',
-      allFrames: true
-    }]);
-  } catch (err) {
-    await chrome.permissions.remove({ origins: [origin] }).catch(() => {});
-    showStatus('Failed to register: ' + err.message, false);
-    return;
-  }
-
-  customSites.push({ id, origin });
-  await chrome.storage.sync.set({ customSites });
-  customSiteUrlInput.value = '';
-  showStatus('Site added. Reload the page to start analyzing.', true);
-  renderCustomSites();
-}
-
-async function removeCustomSite(site) {
-  try {
-    await chrome.scripting.unregisterContentScripts({ ids: [site.id] });
-  } catch {
-    // Already unregistered or never registered; continue with cleanup.
-  }
-  try {
-    await chrome.permissions.remove({ origins: [site.origin] });
-  } catch {
-    // Permission already gone; continue.
-  }
-  const { customSites = [] } = await chrome.storage.sync.get('customSites');
-  const remaining = customSites.filter(s => s.origin !== site.origin);
-  await chrome.storage.sync.set({ customSites: remaining });
-  renderCustomSites();
-}
-
-addCustomSiteBtn.addEventListener('click', addCustomSite);
-customSiteUrlInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    addCustomSite();
-  }
-});
-
 // Universal (all-sites) colorizer toggle. Requests an all-hosts permission once
 // (from this user gesture), then registers the content script on https/http so
 // every site auto-colorizes. The 4 built-ins are excluded (already injected via
 // the static manifest entry).
-const UNIVERSAL_SCRIPT_ID = 'kaigi-universal';
-const UNIVERSAL_BUILTIN_MATCHES = [
-  'https://meet.google.com/*',
-  'https://chat.google.com/*',
-  'https://mail.google.com/*',
-  'https://redmine.irvine.jp/*',
-];
-
-async function registerUniversalScript() {
-  await chrome.scripting.registerContentScripts([{
-    id: UNIVERSAL_SCRIPT_ID,
-    matches: ['https://*/*', 'http://*/*'],
-    excludeMatches: UNIVERSAL_BUILTIN_MATCHES,
-    js: ['dist/content.js'],
-    css: ['src/content/content.css'],
-    runAt: 'document_idle',
-    allFrames: true,
-  }]);
-}
-
-/** Pages the extension can never be injected into. */
-const UNINJECTABLE_URL_RE = /^(chrome|edge|about|devtools|chrome-extension|moz-extension|view-source):|^https:\/\/chromewebstore\.google\.com\//;
-
-/**
- * Colorize the tab the user is looking at, for this visit only.
- *
- * Uses activeTab, so it needs no host permission and grants nothing lasting: the
- * user gets to see what the feature does before deciding to turn it on
- * everywhere, which Chrome requires an explicit grant for. Re-injection is safe
- * because the content bundle guards on window.__kaigiLoaded.
- * @returns {Promise<boolean>} whether injection ran
- */
-async function colorizeActiveTab() {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id || !tab.url || UNINJECTABLE_URL_RE.test(tab.url)) return false;
-    await chrome.scripting.insertCSS({
-      target: { tabId: tab.id, allFrames: true },
-      files: ['src/content/content.css'],
-    });
-    // Runs in the isolated world, the same one the content bundle uses, so the
-    // gate below sees this flag.
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      func: () => { window.__kaigiUniversalTrial = true; },
-    });
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      files: ['dist/content.js'],
-    });
-    return true;
-  } catch (err) {
-    console.warn('[popup] colorize this page failed:', err?.message);
-    return false;
-  }
-}
-
-const colorizeThisPageBtn = document.getElementById('colorizeThisPage');
-if (colorizeThisPageBtn) {
-  colorizeThisPageBtn.addEventListener('click', async () => {
-    colorizeThisPageBtn.disabled = true;
-    const ok = await colorizeActiveTab();
-    colorizeThisPageBtn.disabled = false;
-    showStatus(ok
-      ? 'Colorizing this page. Japanese text will color as it loads.'
-      : 'This page cannot be colorized.', ok);
-  });
-}
-
 if (universalModeToggle) {
   chrome.storage.sync.get(['universalMode'], (r) => {
     universalModeToggle.checked = r?.universalMode === true;
@@ -613,13 +425,10 @@ if (universalModeToggle) {
         showStatus('Permission denied', false);
         return;
       }
-      try {
-        // Clear any stale registration before re-adding.
-        await chrome.scripting.unregisterContentScripts({ ids: [UNIVERSAL_SCRIPT_ID] }).catch(() => {});
-        await registerUniversalScript();
-      } catch (err) {
+      const reg = await chrome.runtime.sendMessage({ type: 'kaigi-universal-register', enabled: true });
+      if (!reg?.ok) {
         universalModeToggle.checked = false;
-        showStatus('Failed to enable: ' + err.message, false);
+        showStatus('Failed to enable: ' + (reg?.error || 'unknown error'), false);
         return;
       }
       await chrome.storage.sync.set({ universalMode: true });
@@ -630,13 +439,12 @@ if (universalModeToggle) {
         ? 'On. This page is colorizing now; reload other tabs.'
         : 'Enabled. Reload open tabs to start colorizing.', true);
     } else {
-      try {
-        await chrome.scripting.unregisterContentScripts({ ids: [UNIVERSAL_SCRIPT_ID] });
-      } catch {
-        // Not registered; continue.
-      }
+      await chrome.runtime.sendMessage({ type: 'kaigi-universal-register', enabled: false });
       await chrome.storage.sync.set({ universalMode: false });
-      // Keep the host permission — custom sites may still rely on it.
+      // Release the all-hosts grant too: nothing else needs it now that Custom
+      // Sites is gone, and leaving it makes Chrome keep warning that this
+      // extension can "read your data on all websites" while it is switched off.
+      await chrome.permissions.remove({ origins: ['https://*/*', 'http://*/*'] }).catch(() => {});
       showStatus('Disabled. Reload open tabs to stop colorizing.', true);
     }
   });
@@ -948,7 +756,6 @@ loadModel();
 loadFontSize();
 loadChunkSize();
 loadStabilityBuffer();
-renderCustomSites();
 
 // Display preferences toggles
 const displayToggleIds = {

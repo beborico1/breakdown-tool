@@ -28,25 +28,49 @@ const EXCLUDE_SELECTORS = [
 ];
 
 /**
- * Detect if current page is a Redmine instance.
- * Checks for Redmine-specific body classes and structural elements.
+ * Signals that are specific to Redmine rather than to Rails in general.
+ * At least one must be present. Ordered cheapest-first.
+ */
+const REDMINE_FINGERPRINTS = [
+  'meta[name="description"][content*="Redmine" i]',
+  'link[rel="stylesheet"][href*="/stylesheets/application.css"][href*="redmine" i]',
+  '#footer a[href*="redmine.org" i]',
+  '#top-menu #account',
+  '#main #content #sidebar',
+  'a[href$="/my/page"], a[href*="/issues?set_filter="]',
+];
+
+/**
+ * Detect if the current page is a Redmine instance.
+ *
+ * `controller-* action-*` on <body> plus an `#wrapper` is a stock Rails idiom, not a
+ * Redmine signature, and #wrapper is one of the commonest ids on the web. That was
+ * tolerable while a static host match fenced this off, but the all-sites colorizer now
+ * runs it on every page — and a false positive is expensive in an asymmetric way:
+ * isBuiltInSurface() would return true, silently disabling the colorizer on a site that
+ * has nothing to do with Redmine. A false negative only costs the richer Redmine
+ * treatment; the page still gets colorized. So require the Rails shape AND a
+ * genuinely Redmine-specific marker.
  * @returns {boolean}
  */
 export function isRedmine() {
   const body = document.body;
   if (!body) return false;
 
-  // Redmine adds controller-* and action-* classes to <body>
-  const hasControllerClass = /\bcontroller-\w+/.test(body.className);
-  const hasActionClass = /\baction-\w+/.test(body.className);
+  // Redmine adds controller-* and action-* classes to <body> — necessary, not sufficient.
+  const className = typeof body.className === 'string' ? body.className : '';
+  if (!/\bcontroller-\w+/.test(className) || !/\baction-\w+/.test(className)) return false;
 
-  if (!hasControllerClass || !hasActionClass) return false;
+  // Redmine's canonical layout wrapper.
+  if (!document.getElementById('wrapper') && !document.getElementById('top-menu')) return false;
 
-  // Verify structural elements
-  const hasWrapper = !!document.getElementById('wrapper');
-  const hasTopMenu = !!document.getElementById('top-menu');
-
-  return hasWrapper || hasTopMenu;
+  return REDMINE_FINGERPRINTS.some((sel) => {
+    try {
+      return !!document.querySelector(sel);
+    } catch {
+      return false; // selector unsupported in this engine
+    }
+  });
 }
 
 /**

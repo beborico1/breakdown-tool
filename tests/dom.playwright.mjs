@@ -786,6 +786,49 @@ try {
   assertEq('caption text is byte-identical', t32.textContent, 'まだ終わっていない文章');
   assertEq('the dot holds no text node', t32.dotChildren, 0);
   assertEq('the dot trails the caption', t32.dotIsLast, true);
+
+  // ---------------------------------------------------------------------------
+  // T33: isRedmine() must not fire on a stock Rails page.
+  //
+  // `controller-* action-*` on <body> plus #wrapper is a Rails idiom, not a
+  // Redmine signature. This used to be fenced off by a static host match; the
+  // all-sites colorizer now runs the detector on every page, and a false
+  // positive makes isBuiltInSurface() return true, which silently disables
+  // colorizing on that site. A false negative only loses the richer Redmine
+  // treatment, so the detector must err toward "not Redmine".
+  // ---------------------------------------------------------------------------
+  console.log('\nT33: Redmine detection does not misfire on plain Rails');
+
+  async function detectsRedmine(html) {
+    await page.goto(`${BASE}/tests/fixtures/universal-dom.html`);
+    await page.evaluate((h) => { document.documentElement.innerHTML = h; }, html);
+    return page.evaluate(async () => {
+      const { isRedmine } = await import('/src/content/redmine/message-finder.js');
+      return isRedmine();
+    });
+  }
+
+  const railsOnly = await detectsRedmine(
+    '<head><title>A Rails app</title></head>' +
+    '<body class="controller-articles action-index">' +
+    '<div id="wrapper"><div id="main"><p>日本語のテキストです。</p></div></div></body>'
+  );
+  assertEq('a stock Rails page is not Redmine', railsOnly, false);
+
+  const realRedmine = await detectsRedmine(
+    '<head><meta name="description" content="Redmine"></head>' +
+    '<body class="controller-issues action-show">' +
+    '<div id="wrapper"><div id="top-menu"><div id="account"></div></div>' +
+    '<div id="main"><div id="content">課題の説明です。</div></div></div>' +
+    '<div id="footer"><a href="https://www.redmine.org/">Redmine</a></div></body>'
+  );
+  assertEq('a real Redmine page is Redmine', realRedmine, true);
+
+  const noRailsClasses = await detectsRedmine(
+    '<head><meta name="description" content="Redmine"></head>' +
+    '<body><div id="wrapper"><div id="top-menu"><div id="account"></div></div></div></body>'
+  );
+  assertEq('Redmine markers alone are not enough', noRailsClasses, false);
 } finally {
   await browser.close();
   server.close();
