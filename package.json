@@ -9,7 +9,7 @@
     "build:code": "rollup -c",
     "watch": "rollup -c -w",
     "test:nlp": "node tests/nlp.node.test.mjs",
-    "test:unit": "node tests/word-cache.node.test.mjs && node tests/frequency-store.node.test.mjs",
+    "test:unit": "node tests/word-cache.node.test.mjs && node tests/frequency-store.node.test.mjs && node tests/jmdict-index.node.test.mjs",
     "test:dom": "node tests/dom.playwright.mjs",
     "test:e2e": "node tests/e2e.playwright.mjs"
   },

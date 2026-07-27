@@ -11,6 +11,7 @@ import { gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { mapPOS } from '../src/offscreen/pos-map.js';
+import { decodeJmdictIndex } from '../src/offscreen/jmdict-index.js';
 
 const gunzipAsync = promisify(gunzip);
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -44,11 +45,15 @@ console.log('Loading kuromoji + JMdict...');
 const tokenizer = await new TokenizerBuilder({
   loader: new NodeDictionaryLoader({ dic_path: path.join(ROOT, 'node_modules/@patdx/kuromoji/dict') }),
 }).build();
-const jmdictGz = await readFile(path.join(ROOT, 'assets/jmdict/jmdict-en.json.gz'));
-const jmdict = JSON.parse((await gunzipAsync(jmdictGz)).toString('utf8'));
+const jmdictGz = await readFile(path.join(ROOT, 'assets/jmdict/jmdict-en.bin.gz'));
+const jmdictRaw = await gunzipAsync(jmdictGz);
+// Copy into a standalone ArrayBuffer: a Node Buffer can sit at any byteOffset
+// in its pool, and the Uint32Array views in the index need 4-byte alignment.
+const jmdict = decodeJmdictIndex(
+  jmdictRaw.buffer.slice(jmdictRaw.byteOffset, jmdictRaw.byteOffset + jmdictRaw.byteLength));
 const kanjiGz = await readFile(path.join(ROOT, 'assets/kanjidic/kanji-en.json.gz'));
 const kanji = JSON.parse((await gunzipAsync(kanjiGz)).toString('utf8'));
-console.log(`Loaded ${Object.keys(jmdict).length} JMdict entries, ${Object.keys(kanji).length} kanji\n`);
+console.log(`Loaded ${jmdict.count} JMdict entries, ${Object.keys(kanji).length} kanji\n`);
 
 const isSingleKanji = (s) => [...s].length === 1 && /[一-龯㐀-䶿]/.test(s);
 
@@ -60,7 +65,7 @@ function analyze(text) {
     const { type, label } = mapPOS(t);
     const readingKata = t.reading && t.reading !== '*' ? t.reading : '';
     const basic = t.basic_form && t.basic_form !== '*' ? t.basic_form : null;
-    let english = label || jmdict[basic] || jmdict[t.surface_form] || jmdict[kataToHira(readingKata)] || jmdict[readingKata] || '';
+    let english = label || jmdict.lookup(basic) || jmdict.lookup(t.surface_form) || jmdict.lookup(kataToHira(readingKata)) || jmdict.lookup(readingKata) || '';
     if (!english && isSingleKanji(t.surface_form)) english = kanji[t.surface_form] || '';
     words.push({
       japanese: t.surface_form,
@@ -141,9 +146,9 @@ console.log('\nTest 5: mixed Latin + Japanese (に右手のurlを出してくだ
 console.log('\nTest 6: full-dictionary coverage (離れ / はなれ now resolve)');
 {
   // The common-only subset lacked these; the full jmdict-eng dataset has them.
-  assertEq('jmdict has many more than the common subset', Object.keys(jmdict).length > 60000, true);
-  assertIncludes('離れ resolves', jmdict['離れ'], 'detached');
-  assertEq('はなれ resolves', Boolean(jmdict['はなれ']), true);
+  assertEq('jmdict has many more than the common subset', jmdict.count > 60000, true);
+  assertIncludes('離れ resolves', jmdict.lookup('離れ'), 'detached');
+  assertEq('はなれ resolves', Boolean(jmdict.lookup('はなれ')), true);
   const w = analyze('家から離れます');
   const hanare = w.find(x => x.japanese === '離れ' || x._basic === '離れる');
   assertEq('離れ token gets a non-empty gloss', Boolean(hanare?.english), true);
