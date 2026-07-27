@@ -1,5 +1,5 @@
 /**
- * Kaigi Meeting - Google Meet Caption Translator & Google Chat Word Breakdown
+ * Japanese in Color - content-script entry point
  *
  * Entry point for the content script that provides:
  * - Japanese word breakdown with color-coded grammar types

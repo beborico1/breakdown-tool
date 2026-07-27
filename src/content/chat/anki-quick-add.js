@@ -1,6 +1,6 @@
 import { debugLog } from '../core/debug.js';
 import { forceHideTooltip } from './word-tooltip.js';
-import { KAIGI_MODEL_NAME } from './anki-model.js';
+import { ANKI_MODEL_NAME, ANKI_DECK_NAME } from './anki-model.js';
 import { enqueueAnkiAdd, flushAnkiQueue, dequeueAnkiAdd, enqueueAnkiRemove, flushAnkiRemoveQueue } from '../core/anki-queue.js';
 import { addOneCard, deleteOneCard, isRetriableAnkiError } from '../core/anki-card.js';
 import { loadAnkiAddedWords, markAnkiAdded, unmarkAnkiAdded, isAnkiAdded } from '../core/anki-added.js';
@@ -173,7 +173,7 @@ function showToast({ variant = 'success', word = '', deck = '', model = '', erro
     sub.textContent = errorMessage || 'Anki not reachable — is Anki running?';
   } else {
     title.textContent = 'Added to Anki';
-    sub.textContent = `${deck || 'kaigi'} · ${model || KAIGI_MODEL_NAME}`;
+    sub.textContent = `${deck || ANKI_DECK_NAME} · ${model || ANKI_MODEL_NAME}`;
   }
   body.appendChild(title);
   body.appendChild(sub);

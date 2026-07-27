@@ -1,7 +1,7 @@
 {
-  "name": "kaigi-meeting",
-  "version": "1.2.0",
-  "description": "Extract and copy captions from Google Meet with translation support",
+  "name": "japanese-in-color",
+  "version": "2.0.0",
+  "description": "Chrome extension that colors every Japanese word on the web by its part of speech, with readings and meanings. Runs entirely on your machine.",
   "private": true,
   "type": "module",
   "scripts": {

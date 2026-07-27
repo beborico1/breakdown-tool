@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "会議 kaigi meeting",
-  "version": "1.2.0",
-  "description": "Extract and copy captions from Google Meet with translation support",
+  "name": "Japanese in Color",
+  "version": "2.0.0",
+  "description": "Color every Japanese word by its part of speech, with readings and meanings. Free, private, works offline.",
   "permissions": [
     "activeTab",
     "storage",
@@ -39,7 +39,7 @@
   },
   "action": {
     "default_popup": "src/pages/popup/popup.html",
-    "default_title": "会議 kaigi meeting",
+    "default_title": "Japanese in Color",
     "default_icon": {
       "16": "assets/icons/icon16.png",
       "32": "assets/icons/icon32.png",

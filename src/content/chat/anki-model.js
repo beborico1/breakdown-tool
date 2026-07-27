@@ -3,12 +3,27 @@
 // big Japanese surface form on a POS-tinted background, reading + meaning
 // on the back.
 
-export const KAIGI_MODEL_NAME = 'Kaigi';
+export const ANKI_MODEL_NAME = 'JapaneseInColor';
 
-export const KAIGI_FIELDS = ['Word', 'Reading', 'Meaning', 'POS'];
+/** Default deck for new users. Exported so nothing hard-codes it a second time. */
+export const ANKI_DECK_NAME = 'Japanese in Color';
+
+/**
+ * Note types this extension created, current and historical.
+ *
+ * A card written before the 2.0 rename still carries the old note type, and the
+ * rich field layout is chosen by matching on it — so dropping the old name would
+ * silently downgrade those cards to a plain Front/Back render.
+ */
+const LEGACY_MODEL_NAMES = ['Kaigi'];
+export function isOurModel(name) {
+  return name === ANKI_MODEL_NAME || LEGACY_MODEL_NAMES.includes(name);
+}
+
+export const ANKI_FIELDS = ['Word', 'Reading', 'Meaning', 'POS'];
 
 // POS colors mirror src/content/content.css (.gcwb-type-*).
-const KAIGI_CSS = `
+const ANKI_CSS = `
 .card {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", "Yu Gothic", sans-serif;
   text-align: center;
@@ -108,9 +123,9 @@ const BACK_TEMPLATE = `
 `.trim();
 
 export const KAIGI_MODEL_DEFINITION = {
-  modelName: KAIGI_MODEL_NAME,
-  inOrderFields: KAIGI_FIELDS,
-  css: KAIGI_CSS,
+  modelName: ANKI_MODEL_NAME,
+  inOrderFields: ANKI_FIELDS,
+  css: ANKI_CSS,
   isCloze: false,
   cardTemplates: [
     {
@@ -139,16 +154,16 @@ async function ankiRequest(fetchFn, action, params) {
 }
 
 // fetchFn: async (body) => { ok, text, status, error }
-export async function ensureKaigiModel(fetchFn) {
+export async function ensureAnkiModel(fetchFn) {
   if (ensurePromise) return ensurePromise;
   ensurePromise = (async () => {
     const names = await ankiRequest(fetchFn, 'modelNames');
-    if (Array.isArray(names) && names.includes(KAIGI_MODEL_NAME)) {
+    if (Array.isArray(names) && names.includes(ANKI_MODEL_NAME)) {
       // Keep templates + CSS in sync with the bundled definition.
       try {
         await ankiRequest(fetchFn, 'updateModelTemplates', {
           model: {
-            name: KAIGI_MODEL_NAME,
+            name: ANKI_MODEL_NAME,
             templates: {
               'Card 1': {
                 Front: KAIGI_MODEL_DEFINITION.cardTemplates[0].Front,
@@ -158,7 +173,7 @@ export async function ensureKaigiModel(fetchFn) {
           },
         });
         await ankiRequest(fetchFn, 'updateModelStyling', {
-          model: { name: KAIGI_MODEL_NAME, css: KAIGI_CSS },
+          model: { name: ANKI_MODEL_NAME, css: ANKI_CSS },
         });
       } catch {}
       return;

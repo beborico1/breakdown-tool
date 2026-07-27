@@ -1,31 +1,49 @@
-# Kaigi Meeting
+# Japanese in Color
 
-Chrome extension for Japanese learning during Google Meet calls and Google Chat.
+A Chrome extension that colors every Japanese word on the web by the job it does in the sentence,
+and tells you how it is read and what it means when you hover it.
+
+Everything runs on your machine: a bundled kuromoji tokenizer, JMdict glosses, KANJIDIC readings,
+and Chrome's built-in on-device translator. No account, no API key, no server.
 
 ## Features
 
-- **Caption Translation**: Click any Google Meet caption to see a word-by-word breakdown with readings, romaji, and English meanings
-- **Color-coded Grammar**: Words are colored by type (noun, verb, particle, etc.)
-- **Minimalistic Mode**: Inline colored text with tooltips instead of breakdown panels
-- **Google Chat Support**: Right-click Japanese messages to analyze them
-- **Word Frequency Tracking**: Tracks vocabulary encountered across sessions
-
-## Setup
-
-```bash
-npm install
-npm run build
-```
+- **Color on every site** — switch it on once and any page with Japanese on it gets colored by
+  part of speech. Pause it per site whenever you want.
+- **Hover for meaning** — reading, romaji, and English for any word; hover a clause-ending dot for
+  the whole clause.
+- **Your words** — every word you meet is tracked, searchable, and exportable to Anki via
+  AnkiConnect (on your own machine).
+- **Google Meet, Chat, Gmail and Redmine** get purpose-built handling: live caption breakdowns,
+  transcript copy, and per-message analysis.
+- **Speak & check** — say something in Japanese and see it broken down.
+- **Insights** — a local dashboard of what you have used, stored only on your machine.
 
 ## Development
 
 ```bash
-npm run watch
+npm install
+npm run build        # dictionaries + bundles
+npm run package      # the Chrome Web Store zip, from a computed file set
 ```
 
-## Load in Chrome
+Load `build/` (not the repo root) via **Load unpacked** to test what users actually install.
 
-1. Go to `chrome://extensions/`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select this folder
+### Tests
+
+```bash
+npm run test:nlp     # the offline pipeline, in node
+npm run test:unit    # word cache, frequency store, jmdict index, clauses, metrics
+npm run test:dom     # colorizer DOM behaviour in headless Chromium
+npm run test:pages   # every extension page loads clean (needs a display)
+npm run test:e2e     # end-to-end analyze through the service worker (needs a display)
+```
+
+`test:nlp` and `test:unit` run in CI; the Playwright suites need a real Chromium with the
+extension loaded, so they stay local.
+
+## Privacy
+
+Page text is analyzed on your computer and never uploaded. Usage metrics are stored locally and
+never transmitted — see [PRIVACY_POLICY.md](PRIVACY_POLICY.md) and
+[docs/metrics-remote-sink.md](docs/metrics-remote-sink.md).

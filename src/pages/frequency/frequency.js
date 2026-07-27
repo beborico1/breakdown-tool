@@ -1,4 +1,5 @@
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+import { ANKI_MODEL_NAME, ANKI_DECK_NAME, isOurModel } from '../../content/chat/anki-model.js';
 import { flushAnkiQueue } from '../../content/core/anki-queue.js';
 import { addOneCard, isRetriableAnkiError } from '../../content/core/anki-card.js';
 import { readAllFrequency, addMissingWords } from '../../content/core/frequency-store.js';
@@ -156,13 +157,13 @@ const refreshAnkiDeckCacheBtn = document.getElementById('refreshAnkiDeckCache');
 const ankiDeckCacheMetaEl = document.getElementById('ankiDeckCacheMeta');
 
 const DEFAULT_ANKI_SETTINGS = {
-  deckName: 'kaigi',
+  deckName: ANKI_DECK_NAME,
   includeFurigana: true,
   includePartOfSpeech: true,
   includeRomaji: true,
   includeCount: false,
   furiganaFormat: 'parentheses',
-  modelName: 'Kaigi',
+  modelName: ANKI_MODEL_NAME,
   frontFieldName: 'Front',
   backFieldName: 'Back',
   customTags: 'kaigi-meeting',
@@ -203,10 +204,10 @@ const ANKI_PRESETS = {
 };
 
 const SAMPLE_WORD = {
-  japanese: '会議',
-  reading: 'かいぎ',
-  romaji: 'kaigi',
-  english: 'meeting',
+  japanese: '言葉',
+  reading: 'ことば',
+  romaji: 'kotoba',
+  english: 'word; language',
   type: 'noun',
   count: 12
 };
@@ -371,7 +372,7 @@ function stripHtml(value) {
 
 /**
  * Extract the Japanese surface form from a card's front-field value.
- * The front may be plain ("会議"), parentheses ("会議 (かいぎ)"), or Anki ruby ("会議[かいぎ]").
+ * The front may be plain ("言葉"), parentheses ("言葉 (ことば)"), or Anki ruby ("言葉[ことば]").
  * All three start with the surface form, so we keep the leading run up to the first
  * space, "(", or "[". HTML tags from rich fields are stripped first.
  */
@@ -403,7 +404,6 @@ async function refreshAnkiDeckCache() {
   const cards = [];
   const surfaces = new Set();
   // Mirror of src/content/chat/anki-model.js — the right-click quick-add uses this model.
-  const KAIGI_MODEL_NAME = 'Kaigi';
   let loggedFirst = false;
   for (const note of info || []) {
     if (!loggedFirst) {
@@ -414,7 +414,7 @@ async function refreshAnkiDeckCache() {
     let japanese = '';
     let reading = '';
     let english = '';
-    if (note?.modelName === KAIGI_MODEL_NAME) {
+    if (isOurModel(note?.modelName)) {
       japanese = stripHtml(fields.Word?.value);
       reading = stripHtml(fields.Reading?.value);
       english = stripHtml(fields.Meaning?.value);
@@ -470,8 +470,9 @@ async function loadAnkiSettings() {
   return new Promise(resolve => {
     chrome.storage.sync.get(['ankiSettings'], (result) => {
       ankiSettings = { ...DEFAULT_ANKI_SETTINGS, ...(result.ankiSettings || {}) };
-      if (ankiSettings.deckName === 'Kaigi Meeting') {
-        ankiSettings.deckName = 'kaigi';
+      // Deck name from a pre-2.0 profile; point it at the current default.
+      if (ankiSettings.deckName === 'Kaigi Meeting' || ankiSettings.deckName === 'kaigi') {
+        ankiSettings.deckName = ANKI_DECK_NAME;
         saveAnkiSettings();
       }
       resolve();

@@ -1,9 +1,9 @@
-import { ensureKaigiModel, KAIGI_MODEL_NAME, KAIGI_FIELDS } from '../chat/anki-model.js';
+import { ensureAnkiModel, ANKI_MODEL_NAME, ANKI_DECK_NAME, ANKI_FIELDS, isOurModel } from '../chat/anki-model.js';
 
 const ANKI_ORIGIN = 'http://localhost:8765/*';
 const ANKI_URL = 'http://localhost:8765';
-const DEFAULT_DECK = 'kaigi';
-const DEFAULT_MODEL = KAIGI_MODEL_NAME;
+const DEFAULT_DECK = ANKI_DECK_NAME;
+const DEFAULT_MODEL = ANKI_MODEL_NAME;
 
 const KAIGI_POS_VALUES = new Set([
   'noun', 'verb', 'particle', 'adjective', 'adverb',
@@ -53,7 +53,7 @@ async function checkPermission() {
 
 export async function addOneCard({ word, reading, english, pos }) {
   if (!(await checkPermission())) {
-    throw new Error('Anki permission not granted. Open the extension popup → AnkiConnect Setup to grant access to localhost:8765.');
+    throw new Error('Anki access is not granted yet. Open Your words → AnkiConnect Setup and click Allow.');
   }
 
   const settings = await getAnkiSettings();
@@ -61,13 +61,13 @@ export async function addOneCard({ word, reading, english, pos }) {
   const safePos = KAIGI_POS_VALUES.has(pos) ? pos : '';
 
   let fields;
-  if (settings.modelName === KAIGI_MODEL_NAME) {
-    await ensureKaigiModel(ankiFetch);
+  if (isOurModel(settings.modelName)) {
+    await ensureAnkiModel(ankiFetch);
     fields = {
-      [KAIGI_FIELDS[0]]: word,
-      [KAIGI_FIELDS[1]]: reading && reading !== word ? reading : '',
-      [KAIGI_FIELDS[2]]: meaning,
-      [KAIGI_FIELDS[3]]: safePos,
+      [ANKI_FIELDS[0]]: word,
+      [ANKI_FIELDS[1]]: reading && reading !== word ? reading : '',
+      [ANKI_FIELDS[2]]: meaning,
+      [ANKI_FIELDS[3]]: safePos,
     };
   } else {
     const front = reading && reading !== word ? `${word}（${reading}）` : word;
@@ -114,11 +114,11 @@ export async function addOneCard({ word, reading, english, pos }) {
 export async function deleteOneCard({ word }) {
   if (!word) return { deleted: 0 };
   if (!(await checkPermission())) {
-    throw new Error('Anki permission not granted. Open the extension popup → AnkiConnect Setup to grant access to localhost:8765.');
+    throw new Error('Anki access is not granted yet. Open Your words → AnkiConnect Setup and click Allow.');
   }
 
   const settings = await getAnkiSettings();
-  const frontField = settings.modelName === KAIGI_MODEL_NAME ? KAIGI_FIELDS[0] : settings.frontField;
+  const frontField = isOurModel(settings.modelName) ? ANKI_FIELDS[0] : settings.frontField;
   // Trailing `*` covers the custom-model `単語（よみ）` front format as well as
   // the Kaigi model's exact-word front.
   const query = `deck:"${settings.deckName}" "${frontField}:${word}*"`;

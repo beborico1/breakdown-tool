@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Word Frequency - Meet Captions</title>
+  <title>Your words — Japanese in Color</title>
   <link rel="stylesheet" href="frequency.css">
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1>Word Frequency</h1>
+      <h1>Your words</h1>
       <div class="header-actions">
         <div class="anki-sync-wrapper">
           <span id="ankiStatus" class="anki-status-dot disconnected" title="AnkiConnect status"></span>
@@ -209,8 +209,9 @@
     </div>
 
     <div id="emptyState" class="empty-state" style="display: none;">
-      <p>No words tracked yet</p>
-      <p class="empty-hint">Translate some captions in Google Meet to start building your vocabulary</p>
+      <p>No words yet</p>
+      <p class="empty-hint">Turn on coloring and browse any Japanese page &mdash; every word you
+        hover lands here.</p>
     </div>
 
     <div id="wordGrid" class="word-grid"></div>
@@ -265,7 +266,7 @@
           <div id="ankiConnStatusRow" class="anki-conn-status" hidden></div>
           <div class="anki-settings-row">
             <label for="ankiDeckSelect">Deck</label>
-            <select id="ankiDeckSelect"><option value="Kaigi Meeting">Kaigi Meeting</option></select>
+            <select id="ankiDeckSelect"><option value="Japanese in Color">Japanese in Color</option></select>
           </div>
           <div class="anki-settings-row">
             <label for="ankiModelSelect">Note type</label>
@@ -340,7 +341,7 @@
 
       <aside class="anki-modal-preview" aria-live="polite" aria-label="Card preview">
         <div class="anki-preview-label">
-          Preview &mdash; <span id="ankiPreviewWordLabel">会議</span>
+          Preview &mdash; <span id="ankiPreviewWordLabel">言葉</span>
         </div>
         <div class="anki-preview-card">
           <div class="anki-preview-side">
