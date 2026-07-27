@@ -14,6 +14,19 @@ import { isBlockLevel } from './block-walker.js';
 export const DEFAULT_EXCLUDE_TAGS = new Set(['PRE', 'CODE', 'IMG', 'OBJECT']);
 
 /**
+ * Ticks once per word that paints as more than one span, so every segment of
+ * that word carries the same id and no two words share one.
+ *
+ * Word-level interaction needs to know that 言 / い / 方 are one word rather than
+ * three. The spans cannot answer that themselves: each segment already carries
+ * the full word in data-word, so a repeated character (ここ split across a
+ * wrapper) is indistinguishable from two separate tokens by inspection alone.
+ * Frame-scoped rather than block-scoped so an id stays unique after a repaint
+ * adds spans to a block that already has some.
+ */
+let segSeq = 0;
+
+/**
  * Walk text nodes inside blockEl in document order, skipping excluded-tag
  * subtrees, contenteditable regions, and existing word spans. Returns the
  * assembled text plus a parallel range table so analyzer offsets can be mapped
@@ -181,6 +194,7 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
       rangeIdx = segIdx; // last range may still hold the next word's start
 
       const multi = segs.length > 1;
+      const segId = multi ? String(++segSeq) : '';
       for (const seg of segs) {
         const bucket = buckets.get(seg.node) || [];
         bucket.push({
@@ -188,6 +202,7 @@ export function paintBlockTokens(blockEl, analyzerText, words, opts = {}) {
           start: seg.start,
           end: seg.end,
           word: multi ? surface : undefined, // full word for dataset/tooltip
+          seg: segId,                        // ties this word's segments together
           reading: w.reading,
           romaji: w.romaji,
           english: w.english,

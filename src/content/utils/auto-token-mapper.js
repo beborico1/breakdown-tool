@@ -89,11 +89,13 @@ function decorateRubyReadings(readings, typeClass, isAltTone, data) {
  * tokens.
  *
  * @param {Text} textNode
- * @param {Array<{surface:string,start:number,end:number,word?:string,reading:string,romaji:string,english:string,type:string}>} tokens
+ * @param {Array<{surface:string,start:number,end:number,word?:string,seg?:string,reading:string,romaji:string,english:string,type:string}>} tokens
  *   Local-offset tokens (start/end are offsets INTO this text node), in order.
  *   `surface` is the exact slice of this node. `word` (optional) is the full
  *   word when the token is one segment of a word split across text nodes; it
- *   feeds data-word so the hover card shows the whole word.
+ *   feeds data-word so the hover card shows the whole word. `seg` (optional) is
+ *   the id shared by that word's segments, so word-level interaction can treat
+ *   them as one.
  * @param {{decorateNativeRuby?: boolean}} [opts] - When true, copy each
  *   painted ruby base's POS/tone classes to its annotation-only <rt> group.
  */
@@ -149,6 +151,10 @@ export function wrapJapaneseTokensInTextNode(textNode, tokens, opts = {}) {
     span.dataset.romaji = t.romaji || '';
     span.dataset.english = t.english || '';
     span.dataset.type = typeClass;
+    // Only a word split across text nodes carries this. Its absence is what
+    // tells a reader of the DOM that this span is a whole word on its own, so
+    // it must stay absent rather than become an empty string.
+    if (t.seg) span.dataset.gcwbSeg = t.seg;
     span.appendChild(document.createTextNode(t.surface));
 
     if (decorateNativeRuby) {
