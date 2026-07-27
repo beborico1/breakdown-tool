@@ -175,6 +175,11 @@ try {
   });
   ok('clicking two touching words joins them', joined.count >= 2, JSON.stringify(joined));
 
+  // Park the pointer first. The tooltip the last click opened can sit over the
+  // island it describes, and hovering into it instead of the word would take the
+  // tooltip away rather than open one.
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(250);
   await p2words.nth(0).hover();
   await page.waitForTimeout(1200);
   const islandTip = await page.evaluate(() => {

@@ -1033,6 +1033,48 @@ try {
   assertEq('and leaves no inline style behind', afterEscape.styled, 0);
   assertEq('and the text is still the page own', afterEscape.text, beforeIsland);
 
+  // ---- T41: an island being built spends no translation on its own prefixes
+  //
+  // Every click changes the phrase, so each intermediate island is a distinct
+  // cache key that neither the LRU nor the in-flight dedupe in clause-translate
+  // can collapse, and they all queue onto the single translator session the
+  // clause dots share. A request timed off the hover dwell alone would fire
+  // between clicks at any human clicking speed and land the wanted phrase last.
+  //
+  // Driven with an injected translator rather than the real one, which is the
+  // reason word-tooltip.js takes it as an argument. Pinning this against the
+  // real service worker is not possible: an MV3 worker re-runs its script when a
+  // message wakes it, so a listener added from the outside never survives.
+  console.log('\nT41: building an island costs one translation, not one per word');
+  await page.evaluate(() => {
+    window.asked = [];
+    tip.setupWordTooltip({
+      translateClause: (text) => { window.asked.push(text); return Promise.resolve('EN'); },
+      peekClauseTranslation: () => '',
+      warmClauseTranslator: () => {},
+    });
+    isl.setupWordIsland({ onChange: tip.onIslandChange });
+    isl.clearIsland();
+  });
+
+  // Slower than the 150ms hover dwell, faster than the settle window.
+  for (const i of [0, 1, 2]) {
+    await page.evaluate((n) => tap('t34', n), i);
+    await page.waitForTimeout(300);
+  }
+  const midBuild = await page.evaluate(() => window.asked.slice());
+  await page.waitForTimeout(700);
+  const settled = await page.evaluate(() => ({
+    asked: window.asked.slice(),
+    shown: document.querySelector('.gcwb-island-tooltip .gcwb-tooltip-japanese')?.textContent ?? null,
+  }));
+
+  assertEq('no prefix of the phrase is ever translated', midBuild, []);
+  assertEq('the settled island is translated once', settled.asked, ['今日は、いい']);
+  assertEq('and the box was showing that phrase all along', settled.shown, '今日は、いい');
+
+  await page.evaluate(() => { isl.clearIsland(); tip.forceHideTooltip(); });
+
   // ---------------------------------------------------------------------------
   // T33: isRedmine() must not fire on a stock Rails page.
   //
