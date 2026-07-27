@@ -1,0 +1,48 @@
+<!--
+  Master artwork for the toolbar icon. Rendered to assets/icons/icon{16,32,48,128}.png
+  by `npm run icons` (scripts/make-icons.mjs). This file never ships: assets/source/
+  is not in the packaging allowlist, unlike assets/icons/.
+
+  Design constraints this shape answers:
+
+  - A 16x16 toolbar icon is ~256 pixels. Only one high-contrast shape survives that,
+    so the icon is a single glyph on a solid tile and nothing else.
+  - あ is the first character of the kana syllabary and reads as "Japanese" instantly,
+    including to someone who does not read Japanese.
+  - The tile is filled, not outlined. There is no chrome.action.setIcon anywhere in
+    the extension, so one artwork serves both light and dark toolbars, and #632889
+    on its own nearly disappears on a dark one. A filled purple tile with a white
+    glyph carries its own contrast in either direction — which is what lets the
+    previous artwork's baked-in white halo go away.
+  - The tile is inset to a 96x96 safe area inside the 128 box (16px margin), because
+    the store tile and the toolbar both expect breathing room. The old icon128 had a
+    bounding box of (0,10,128,118) — no horizontal margin at all.
+  - The glyph is a path, not <text>. Text would render differently depending on which
+    Japanese font the rendering machine happens to have, so the outline is embedded to
+    make `npm run icons` reproducible anywhere.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!--
+    The ids and the two data-* knobs are read by scripts/make-icons.mjs, which tunes
+    them per output size. They are not decoration:
+
+    inset  A 16px margin looks right at 128 but throws away a quarter of the width at
+           16, where the tile is only 12 real pixels across. Small sizes go closer to
+           full bleed.
+    stroke A 7.5 stroke in a 128 viewBox is 0.94 real pixels at 16x16, so the bowl of
+           the glyph closes into a blob. Small sizes need a proportionally heavier
+           stroke to survive rasterisation — this is the usual size-specific
+           optical correction, not a hack.
+  -->
+  <rect id="tile" x="16" y="16" width="96" height="96" rx="22" fill="#632889"/>
+  <!--
+    あ as two strokes: the horizontal bar, and one continuous stroke for the descending
+    spine and its looping bowl. Stroked rather than a filled outline because a filled
+    counter of this size fills in when downscaled.
+  -->
+  <g id="glyph" fill="none" stroke="#ffffff" stroke-width="7.5"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 46 H88"/>
+    <path d="M67 32 C67 52 66 70 62 84 C59 94 53 99 47 99 C42 99 39 95 39 90 C39 79 51 70 68 66 C82 63 92 68 92 79 C92 90 84 97 74 100"/>
+  </g>
+</svg>
