@@ -4,6 +4,7 @@
 
 import { mkdir, cp, stat, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
@@ -38,28 +39,53 @@ async function copyKuromoji() {
   console.log(`[assets] kuromoji dict -> ${KUROMOJI_DST}`);
 }
 
-async function fetchLatestReleaseAssets() {
-  const res = await fetch('https://api.github.com/repos/scriptin/jmdict-simplified/releases/latest');
-  if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-  const json = await res.json();
-  return json.assets || [];
+// Pinned dictionary release. Tracking "latest" made the build unreproducible:
+// two checkouts built a week apart shipped different glosses, and a bad upstream
+// release would land in a published package with no way to tell from the diff.
+// To upgrade: bump the tag, run the build, and record the digests it reports.
+const JMDICT_RELEASE_TAG = '3.6.2+20260720135044';
+const PINNED_ASSETS = {
+  jmdict: {
+    name: `jmdict-eng-${JMDICT_RELEASE_TAG}.json.tgz`,
+    sha256: 'b3524eb36dba5c096d509c73640460462915fb9121a1e0cb86a6f7936c0ccd3e',
+  },
+  kanjidic: {
+    name: `kanjidic2-en-${JMDICT_RELEASE_TAG}.json.tgz`,
+    sha256: '9974d1cab025813631a570846c88a38f7f0c1e0544afd2e81651523f1d62e2de',
+  },
+};
+
+function releaseAssetUrl(name) {
+  // The download host serves the tag verbatim; '+' is legal in a path segment.
+  return 'https://github.com/scriptin/jmdict-simplified/releases/download/' +
+    `${encodeURIComponent(JMDICT_RELEASE_TAG)}/${encodeURIComponent(name)}`;
 }
 
-function pickAsset(assets, pattern, label) {
-  const asset = assets.find(a => pattern.test(a.name));
-  if (!asset) throw new Error(`${label} .tgz not found in latest release`);
-  return asset.browser_download_url;
-}
-
-async function downloadAndExtract(url, tmpDir) {
+/**
+ * Download a pinned release asset, verify its SHA-256, then extract it.
+ * The whole archive is buffered because the digest has to be checked before a
+ * single byte reaches the tar extractor — these are 1-12 MB, so it is cheap.
+ * @returns {Promise<string>} path to the extracted .json
+ */
+async function downloadAndExtract({ name, sha256 }, tmpDir) {
   await mkdir(tmpDir, { recursive: true });
-  console.log(`[assets] downloading ${url}`);
+  const url = releaseAssetUrl(name);
+  console.log(`[assets] downloading ${name}`);
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-  await pipeline(
-    Readable.fromWeb(res.body),
-    tar.x({ cwd: tmpDir })
-  );
+  if (!res.ok) throw new Error(`Download failed: ${res.status} for ${url}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+
+  const actual = createHash('sha256').update(buf).digest('hex');
+  if (actual !== sha256) {
+    throw new Error(
+      `Checksum mismatch for ${name}\n  expected ${sha256}\n  actual   ${actual}\n` +
+      'The pinned release was modified upstream, or the download was corrupted. ' +
+      'Do NOT package this build.'
+    );
+  }
+  console.log(`[assets] sha256 ok (${actual.slice(0, 12)}…)`);
+
+  await pipeline(Readable.from(buf), tar.x({ cwd: tmpDir }));
   const files = await readdir(tmpDir);
   const jsonFile = files.find(f => f.endsWith('.json'));
   if (!jsonFile) throw new Error('no .json in extracted archive');
@@ -161,19 +187,17 @@ async function buildDictionaries() {
     console.log('[assets] jmdict + kanjidic already built (delete the .gz files to rebuild)');
     return;
   }
-  const assets = await fetchLatestReleaseAssets();
+  console.log(`[assets] dictionary release pinned to ${JMDICT_RELEASE_TAG}`);
   if (jmdictDone) {
     console.log(`[assets] jmdict already built (delete ${JMDICT_OUT} to rebuild)`);
   } else {
-    const url = pickAsset(assets, /^jmdict-eng-\d.+\.json\.tgz$/, 'jmdict-eng');
-    const jsonPath = await downloadAndExtract(url, JMDICT_TMP_DIR);
+    const jsonPath = await downloadAndExtract(PINNED_ASSETS.jmdict, JMDICT_TMP_DIR);
     await buildJmdictMap(jsonPath);
   }
   if (kanjidicDone) {
     console.log(`[assets] kanjidic already built (delete ${KANJIDIC_OUT} to rebuild)`);
   } else {
-    const url = pickAsset(assets, /^kanjidic2-en-\d.+\.json\.tgz$/, 'kanjidic2-en');
-    const jsonPath = await downloadAndExtract(url, KANJIDIC_TMP_DIR);
+    const jsonPath = await downloadAndExtract(PINNED_ASSETS.kanjidic, KANJIDIC_TMP_DIR);
     await buildKanjidicMap(jsonPath);
   }
 }
