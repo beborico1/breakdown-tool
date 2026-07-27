@@ -7,6 +7,7 @@ import {
   countedContentKeys,
   rememberCountedContentKey
 } from '../core/state.js';
+import { mergeWordCounts } from '../core/frequency-store.js';
 
 /**
  * Record word frequencies from breakdown data
@@ -61,7 +62,10 @@ export function recordWordFrequencies(words, contentKey) {
 }
 
 /**
- * Save accumulated frequency updates to chrome.storage.local
+ * Persist accumulated frequency updates.
+ *
+ * Cost is proportional to the size of this batch, not to the whole corpus:
+ * mergeWordCounts only reads and rewrites the shards the batch lands in.
  */
 export async function saveFrequencyUpdates() {
   if (pendingFrequencyUpdates.size === 0) return;
@@ -70,48 +74,8 @@ export async function saveFrequencyUpdates() {
   pendingFrequencyUpdates.clear();
 
   try {
-    // Load existing data
-    const result = await new Promise(resolve => {
-      chrome.storage.local.get(['wordFrequencyData'], resolve);
-    });
-
-    const data = result.wordFrequencyData || {
-      version: 1,
-      lastUpdated: Date.now(),
-      totalWords: 0,
-      uniqueWords: 0,
-      words: {}
-    };
-
-    // Merge updates
-    let newWordsAdded = 0;
-    let totalCountAdded = 0;
-
-    for (const [key, update] of updates) {
-      if (data.words[key]) {
-        // Update existing word
-        data.words[key].count += update.count;
-        data.words[key].lastSeen = update.lastSeen;
-        totalCountAdded += update.count;
-      } else {
-        // Add new word
-        data.words[key] = update;
-        newWordsAdded++;
-        totalCountAdded += update.count;
-      }
-    }
-
-    // Update totals
-    data.totalWords += totalCountAdded;
-    data.uniqueWords = Object.keys(data.words).length;
-    data.lastUpdated = Date.now();
-
-    // Save back to storage
-    await new Promise(resolve => {
-      chrome.storage.local.set({ wordFrequencyData: data }, resolve);
-    });
-
-    debugLog('FREQ', `Saved: +${totalCountAdded} total, +${newWordsAdded} unique (${data.uniqueWords} total unique)`);
+    const { newWords, addedCount } = await mergeWordCounts(updates);
+    debugLog('FREQ', `Saved: +${addedCount} total, +${newWords} unique`);
   } catch (error) {
     debugLog('FREQ', 'Save error:', error.message);
     // Re-queue failed updates for next attempt
@@ -121,4 +85,18 @@ export async function saveFrequencyUpdates() {
       }
     }
   }
+}
+
+// A meeting can run for hours, and the counts are a running total — losing the
+// last few seconds of them on a crash costs nothing. Flush on the way out so an
+// ordinary tab close or navigation still persists the tail.
+if (typeof document !== 'undefined') {
+  const flush = () => {
+    if (frequencySaveTimeout) clearTimeout(frequencySaveTimeout);
+    saveFrequencyUpdates();
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush();
+  });
+  window.addEventListener('pagehide', flush);
 }

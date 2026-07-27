@@ -1,6 +1,7 @@
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
 import { flushAnkiQueue } from '../../content/core/anki-queue.js';
 import { addOneCard, isRetriableAnkiError } from '../../content/core/anki-card.js';
+import { readAllFrequency, addMissingWords } from '../../content/core/frequency-store.js';
 
 initDisplayPreferences();
 
@@ -229,41 +230,30 @@ const typeColors = {
 };
 
 /**
- * Load data from chrome.storage.local.
- * Backfills any wordCache entries missing from wordFrequencyData so the
+ * Load the whole corpus for the dashboard.
+ * Backfills any wordCache entries missing from the frequency store so the
  * dashboard reflects words translated in Chat/Gmail, not just Meet.
  */
 async function loadData() {
-  const result = await new Promise(resolve => {
-    chrome.storage.local.get(['wordFrequencyData', 'wordCache'], resolve);
+  const data = await readAllFrequency();
+  const { wordCache } = await new Promise(resolve => {
+    chrome.storage.local.get(['wordCache'], resolve);
   });
 
-  const existingData = result.wordFrequencyData;
-  const wordCache = result.wordCache;
-
-  const hasExistingWords = existingData?.words && Object.keys(existingData.words).length > 0;
+  const hasExistingWords = Object.keys(data.words).length > 0;
   const hasCacheEntries = wordCache && typeof wordCache === 'object' && Object.keys(wordCache).length > 0;
 
   if (!hasExistingWords && !hasCacheEntries) return null;
 
-  const data = existingData || {
-    version: 1,
-    lastUpdated: Date.now(),
-    totalWords: 0,
-    uniqueWords: 0,
-    words: {}
-  };
-
-  let addedCount = 0;
-
   if (hasCacheEntries) {
+    const missing = new Map();
     for (const [japanese, entry] of Object.entries(wordCache)) {
       const type = entry.type || 'other';
       const key = `${japanese}|${type}`;
       if (data.words[key]) continue;
 
       const ts = entry.lastUsed || Date.now();
-      data.words[key] = {
+      const record = {
         japanese,
         reading: entry.reading || '',
         romaji: entry.romaji || '',
@@ -273,23 +263,17 @@ async function loadData() {
         firstSeen: ts,
         lastSeen: ts
       };
-      addedCount++;
+      missing.set(key, record);
+      data.words[key] = record;
     }
-  }
 
-  if (addedCount > 0) {
-    let totalWords = 0;
-    for (const word of Object.values(data.words)) {
-      totalWords += word.count || 0;
+    if (missing.size > 0) {
+      const added = await addMissingWords(missing);
+      data.totalWords += added;
+      data.uniqueWords = Object.keys(data.words).length;
+      data.lastUpdated = Date.now();
+      console.log(`[Frequency] Backfilled ${added} words from wordCache`);
     }
-    data.totalWords = totalWords;
-    data.uniqueWords = Object.keys(data.words).length;
-    data.lastUpdated = Date.now();
-
-    await new Promise(resolve => {
-      chrome.storage.local.set({ wordFrequencyData: data }, resolve);
-    });
-    console.log(`[Frequency] Backfilled ${addedCount} words from wordCache`);
   }
 
   return data;

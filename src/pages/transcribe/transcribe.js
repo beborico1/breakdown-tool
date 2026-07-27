@@ -4,6 +4,7 @@
 // ============================================
 
 import { initDisplayPreferences } from '../../content/core/display-preferences.js';
+import { mergeWordCounts } from '../../content/core/frequency-store.js';
 import { paintWordColoring } from '../../content/shared/word-render.js';
 import { attachHoverListeners } from '../../content/meet/hover-card.js';
 import { initAnkiQuickAdd, attachAnkiContextMenu } from '../../content/chat/anki-quick-add.js';
@@ -270,31 +271,27 @@ Text: ${text}`;
 
 function recordWordFrequencies(words) {
   const now = Date.now();
-  chrome.storage.local.get(['wordFrequencyData'], (result) => {
-    const data = result.wordFrequencyData || {
-      version: 1, lastUpdated: now, totalWords: 0, uniqueWords: 0, words: {}
-    };
 
-    let totalCountAdded = 0;
-    for (const word of words) {
-      const key = `${word.japanese}|${word.type}`;
-      if (data.words[key]) {
-        data.words[key].count++;
-        data.words[key].lastSeen = now;
-      } else {
-        data.words[key] = {
-          japanese: word.japanese, reading: word.reading || '',
-          romaji: word.romaji, english: word.english, type: word.type,
-          count: 1, firstSeen: now, lastSeen: now
-        };
-      }
-      totalCountAdded++;
+  // Collapse repeats within this batch first, so a word said three times costs
+  // one merged update rather than three round trips.
+  const updates = new Map();
+  for (const word of words) {
+    const key = `${word.japanese}|${word.type}`;
+    const existing = updates.get(key);
+    if (existing) {
+      existing.count++;
+      existing.lastSeen = now;
+      continue;
     }
+    updates.set(key, {
+      japanese: word.japanese, reading: word.reading || '',
+      romaji: word.romaji, english: word.english, type: word.type,
+      count: 1, firstSeen: now, lastSeen: now
+    });
+  }
 
-    data.totalWords += totalCountAdded;
-    data.uniqueWords = Object.keys(data.words).length;
-    data.lastUpdated = now;
-    chrome.storage.local.set({ wordFrequencyData: data });
+  mergeWordCounts(updates).catch(err => {
+    console.warn('[transcribe] frequency save failed:', err?.message || err);
   });
 }
 

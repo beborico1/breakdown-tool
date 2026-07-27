@@ -45,8 +45,11 @@ export const activeContentKeys = new Set();
 // Cache pruning interval (5 minutes)
 export const CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 
-// Word frequency tracking
-export const FREQUENCY_SAVE_DEBOUNCE_MS = 2000;
+// Word frequency tracking. The debounce is long because counts are a running
+// total with no per-second durability requirement, and each flush is a storage
+// write that lands in the browser process; frequency-tracker also flushes on
+// visibilitychange/pagehide so the tail is never lost.
+export const FREQUENCY_SAVE_DEBOUNCE_MS = 30000;
 export let frequencySaveTimeout = null;
 export function setFrequencySaveTimeout(value) {
   frequencySaveTimeout = value;
