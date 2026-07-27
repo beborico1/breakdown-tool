@@ -7,8 +7,9 @@ import { isRedmine } from '../redmine/message-finder.js';
 import { findJapaneseBlocks, nearestBlockRoot, SKIP_SUBTREE_TAGS } from '../shared/block-walker.js';
 import { collectBlockTextNodes, paintBlockTokens } from '../shared/auto-lite-core.js';
 import { createAnalyzeQueue } from '../shared/analyze-queue.js';
-import { setupWordTooltip } from '../chat/word-tooltip.js';
-import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
+import { setupWordTooltip, onIslandChange } from '../chat/word-tooltip.js';
+import { setupWordIsland, clearIsland } from '../shared/word-island.js';
+import { translateClause, warmClauseTranslator, peekClauseTranslation } from '../core/clause-translate.js';
 import { count, markOnce } from '../../metrics/index.js';
 import { M, F, S } from '../../metrics/events.js';
 
@@ -346,7 +347,9 @@ function setupObservers() {
 function start() {
   if (started) return;
   started = true;
-  setupWordTooltip({ translateClause, warmClauseTranslator });   // self-guards against double-binding
+  // Both self-guard against double-binding.
+  setupWordTooltip({ translateClause, warmClauseTranslator, peekClauseTranslation });
+  setupWordIsland({ onChange: onIslandChange });
   setupObservers();
   scan();
   // Block detection reads computed display; stylesheets still loading can
@@ -387,6 +390,10 @@ function stopUniversal() {
   window.removeEventListener('hashchange', onSoftNav);
   for (const block of observedBlocks) processed.delete(block);
   observedBlocks.clear();
+  // The words themselves stay as painted until the page reloads, but a live
+  // island is a control surface, and leaving one lit on a site the user just
+  // paused would advertise an interaction that no longer answers.
+  clearIsland();
   started = false;
 }
 

@@ -2,8 +2,9 @@ import { debugLog } from '../core/debug.js';
 import { isGoogleChat, findChatMessageElement, extractChatMessageText } from './message-finder.js';
 import { showCustomContextMenu } from './context-menu.js';
 import { initWordCache } from '../core/word-cache.js';
-import { setupWordTooltip } from './word-tooltip.js';
-import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
+import { setupWordTooltip, onIslandChange } from './word-tooltip.js';
+import { setupWordIsland } from '../shared/word-island.js';
+import { translateClause, warmClauseTranslator, peekClauseTranslation } from '../core/clause-translate.js';
 import { maybeAutoAnalyzeChat } from '../core/auto-analyze.js';
 import { initAnkiQuickAdd } from './anki-quick-add.js';
 
@@ -125,7 +126,8 @@ export async function initializeGoogleChat() {
   const setup = () => {
     setupChatContextMenu();
     setupAutoHighlighting();
-    setupWordTooltip({ translateClause, warmClauseTranslator });
+    setupWordTooltip({ translateClause, warmClauseTranslator, peekClauseTranslation });
+    setupWordIsland({ onChange: onIslandChange });
     initAnkiQuickAdd();
   };
 

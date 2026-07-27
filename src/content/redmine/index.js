@@ -3,8 +3,9 @@ import { initWordCache } from '../core/word-cache.js';
 import { isRedmine, findRedmineTextElement, extractRedmineText } from './message-finder.js';
 import { showCustomContextMenu } from '../chat/context-menu.js';
 import { highlightRedmineBlock, highlightAllRedmineBlocks, clearRedmineHighlightState } from './word-highlight.js';
-import { setupWordTooltip } from '../chat/word-tooltip.js';
-import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
+import { setupWordTooltip, onIslandChange } from '../chat/word-tooltip.js';
+import { setupWordIsland } from '../shared/word-island.js';
+import { translateClause, warmClauseTranslator, peekClauseTranslation } from '../core/clause-translate.js';
 import { maybeAutoAnalyzeRedmine } from '../core/auto-analyze.js';
 
 const REDMINE_TARGET_MATCH = '.subject h3, .description .wiki, .journal .wiki, .wiki-page .wiki, .news .wiki, #activity dd';
@@ -96,7 +97,8 @@ export async function initializeRedmine() {
   const setup = () => {
     setupRedmineContextMenu();
     highlightAllRedmineBlocks();
-    setupWordTooltip({ translateClause, warmClauseTranslator });
+    setupWordTooltip({ translateClause, warmClauseTranslator, peekClauseTranslation });
+    setupWordIsland({ onChange: onIslandChange });
     maybeAutoAnalyzeRedmine();
     setupRedmineAutoObserver();
 

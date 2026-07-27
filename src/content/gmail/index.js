@@ -4,8 +4,9 @@ import { isGmail, findGmailMessageElement, extractGmailMessageText, extractBrSep
 import { showInlineBreakdown } from '../chat/inline-breakdown.js';
 import { showCustomContextMenu } from '../chat/context-menu.js';
 import { highlightGmailMessage, highlightAllGmailMessages, clearGmailHighlightState } from './word-highlight.js';
-import { setupWordTooltip } from '../chat/word-tooltip.js';
-import { translateClause, warmClauseTranslator } from '../core/clause-translate.js';
+import { setupWordTooltip, onIslandChange } from '../chat/word-tooltip.js';
+import { setupWordIsland } from '../shared/word-island.js';
+import { translateClause, warmClauseTranslator, peekClauseTranslation } from '../core/clause-translate.js';
 import { maybeAutoAnalyzeGmail } from '../core/auto-analyze.js';
 
 /**
@@ -163,7 +164,8 @@ export async function initializeGmail() {
   const setup = () => {
     setupGmailContextMenu();
     setupGmailAutoHighlighting();
-    setupWordTooltip({ translateClause, warmClauseTranslator });
+    setupWordTooltip({ translateClause, warmClauseTranslator, peekClauseTranslation });
+    setupWordIsland({ onChange: onIslandChange });
     setupGmailNavigationWatcher();
     maybeAutoAnalyzeGmail();
 
