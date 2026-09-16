@@ -122,7 +122,7 @@ async function buildWords(text) {
   return words;
 }
 
-async function analyze(text) {
+export async function analyze(text) {
   if (!text || !text.trim()) {
     return { original: text || '', translation: '', words: [] };
   }
@@ -149,7 +149,7 @@ async function analyze(text) {
  * Chrome Translator round-trip removes the dominant per-block latency and avoids
  * contending for the translator model.
  */
-async function analyzeTokensOnly(text) {
+export async function analyzeTokensOnly(text) {
   if (!text || !text.trim()) {
     return { original: text || '', translation: '', words: [] };
   }
@@ -158,7 +158,7 @@ async function analyzeTokensOnly(text) {
   return { original: text, translation: '', words };
 }
 
-async function translateOnly(text) {
+export async function translateOnly(text) {
   if (!text || !text.trim()) return '';
   try {
     return await translateJaEn(text);
@@ -168,34 +168,42 @@ async function translateOnly(text) {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== 'kaigi-nlp') return false;
-  (async () => {
-    try {
-      if (msg.op === 'analyze') {
-        const result = await analyze(msg.text);
-        sendResponse({ ok: true, result });
-      } else if (msg.op === 'tokenize') {
-        const result = await analyzeTokensOnly(msg.text);
-        sendResponse({ ok: true, result });
-      } else if (msg.op === 'translate') {
-        const text = await translateOnly(msg.text);
-        sendResponse({ ok: true, text });
-      } else if (msg.op === 'warmup') {
-        await ensureTokenizer();
-        // Fire-and-forget so the model download starts now without blocking.
-        ensureJaEnTranslator().catch(() => {});
-        sendResponse({ ok: true });
-      } else if (msg.op === 'translator-state') {
-        sendResponse({ ok: true, state: getTranslatorState() });
-      } else {
-        sendResponse({ ok: false, error: `unknown op: ${msg.op}` });
+// This file is imported directly by service-worker.js as a fallback path for
+// browsers without chrome.offscreen (see HAS_OFFSCREEN there). A service
+// worker has no `document` global, so gate the message-listener side effect
+// on that to avoid double-registering this handler in the same runtime when
+// chrome.offscreen IS available and this also loads as the real offscreen
+// document.
+if (typeof document !== 'undefined') {
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== 'kaigi-nlp') return false;
+    (async () => {
+      try {
+        if (msg.op === 'analyze') {
+          const result = await analyze(msg.text);
+          sendResponse({ ok: true, result });
+        } else if (msg.op === 'tokenize') {
+          const result = await analyzeTokensOnly(msg.text);
+          sendResponse({ ok: true, result });
+        } else if (msg.op === 'translate') {
+          const text = await translateOnly(msg.text);
+          sendResponse({ ok: true, text });
+        } else if (msg.op === 'warmup') {
+          await ensureTokenizer();
+          // Fire-and-forget so the model download starts now without blocking.
+          ensureJaEnTranslator().catch(() => {});
+          sendResponse({ ok: true });
+        } else if (msg.op === 'translator-state') {
+          sendResponse({ ok: true, state: getTranslatorState() });
+        } else {
+          sendResponse({ ok: false, error: `unknown op: ${msg.op}` });
+        }
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e?.message || e) });
       }
-    } catch (e) {
-      sendResponse({ ok: false, error: String(e?.message || e) });
-    }
-  })();
-  return true;
-});
+    })();
+    return true;
+  });
 
-console.log('[kaigi-offscreen] NLP ready');
+  console.log('[kaigi-offscreen] NLP ready');
+}

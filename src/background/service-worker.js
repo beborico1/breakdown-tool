@@ -1,4 +1,9 @@
 import { ingest, commit, seedMeta, prune, readAll, reset } from '../metrics/sink-local.js';
+// Safari has no chrome.offscreen API. offscreen.js has no real DOM dependency
+// (tokenize/lookup is pure JS + fetch), so on browsers missing chrome.offscreen
+// we skip the offscreen document entirely and call the same logic in-worker.
+import { analyze, analyzeTokensOnly, translateOnly } from '../offscreen/offscreen.js';
+const HAS_OFFSCREEN = typeof chrome.offscreen !== 'undefined';
 // Fetch proxy: content scripts in MV3 cannot reliably reach a local server from
 // strict-CSP pages (chat.google.com, meet.google.com). The service worker has
 // extension-origin privileges + host_permissions, so it can fetch any allowed URL.
@@ -162,6 +167,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== 'kaigi-nlp-proxy') return false;
   (async () => {
     try {
+      // No chrome.offscreen (Safari): run the same tokenize/lookup logic
+      // directly in the worker instead of proxying to an offscreen doc.
+      if (!HAS_OFFSCREEN) {
+        let response;
+        if (msg.op === 'analyze') {
+          response = { ok: true, result: await analyze(msg.text) };
+        } else if (msg.op === 'tokenize') {
+          response = { ok: true, result: await analyzeTokensOnly(msg.text) };
+        } else if (msg.op === 'translate') {
+          response = { ok: true, text: await translateOnly(msg.text) };
+        } else if (msg.op === 'warmup') {
+          // No on-device Translator API outside Chrome; tokenizer warms lazily
+          // on first real request instead.
+          response = { ok: true };
+        } else if (msg.op === 'translator-state') {
+          response = { ok: true, state: { available: false } };
+        } else {
+          response = { ok: false, error: `unknown op: ${msg.op}` };
+        }
+        sendResponse(response);
+        return;
+      }
+
       await ensureOffscreen();
       const response = await chrome.runtime.sendMessage({
         type: 'kaigi-nlp',
